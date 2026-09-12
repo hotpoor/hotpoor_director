@@ -140,3 +140,10 @@
 - 3 项单元测试、9 项真实 PostgreSQL 集成测试通过；标准版实际文生图与图生图均通过（512×512、30 步、CFG 4），真实进度、负向提示词持久化、私有输出、请求去重与 token 空值均验证。
 - Electron 检查通过：模型切换、默认参数、反向提示词草稿、跨 tab 模型保持、保存重开，以及历史预览等原有交互。未打包 EXE。
 - 已按追加请求准备 H3-Base-Ref2VA 的 ComfyUI pruned FP8 下载配置（20,958,205,608 字节，固定仓库 revision 与 SHA-256），共用现有文本编码器和音视频 VAE；下载完成后仍需独立接入参考模式工作流。
+
+## 2026-09-12 · LTX-2.5 22B 蒸馏版安装准备
+
+- ComfyUI 已具备原生工作流及所需核心节点；复制文生视频、图生视频和首尾帧模板至本地 user/default/workflows/LTX-2.5。
+- 准备官方 Comfy INT8 主模型、Gemma 4 12B 编码器、音视频 VAE 与空间放大器的固定 revision / SHA-256 清单，共 5 文件、39,709,872,236 字节；下载与逐文件校验脚本在 ComfyUI/setup/download-ltx25.ps1。
+- 当前 Hugging Face 令牌访问官方 Lightricks/LTX-2.5 权重返回 403 GatedRepo，账号未获准；尚未启动权重下载，需用户先在官方页面开通权限。没有将该模型标记为已安装或加入工作台可用列表。
+- 当前 CUDA 12.6 环境禁用了 Comfy Kitchen CUDA 量化加速，INT8 convrot 的运行兼容性及显存表现需在模型下载后检查；尚未调整现有 Torch 环境或做生成测试。
