@@ -43,6 +43,7 @@
     <dialog id="project-dialog"><form id="project-form"><div class="dialog-heading"><h2 id="dialog-title">新建项目</h2><button type="button" id="close-dialog" class="quiet" aria-label="关闭">✕</button></div><label>主标题<input name="title" maxlength="160" placeholder="例如：雨夜来信" required></label><label>副标题<input name="subtitle" maxlength="240" placeholder="一句话，定义这部作品"></label><label>描述<textarea name="description" maxlength="10000" rows="4" placeholder="故事梗概、视觉方向、创作备忘…"></textarea></label><label>封面照片 <small>可多张，第一张为主封面</small><input id="cover-upload" type="file" accept="image/png,image/jpeg,image/webp" multiple></label><div id="cover-list" class="cover-list"></div><p id="project-form-error" role="status"></p><button id="save-project" type="submit">创建项目</button></form></dialog>
   </section>
   <script src="/static/studio.js"></script>
+  <script src="/static/preview.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

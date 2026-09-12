@@ -116,3 +116,7 @@ PyInstaller 将 Python/Tornado 打包为独立后端；Electron Builder 将后�
 `npm test` 使用独立临时 PostgreSQL。`scripts/smoke-studio.cjs` 使用 `.test-data/studio-smoke` 数据库（需预先准备测试配置，端口建议 55440），检查项目创建、参数切换、八方向缩放、自动保存、重新打开和窄窗口布局。`scripts/smoke-generation.py` 为可选真实 GPU 测试，会提交一张 256px 图生图，使用上述 UI 测试账号；不自动加入常规测试。
 
 Logo 使用用户提供的透明原图，`scripts/prepare_brand.py` 可使用 Pillow 重建黑色原版、白色反白版和 PNG/ICO。原始透明图不加外圈白边。
+
+### 图片放大预览
+
+点击卡片大图、历史缩略图或 Pin 图片即可进入独立预览。滚轮/加减按钮缩放，拖动平移，100% 查看原尺寸，双击切换原尺寸与适应窗口；可切换同一卡片的历史图片。右上角支持系统全屏，Esc 关闭预览。此操作不会改变画布视角。

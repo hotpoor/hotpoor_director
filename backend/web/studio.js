@@ -131,7 +131,7 @@
   }
   function jobMedia(row,index=0,mini=false) {
     const url = `/api/outputs/${row.block_id}/${index}`;
-    return row.body.type === 'video' ? `<video src="${url}" ${mini?'preload="none"':'controls preload="metadata"'}></video>` : `<img src="${url}" alt="生成图片" loading="lazy">`;
+    return row.body.type === 'video' ? `<video src="${url}" ${mini?'preload="none"':'controls preload="metadata"'}></video>` : `<img src="${url}" data-preview="${url}" data-preview-title="${esc(row.body.model)} · ${date(row.createtime)}" ${mini?'':'role="button" tabindex="0"'} title="点击放大预览" alt="生成图片，点击放大预览" loading="lazy">`;
   }
   function renderResults(card) {
     const el = document.querySelector(`[data-card="${card.id}"] .card-results`); if (!el) return;
