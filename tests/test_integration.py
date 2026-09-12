@@ -256,3 +256,23 @@ def test_imported_media_cards_and_range_requests(service):
         assert card['mime']=='audio/wav' and card['name']=='test.wav'
         assert second.post('/api/projects', json=body).status_code == 404
         assert first.post('/api/projects',json={'title':'invalid cover','covers':[asset['id']]}).status_code == 400
+
+
+def test_connections_stay_in_their_project(service):
+    _, url = service
+    with signed_in(url) as client:
+        a={'id':'d'*32,'type':'image','mode':'text','x':0,'y':0,'w':480,'h':600,'hiddenJobs':['a'*32]}
+        b={**a,'id':'e'*32,'x':600}
+        body={'title':'connected canvas','canvas':{'viewport':{'x':0,'y':0,'zoom':1},'cards':[a,b],'connections':[{'id':'f'*32,'source':a['id'],'target':b['id']}]}}
+        result=client.post('/api/projects',json=body)
+        assert result.status_code==200,result.text
+        saved=result.json();assert client.get('/api/projects/'+saved['block_id']).json()['body']['canvas']['connections']==body['canvas']['connections']
+        for target in [a['id'],'0'*32,[]]:
+            invalid=json.loads(json.dumps(body));invalid['canvas']['connections'][0]['target']=target
+            assert client.post('/api/projects',json=invalid).status_code==400
+        duplicate=json.loads(json.dumps(body));duplicate['canvas']['connections'].append({**body['canvas']['connections'][0],'id':'1'*32})
+        assert client.post('/api/projects',json=duplicate).status_code==400
+
+        assert client.get('/api/projects/'+saved['block_id']).json()['body']['canvas']['cards'][0]['hiddenJobs']==['a'*32]
+        invalid=json.loads(json.dumps(body));invalid['canvas']['cards'][0]['hiddenJobs']=[{}]
+        assert client.post('/api/projects',json=invalid).status_code==400

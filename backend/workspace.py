@@ -76,11 +76,25 @@ def validate_project(data):
             for key in ('width', 'height', 'steps', 'seed', 'denoise', 'duration', 'cfg'):
                 if key in draft and not finite(draft[key], -1, 2**53 - 1):
                     raise ValueError('卡片数值参数不正确')
+        hidden = card.get('hiddenJobs', [])
+        if not isinstance(hidden, list) or len(hidden) > 10000 or any(not isinstance(job, str) or not ID.fullmatch(job) for job in hidden):
+            raise ValueError('隐藏结果列表格式不正确')
         pins = card.get('pins', [])
         if not isinstance(pins, list) or len(pins) > 8 or any(not isinstance(pin, str) or not ID.fullmatch(pin) for pin in pins):
             raise ValueError('固定对比项格式不正确')
         if not finite(card.get('pinLimit', 2), 0, 8):
             raise ValueError('对比位数量不正确')
+    connections = canvas.get('connections', [])
+    if not isinstance(connections, list) or len(connections) > 1000:
+        raise ValueError('画布最多 1000 条连接线')
+    edge_ids, pairs = set(), set()
+    for edge in connections:
+        if not isinstance(edge, dict) or not isinstance(edge.get('id'), str) or not ID.fullmatch(edge['id']) or edge['id'] in edge_ids:
+            raise ValueError('连接线 UUID 不正确或重复')
+        source, target = edge.get('source'), edge.get('target')
+        if not isinstance(source, str) or not isinstance(target, str) or source not in seen or target not in seen or source == target or (source, target) in pairs:
+            raise ValueError('连接线必须连接当前画布的两张不同卡片且不能重复')
+        edge_ids.add(edge['id']); pairs.add((source, target))
     if len(json.dumps(canvas)) > 2_000_000:
         raise ValueError('画布数据过大')
     return {k: data.get(k, '') for k in ('title', 'subtitle', 'description')} | {'covers': covers, 'canvas': canvas}

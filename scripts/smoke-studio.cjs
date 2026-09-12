@@ -9,6 +9,7 @@ process.env.DIRECTOR_SMOKE_TEST = '1';
 process.env.DIRECTOR_DATA_DIR = directory;
 app.on('browser-window-created', (_, window) => {
   window.webContents.once('did-finish-load', async () => {
+    window.webContents.on('console-message',(_event,level,message)=>{if(level>=3)console.error('Renderer:',message);});
     const js = (source,userGesture=false) => window.webContents.executeJavaScript(source,userGesture);
     async function waitFor(source) {
       for (let i=0;i<100;i++) { if(await js(source))return; await new Promise(r=>setTimeout(r,100)); }
@@ -131,11 +132,27 @@ app.on('browser-window-created', (_, window) => {
         console.log('Image preview verified: result/pins, history selects without opening preview, zoom, pan, system fullscreen, exit fullscreen, and Escape.');
       }
       console.log('Studio UI verified: project creation, two cards, independent tab drafts, 8 resize handles, autosave/reopen, narrow layout. Project '+result);
+      if(process.env.DIRECTOR_VISIBILITY_SMOKE==='1'){
+        const visibilityProject=JSON.parse(fs.readFileSync(path.join(directory,'generation-record.json'),'utf8')).body.project_id;
+        const selected=await js("document.querySelector('[data-hide-job]').dataset.hideJob");
+        const before=await js("document.querySelectorAll('.history-strip [data-history]').length");
+        await js("document.querySelector('[data-hide-job]').click()");
+        await waitFor(`document.querySelectorAll('.history-strip [data-history]').length===${before-1} && !!document.querySelector('[data-restore-job="${selected}"]')`);
+        if(await js(`!!document.querySelector('.history-strip [data-history="${selected}"]')`))throw Error('Hidden job remains in history');
+        await waitFor("document.querySelector('#save-status').textContent.startsWith('已自动保存')");
+        await js("document.querySelector('#back-dashboard').click()");await waitFor("!document.querySelector('#dashboard').hidden");await waitFor(`!!document.querySelector('[data-project="${visibilityProject}"]')`);await js(`document.querySelector('[data-project="${visibilityProject}"]').click()`);
+        await waitFor(`!document.querySelector('#editor').hidden && !!document.querySelector('[data-restore-job="${selected}"]')`);
+        await js(`document.querySelector('[data-restore-job="${selected}"]').closest('details').open=true;document.querySelector('[data-restore-job="${selected}"]').click()`);
+        await waitFor(`!!document.querySelector('.history-strip [data-history="${selected}"]') && !document.querySelector('[data-restore-job="${selected}"]')`);
+        if(!await js("getComputedStyle(document.querySelector('.history-details dd')).wordBreak==='break-all'"))throw Error('Long text does not wrap');
+        console.log('PASS: hide result, separate hidden list, autosave/reopen, restore and break-all text.');
+      }
       if(process.env.DIRECTOR_MATERIAL_SMOKE==='1'){
       await js("document.querySelector('#back-dashboard').click()");
       await waitFor("!document.querySelector('#dashboard').hidden");
       await js("document.querySelector('#new-project').click();document.querySelector('#project-form').elements.title.value='Imported media smoke';document.querySelector('#project-form').requestSubmit()");
       await waitFor("!document.querySelector('#editor').hidden && !document.querySelector('#project-dialog').open");
+      const materialProject=await js("(async()=> (await(await fetch('/api/projects')).json()).projects[0].block_id)()");
       const png=fs.readFileSync(path.join(root,'assets/icon.png')).toString('base64');
       const video=fs.readFileSync('J:/codex_projects/ComfyUI/output/director/smoke-video_00001_.mp4').toString('base64');
       const wav=Buffer.alloc(16044);wav.write('RIFF');wav.writeUInt32LE(16036,4);wav.write('WAVEfmt ',8);wav.writeUInt32LE(16,16);wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);wav.writeUInt32LE(8000,24);wav.writeUInt32LE(16000,28);wav.writeUInt16LE(2,32);wav.writeUInt16LE(16,34);wav.write('data',36);wav.writeUInt32LE(16000,40);
@@ -155,8 +172,8 @@ app.on('browser-window-created', (_, window) => {
       await js(`(()=>{const dt=new DataTransfer();dt.items.add(window.makeMaterial('${png}','reference.png','image/png'));document.querySelector('.ref-zone').dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:dt}));})()`);
       await waitFor("document.querySelector('.ref-list img')?.naturalWidth>0");
       await waitFor("document.querySelector('#save-status').textContent.startsWith('已自动保存')");
-      await js("document.querySelector('#back-dashboard').click()");await waitFor("!document.querySelector('#dashboard').hidden");await js("document.querySelector('.project-tile').click()");
-      await waitFor("document.querySelectorAll('.asset-card').length===3 && document.querySelector('.ref-list img')?.naturalWidth>0");
+      await js("document.querySelector('#back-dashboard').click()");await waitFor("!document.querySelector('#dashboard').hidden");await waitFor(`!!document.querySelector('[data-project="${materialProject}"]')`);await js(`document.querySelector('[data-project="${materialProject}"]').click()`);
+      await waitFor("!document.querySelector('#editor').hidden && document.querySelectorAll('.asset-card').length===3 && document.querySelector('.ref-list img')?.naturalWidth>0");
       if(await js("[...document.querySelectorAll('input[type=file]')].some(e=>getComputedStyle(e).display!=='none')"))throw Error('Native file input visible');
       await js("document.querySelector('#fit-cards').click()");
       window.webContents.invalidate();
@@ -164,6 +181,48 @@ app.on('browser-window-created', (_, window) => {
       await window.webContents.capturePage(undefined,{stayHidden:true,stayAwake:true});await new Promise(r=>setTimeout(r,1500));
       fs.writeFileSync(path.join(directory,'imported-materials.png'),(await window.webContents.capturePage(undefined,{stayHidden:true,stayAwake:true})).toPNG());
       console.log('PASS: button image import, video drop, audio paste, playback metadata, image preview, reference drop, persistence, hidden file inputs.');
+      const videoCard=await js("document.querySelector('.asset-card video').closest('[data-card]').dataset.card");
+      await js(`document.querySelector('[data-card="${videoCard}"] [data-extract-frame=last]').click()`);
+      await waitFor("document.querySelectorAll('.asset-card').length===4");
+      await waitFor("[...document.querySelectorAll('.asset-card img')].filter(e=>e.naturalWidth>0).length===2");
+      await waitFor("document.querySelector('#save-status').textContent.startsWith('已自动保存')");
+      await js(`(()=>{const c=document.querySelector('[data-card="${videoCard}"]');c.querySelector('.frame-seconds').value=0.5;c.querySelector('[data-extract-frame=time]').click();})()`);
+      await waitFor("document.querySelectorAll('.asset-card').length===5");
+      await waitFor("[...document.querySelectorAll('.asset-card img')].filter(e=>e.naturalWidth>0).length===3");
+      await waitFor("document.querySelector('#save-status').textContent.startsWith('已自动保存')");
+      await js("document.querySelector('#back-dashboard').click()");await waitFor("!document.querySelector('#dashboard').hidden");await waitFor(`!!document.querySelector('[data-project="${materialProject}"]')`);await js(`document.querySelector('[data-project="${materialProject}"]').click()`);
+      await waitFor("!document.querySelector('#editor').hidden && document.querySelectorAll('.asset-card').length===5");
+      window.showInactive();await new Promise(r=>setTimeout(r,1200));await js("document.querySelector('#fit-cards').click()");await new Promise(r=>setTimeout(r,500));fs.writeFileSync(path.join(directory,'frames-and-materials.png'),(await window.webContents.capturePage()).toPNG());window.hide();
+      console.log('PASS: actual video last frame and 0.5s frame extraction to persisted PNG asset cards.');
+
+      }
+      if(process.env.DIRECTOR_CONNECTION_SMOKE==='1'){
+        const connectedProject=JSON.parse(fs.readFileSync(path.join(directory,'generation-record.json'),'utf8')).body.project_id;
+        await js("document.querySelector('#back-dashboard').click()");await waitFor("!document.querySelector('#dashboard').hidden");
+        await waitFor(`!!document.querySelector('[data-project="${connectedProject}"]')`);await js(`document.querySelector('[data-project="${connectedProject}"]').click()`);
+        await waitFor("!document.querySelector('#editor').hidden && !!document.querySelector('.history-strip img')");
+        await js("document.querySelector('#add-image').click();document.querySelector('#fit-cards').click()");
+        await waitFor("document.querySelector('#save-status').textContent.startsWith('已自动保存')");
+        const ids=await js("(()=>{const c=[...document.querySelectorAll('[data-card]')];return {source:c[0].dataset.card,target:c[c.length-1].dataset.card}})()");
+        const ports=await js(`(()=>{const a=document.querySelector('[data-card="${ids.source}"] .port-output').getBoundingClientRect(),b=document.querySelector('[data-card="${ids.target}"] .port-input').getBoundingClientRect();return {a:{x:Math.round(a.x+a.width/2),y:Math.round(a.y+a.height/2)},b:{x:Math.round(b.x+b.width/2),y:Math.round(b.y+b.height/2)}}})()`);
+        window.webContents.sendInputEvent({type:'mouseMove',...ports.a});window.webContents.sendInputEvent({type:'mouseDown',...ports.a,button:'left',clickCount:1});
+        await new Promise(r=>setTimeout(r,80));window.webContents.sendInputEvent({type:'mouseMove',...ports.b,button:'left'});
+        await new Promise(r=>setTimeout(r,80));window.webContents.sendInputEvent({type:'mouseUp',...ports.b,button:'left',clickCount:1});
+        await waitFor("document.querySelectorAll('.connection-wire:not(.draft-wire)').length>=1");
+        await waitFor(`document.querySelector('[data-card="${ids.target}"] .imported-item img')?.naturalWidth>0`);
+        await js(`document.querySelector('[data-card="${ids.target}"] [data-use-material]').click()`);
+        await waitFor(`document.querySelector('[data-card="${ids.target}"] .ref-list img')?.naturalWidth>0`);
+        if(!await js(`document.querySelector('[data-card="${ids.target}"] [data-mode=image]').getAttribute('aria-selected')==='true'`))throw Error('Imported generated result did not select image mode');
+        await waitFor("document.querySelector('#save-status').textContent.startsWith('已自动保存')");
+        await js("document.querySelector('#back-dashboard').click()");await waitFor("!document.querySelector('#dashboard').hidden");await waitFor(`!!document.querySelector('[data-project="${connectedProject}"]')`);await js(`document.querySelector('[data-project="${connectedProject}"]').click()`);
+        await waitFor(`!document.querySelector('#editor').hidden && !!document.querySelector('[data-card="${ids.target}"] .ref-list img') && document.querySelectorAll('.connection-wire').length>=1`);
+        await js(`(()=>{const c=document.querySelector('[data-card="${ids.target}"]');for(const [k,v] of Object.entries({width:256,height:256,steps:4,prompt:'A cinematic still life of a white cup'})){const input=c.querySelector('[data-field='+k+']');input.value=v;input.dispatchEvent(new Event('input',{bubbles:true}));}c.querySelector('.generate').click();})()`);
+        await waitFor(`!!document.querySelector('[data-card="${ids.target}"] .generation-progress')`);
+        for(let i=0;i<300;i++){if(await js(`!document.querySelector('[data-card="${ids.target}"] .generation-progress')`))break;await new Promise(r=>setTimeout(r,1000));if(i===299)throw Error('Downstream generation timed out');}
+        await waitFor(`document.querySelector('[data-card="${ids.target}"] .result-stage img')?.naturalWidth>0`);
+        await js(`document.querySelector('[data-card="${ids.target}"] .imported-library').scrollIntoView({block:'center'});document.querySelector('#fit-cards').click()`);
+        window.showInactive();await new Promise(r=>setTimeout(r,1200));fs.writeFileSync(path.join(directory,'connected-cards.png'),(await window.webContents.capturePage()).toPNG());window.hide();
+        console.log('PASS: real mouse port connection, generated history library, generated output used as reference, persistence and actual downstream image generation.');
       }
       app.quit();
     } catch(error) { console.error(error);process.exitCode=1;app.quit(); }
