@@ -106,7 +106,7 @@
   function draft(card) {
     card.drafts ||= {};
     const defaults = {model:card.type === 'image' ? 'z-image-turbo':'minimax-h3', prompt:'', width:card.type === 'image' ? 1024:832, height:card.type === 'image' ? 1024:480, steps:8, seed:-1, denoise:.65, duration:2, refs:[]};
-    return card.drafts[card.mode] = {...defaults, ...card.drafts[card.mode]};
+    return card.drafts[card.mode] = {...defaults, ...card.drafts[card.mode], ...(card.model ? {model:card.model} : {})};
   }
   function transform() {
     const {x,y,zoom} = state.project.body.canvas.viewport;
@@ -124,9 +124,18 @@
   function renderCard(card) {
     const el = document.querySelector(`[data-card="${card.id}"]`); if (!el) return;
     position(card,el);
-    const d = draft(card), model = state.models.find(m => m.id === d.model), unsupported = !model?.modes.includes(card.mode);
+    const available = state.models.filter(m => m.type === card.type);
+    const model = available.find(m => m.id === (card.model || draft(card).model)) || available[0];
+    if(model) {
+      card.model = model.id;
+      if(!model.modes.includes(card.mode) && model.modes.length) {
+        card.mode = model.modes[0];
+        changed();
+      }
+    }
+    const d = draft(card), unsupported = !model?.modes.includes(card.mode);
     const tabLabels = card.type === 'image' ? ['文生图','图生图','参考图'] : ['文生视频','图生视频','多元素参考'];
-    el.innerHTML = `<header class="card-heading"><span class="card-grip">⠿</span><strong>${card.type === 'image'?'◧ 图片生成':'▷ 视频生成'}</strong><small>${card.id.slice(0,6).toUpperCase()}</small><button class="quiet remove-card" title="移除卡片">✕</button></header><div class="card-content"><section class="card-results"></section><div class="generation-tabs" role="tablist">${['text','image','reference'].map((m,i)=>`<button role="tab" aria-selected="${m===card.mode}" data-mode="${m}">${tabLabels[i]}</button>`).join('')}</div><div class="generation-settings"><label>模型<select data-field="model">${state.models.filter(m=>m.type===card.type).map(m=>`<option value="${m.id}" ${m.id===d.model?'selected':''}>${esc(m.name)}</option>`).join('')}</select></label>${unsupported ? `<p class="mode-note">${esc(model?.note || '模型不可用')}</p>` : ''}<label>提示词<textarea data-field="prompt" rows="3" placeholder="描述画面、镜头、光线与情绪…">${esc(d.prompt)}</textarea></label>${card.mode!=='text' ? `<label>${card.type==='video'&&card.mode==='image'?'首帧 / 尾帧（可选）':'输入图片'}<input class="ref-upload" type="file" accept="image/png,image/jpeg,image/webp" ${card.type==='video'||card.mode==='reference'?'multiple':''}></label><div class="ref-list">${d.refs.map((r,i)=>`<div><img src="/api/assets/${esc(r)}" alt="输入图片 ${i+1}"><button class="quiet" data-remove-ref="${i}" title="移除图片">✕</button><small>${card.type==='video'&&card.mode==='image'?(i?'尾帧':'首帧'):i+1}</small></div>`).join('')}</div>`:''}<div class="parameter-grid"><label>宽度<input data-field="width" type="number" min="256" max="1536" step="${card.type==='image'?16:32}" value="${d.width}"></label><label>高度<input data-field="height" type="number" min="256" max="1536" step="${card.type==='image'?16:32}" value="${d.height}"></label><label>步数<input data-field="steps" type="number" min="1" max="40" value="${d.steps}"></label>${card.type==='video'?`<label>时长 / 秒<input data-field="duration" type="number" min="1" max="15" step="1" value="${d.duration}"></label>`:`<label>重绘强度<input data-field="denoise" type="number" min="0.01" max="1" step="0.05" value="${d.denoise}" ${card.mode==='text'?'disabled':''}></label>`}</div><label>种子 <small>−1 为随机</small><input data-field="seed" type="number" min="-1" max="9007199254740991" value="${d.seed}"></label><button class="generate" ${unsupported?'disabled':''}>${unsupported?'当前模式暂不可生成':'生成'+(card.type==='image'?'图片':'视频')+' ↗'}</button><p class="card-feedback" role="status"></p></div></div>${['n','s','e','w','ne','nw','se','sw'].map(dir=>`<div class="resize-handle resize-${dir}" data-resize="${dir}"></div>`).join('')}`;
+    el.innerHTML = `<header class="card-heading"><span class="card-grip">⠿</span><strong>${card.type === 'image'?'◧ 图片生成':'▷ 视频生成'}</strong><small>${card.id.slice(0,6).toUpperCase()}</small><button class="quiet remove-card" title="移除卡片">✕</button></header><div class="card-content"><section class="card-results"></section><label class="model-picker">模型<select data-field="model" ${available.length?'':'disabled'}>${available.map(m=>`<option value="${m.id}" ${m.id===d.model?'selected':''}>${esc(m.name)}</option>`).join('') || '<option>暂无可用模型</option>'}</select></label><div class="generation-tabs" role="tablist">${['text','image','reference'].map((m,i)=>model?.modes.includes(m)?`<button role="tab" aria-selected="${m===card.mode}" data-mode="${m}">${tabLabels[i]}</button>`:'').join('')}</div><div class="generation-settings">${unsupported ? `<p class="mode-note">${esc(model?.note || '模型不可用')}</p>` : ''}<label>提示词<textarea data-field="prompt" rows="3" placeholder="描述画面、镜头、光线与情绪…">${esc(d.prompt)}</textarea></label>${card.mode!=='text' ? `<label>${card.type==='video'&&card.mode==='image'?'首帧 / 尾帧（可选）':'输入图片'}<input class="ref-upload" type="file" accept="image/png,image/jpeg,image/webp" ${card.type==='video'||card.mode==='reference'?'multiple':''}></label><div class="ref-list">${d.refs.map((r,i)=>`<div><img src="/api/assets/${esc(r)}" alt="输入图片 ${i+1}"><button class="quiet" data-remove-ref="${i}" title="移除图片">✕</button><small>${card.type==='video'&&card.mode==='image'?(i?'尾帧':'首帧'):i+1}</small></div>`).join('')}</div>`:''}<div class="parameter-grid"><label>宽度<input data-field="width" type="number" min="256" max="1536" step="${card.type==='image'?16:32}" value="${d.width}"></label><label>高度<input data-field="height" type="number" min="256" max="1536" step="${card.type==='image'?16:32}" value="${d.height}"></label><label>步数<input data-field="steps" type="number" min="1" max="40" value="${d.steps}"></label>${card.type==='video'?`<label>时长 / 秒<input data-field="duration" type="number" min="1" max="15" step="1" value="${d.duration}"></label>`:`<label>重绘强度<input data-field="denoise" type="number" min="0.01" max="1" step="0.05" value="${d.denoise}" ${card.mode==='text'?'disabled':''}></label>`}</div><label>种子 <small>−1 为随机</small><input data-field="seed" type="number" min="-1" max="9007199254740991" value="${d.seed}"></label><button class="generate" ${unsupported?'disabled':''}>${unsupported?'当前模式暂不可生成':'生成'+(card.type==='image'?'图片':'视频')+' ↗'}</button><p class="card-feedback" role="status"></p></div></div>${['n','s','e','w','ne','nw','se','sw'].map(dir=>`<div class="resize-handle resize-${dir}" data-resize="${dir}"></div>`).join('')}`;
     renderResults(card);
   }
   function jobMedia(row,index=0,mini=false) {
@@ -181,10 +190,18 @@
   }
   $('#canvas-world').addEventListener('input',event=>{
     const el=event.target.closest('[data-card]');if(!el)return;const card=cardById(el.dataset.card);
-    if(event.target.dataset.field){const key=event.target.dataset.field;draft(card)[key]=['model','prompt'].includes(key)?event.target.value:Number(event.target.value);changed();}
+    if(event.target.dataset.field && event.target.dataset.field!=='model'){const key=event.target.dataset.field;draft(card)[key]=['model','prompt'].includes(key)?event.target.value:Number(event.target.value);changed();}
   });
   $('#canvas-world').addEventListener('change',async event=>{
     const el=event.target.closest('[data-card]');if(!el)return;const card=cardById(el.dataset.card);
+    if(event.target.dataset.field==='model'){
+      const model=state.models.find(m=>m.id===event.target.value&&m.type===card.type);
+      if(!model)return;
+      card.model=model.id;
+      const top=el.querySelector('.card-content').scrollTop;
+      renderCard(card);el.querySelector('.card-content').scrollTop=top;
+      el.querySelector('[data-field=model]').focus({preventScroll:true});changed();
+    }
     if(event.target.classList.contains('pin-limit')){card.pinLimit=Math.max(0,Math.min(8,Number(event.target.value)||0));card.pins=(card.pins||[]).slice(0,card.pinLimit);changed();renderResults(card);}
     if(event.target.classList.contains('ref-upload')){
       const d=draft(card),limit=card.mode==='reference'?8:card.type==='video'?2:1;
@@ -197,13 +214,13 @@
   $('#canvas-world').addEventListener('click',async event=>{
     const button=event.target.closest('button'),el=event.target.closest('[data-card]');if(!button||!el)return;
     const card=cardById(el.dataset.card);
-    if(button.dataset.mode){card.mode=button.dataset.mode;draft(card);renderCard(card);changed();}
+    if(button.dataset.mode){if(!state.models.find(m=>m.id===card.model)?.modes.includes(button.dataset.mode))return;card.mode=button.dataset.mode;draft(card);renderCard(card);changed();}
     if(button.classList.contains('remove-card')){if(!confirm('移除此卡片？项目中的生成历史仍会保留。'))return;state.project.body.canvas.cards=cards().filter(c=>c.id!==card.id);renderCanvas();changed();}
     if(button.dataset.history){card.selected=button.dataset.history;card.detailsOpen=true;renderResults(card);changed();}
     if(button.dataset.unpin){card.pins=card.pins.filter(id=>id!==button.dataset.unpin);renderResults(card);changed();}
     if(button.classList.contains('pin-current')){const selected=card.selected||state.history.find(h=>h.body.card_id===card.id)?.block_id;card.pins||=[];if(card.pins.includes(selected))return;if(card.pins.length>=(card.pinLimit??2)){tell('对比位已满，可增加数量或取消已有固定。');return;}card.pins.push(selected);renderResults(card);changed();}
     if(button.dataset.removeRef!==undefined){draft(card).refs.splice(Number(button.dataset.removeRef),1);renderCard(card);changed();}
-    if(button.classList.contains('reuse-params')){const h=state.history.find(h=>h.block_id===button.dataset.job);card.mode=h.body.mode;card.drafts[card.mode]={...h.body.params,model:h.body.model,refs:[...h.body.refs]};renderCard(card);changed();}
+    if(button.classList.contains('reuse-params')){const h=state.history.find(h=>h.block_id===button.dataset.job);card.model=h.body.model;card.mode=h.body.mode;card.drafts[card.mode]={...h.body.params,model:h.body.model,refs:[...h.body.refs]};renderCard(card);changed();}
     if(button.classList.contains('generate')){
       button.disabled=true;const feedback=el.querySelector('.card-feedback');feedback.textContent='保存并提交…';
       const projectId=state.project.block_id;

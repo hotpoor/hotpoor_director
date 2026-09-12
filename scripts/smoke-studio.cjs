@@ -44,6 +44,12 @@ app.on('browser-window-created', (_, window) => {
         const list=await (await fetch('/api/projects')).json();const id=list.projects[0].block_id;
         const project=await (await fetch('/api/projects/'+id)).json();
         if(project.body.canvas.cards.length!==2)throw Error('Cards not saved');
+        for(const el of document.querySelectorAll('[data-card]')) {
+          const picker=el.querySelector('[data-field=model]'), tabs=el.querySelector('.generation-tabs');
+          if(!(picker.compareDocumentPosition(tabs)&Node.DOCUMENT_POSITION_FOLLOWING))throw Error('Model must precede modes');
+          if(el.querySelector('[data-mode=reference]') || el.querySelectorAll('[data-mode]').length!==2)throw Error('Unsupported mode visible');
+          picker.dispatchEvent(new Event('change',{bubbles:true}));
+        }
         const card=document.querySelector('[data-card]');
         card.querySelector('[data-field=prompt]').value='A white cup on a black table';card.querySelector('[data-field=prompt]').dispatchEvent(new Event('input',{bubbles:true}));
         card.querySelector('[data-mode=image]').click();
