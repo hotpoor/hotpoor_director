@@ -43,11 +43,17 @@ def main():
                 assert job['body']['status'] == 'queued', job['body']
                 assert post(path + '/generate', payload)['block_id'] == job['block_id']
                 print('Generation API submitted; duplicate request reused the same job.', flush=True)
-                for attempt in range(240):
+                observed_progress = False
+                for attempt in range(1200):
                     response = client.get(path + '/history');response.raise_for_status()
                     record = response.json()['history'][0]
+                    progress = record['body'].get('progress', {})
+                    if progress.get('phase') == 'sampling':
+                        observed_progress = True
+                        print('Real sampling progress:', progress, flush=True)
                     if record['body']['status'] in ('completed','failed'):
                         assert record['body']['status'] == 'completed', record['body'].get('error')
+                        assert observed_progress, 'No real sampling progress observed'
                         media = client.get('/api/outputs/' + record['block_id'] + '/0')
                         assert media.status_code == 200 and media.headers['content-type'].startswith('image/')
                         assert record['body']['usage']['tokens'] is None
@@ -57,7 +63,7 @@ def main():
                         return
                     if attempt % 6 == 0:
                         print('Waiting for local GPU:', record['body']['status'], flush=True)
-                    time.sleep(5)
+                    time.sleep(1)
                 raise TimeoutError('Generation did not finish within 20 minutes')
         finally:
             if process.poll() is None:

@@ -147,6 +147,7 @@ class GenerateHandler(PrivateHandler):
                     headers={'Content-Type': 'multipart/form-data; boundary=' + boundary}, request_timeout=60))
                 uploaded = json.loads(response.body)
                 names.append('/'.join(filter(None, [uploaded.get('subfolder'), uploaded['name']])))
+            await self.settings['progress_tracker'].ensure(self.owner)
             result = await comfy('/prompt', {'prompt': workflow(kind, mode, p, names, job_id), 'client_id': 'director-' + self.owner})
             body.update(status='queued', prompt_id=result['prompt_id'])
         except (HTTPClientError, OSError, KeyError, ValueError) as error:
@@ -168,6 +169,15 @@ class HistoryHandler(PrivateHandler):
         await owned(self.projects, project_id, self.owner, 'project')
         async with self.jobs.connection() as conn:
             rows = await (await conn.execute("SELECT * FROM entities WHERE body->>'kind'='generation' AND body->>'owner_id'=%s AND body->>'project_id'=%s ORDER BY createtime DESC", (self.owner, project_id))).fetchall()
+        tracker = self.settings['progress_tracker']
+        active = any(r['body']['status'] in ('queued', 'running') for r in rows)
+        queue = None
+        if active:
+            await tracker.ensure(self.owner)
+            try:
+                queue = await comfy('/queue')
+            except (HTTPClientError, OSError, ValueError):
+                pass
         for row in rows:
             body = row['body']
             if body['status'] not in ('queued', 'running') or not body.get('prompt_id'):
@@ -175,8 +185,17 @@ class HistoryHandler(PrivateHandler):
             try:
                 entry = (await comfy('/history/' + body['prompt_id'])).get(body['prompt_id'])
             except (HTTPClientError, OSError, ValueError):
+                body['progress'] = {'phase': 'unavailable'}
                 continue
             if not entry:
+                progress = tracker.values.get((self.owner, body['prompt_id']))
+                if progress:
+                    body.update(status='running', progress=progress)
+                elif queue is not None:
+                    running = any(item[1] == body['prompt_id'] for item in queue.get('queue_running', []))
+                    body.update(status='running' if running else 'queued', progress={'phase': 'running' if running else 'queued'})
+                else:
+                    body['progress'] = {'phase': 'unavailable'}
                 continue
             outputs = []
             for output in entry.get('outputs', {}).values():

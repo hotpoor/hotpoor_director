@@ -24,6 +24,7 @@ async def run(args):
     pool = None
     entity_pools = []
     server = None
+    app = None
     try:
         await asyncio.to_thread(postgres.start)
         await asyncio.to_thread(initialize, config)
@@ -54,7 +55,8 @@ async def run(args):
             entity_pool = make_pool(config, database)
             entity_pools.append(entity_pool)
             await entity_pool.open(wait=True)
-        server = tornado.httpserver.HTTPServer(application(config, pool, *entity_pools), max_body_size=25 * 1024 * 1024)
+        app = application(config, pool, *entity_pools)
+        server = tornado.httpserver.HTTPServer(app, max_body_size=25 * 1024 * 1024)
         sockets = tornado.netutil.bind_sockets(args.port, '127.0.0.1')
         server.add_sockets(sockets)
         print(json.dumps({'event': 'ready', 'port': sockets[0].getsockname()[1]}), flush=True)
@@ -63,6 +65,8 @@ async def run(args):
         if server:
             server.stop()
             await server.close_all_connections()
+        if app:
+            await app.settings['progress_tracker'].close()
         if pool:
             await pool.close()
         for entity_pool in entity_pools:

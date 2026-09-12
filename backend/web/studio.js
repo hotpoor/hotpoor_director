@@ -131,15 +131,32 @@
   }
   function jobMedia(row,index=0,mini=false) {
     const url = `/api/outputs/${row.block_id}/${index}`;
-    return row.body.type === 'video' ? `<video src="${url}" ${mini?'preload="none"':'controls preload="metadata"'}></video>` : `<img src="${url}" data-preview="${url}" data-preview-title="${esc(row.body.model)} · ${date(row.createtime)}" ${mini?'':'role="button" tabindex="0"'} title="点击放大预览" alt="生成图片，点击放大预览" loading="lazy">`;
+    return row.body.type === 'video' ? `<video src="${url}" ${mini?'preload="none"':'controls preload="metadata"'}></video>` : `<img src="${url}" data-preview="${url}" data-preview-title="${esc(row.body.model)} · ${date(row.createtime)}" ${mini?'':'role="button" tabindex="0"'} title="${mini?'点击切换当前图片':'点击放大预览'}" alt="生成图片" loading="lazy">`;
   }
-  function renderResults(card) {
+  function renderResults(card, progressOnly=false) {
     const el = document.querySelector(`[data-card="${card.id}"] .card-results`); if (!el) return;
+    const scroller = el.closest('.card-content'), scrollTop = scroller.scrollTop;
+    const detailScroll = el.querySelector('.history-details')?.scrollTop || 0;
     const rows = state.history.filter(h => h.body.card_id === card.id);
     const selected = rows.find(h => h.block_id === card.selected) || rows[0];
     const pins = (card.pins || []).map(id=>rows.find(h=>h.block_id===id)).filter(h=>h?.body.outputs.length);
-    const labels = {completed:'已完成',failed:'失败',submitting:'提交中',queued:'队列中 / 生成中',running:'生成中'};
-    el.innerHTML = `<div class="result-stage">${selected?.body.outputs.length ? jobMedia(selected) : `<div class="result-placeholder"><span>${card.type==='image'?'◧':'▷'}</span><p>${selected ? esc(labels[selected.body.status] || selected.body.status) : '你的下一帧，从这里诞生'}</p></div>`}</div><div class="pin-toolbar"><span>PIN / 对比位</span><input class="pin-limit" aria-label="对比位数量" type="number" min="0" max="8" value="${card.pinLimit ?? 2}"><button class="quiet pin-current" ${selected?.body.outputs.length?'':'disabled'}>＋ 固定当前</button></div>${pins.length?`<div class="pinned-results">${pins.map(h=>`<div>${jobMedia(h)}<button class="quiet" data-unpin="${h.block_id}" title="取消固定">✕</button></div>`).join('')}</div>`:''}<div class="history-heading"><span>生成历史 / ${rows.length}</span><small>最新在左</small></div><div class="history-strip">${rows.map(h=>`<button data-history="${h.block_id}" class="${h===selected?'selected':''}" title="${esc(labels[h.body.status])} · ${date(h.createtime)}">${h.body.outputs.length?jobMedia(h,0,true):`<span>${esc(labels[h.body.status])}</span>`}</button>`).join('') || '<small>还没有生成记录</small>'}</div><details class="history-details" ${card.detailsOpen?'open':''}><summary>生成信息${selected?' · '+esc(labels[selected.body.status]):''}</summary>${selected?`<dl><dt>模型</dt><dd>${esc(selected.body.model)}</dd><dt>创建时间</dt><dd>${date(selected.createtime)}</dd><dt>参数</dt><dd>${selected.body.params.width} × ${selected.body.params.height} · ${selected.body.params.steps} 步 · seed ${selected.body.params.seed}</dd><dt>耗时</dt><dd>${selected.body.elapsed_ms!=null?(selected.body.elapsed_ms/1000).toFixed(1)+' 秒':'待返回'}</dd><dt>Tokens</dt><dd>${selected.body.usage.tokens ?? '未提供（本地模型不按 token 计费）'}</dd><dt>提示词</dt><dd>${esc(selected.body.params.prompt)}</dd>${selected.body.error?`<dt>错误</dt><dd>${esc(selected.body.error)}</dd>`:''}</dl><button class="quiet reuse-params" data-job="${selected.block_id}">复用这次参数</button>`:'<p>选择一条历史查看模型、参数和用量。</p>'}</details>`;
+    const labels = {completed:'已完成',failed:'失败',submitting:'提交中',queued:'排队中',running:'生成中'};
+    const active = rows.find(h=>['submitting','queued','running'].includes(h.body.status));
+    const p = active?.body.progress;
+    const sampler = active && String(p?.node) === (active.body.type==='image'?'8':'11');
+    const determinate = sampler && p?.phase==='sampling' && p.maximum>0 && p.value<p.maximum;
+    const percent = determinate ? Math.floor(p.value/p.maximum*100) : null;
+    const phase = p?.phase==='unavailable' ? '进度暂不可用，正在等待结果' : determinate ? `采样 ${p.value} / ${p.maximum} · ${percent}%` : p?.phase==='finishing' || (sampler && p?.value>=p?.maximum) ? '采样完成，正在处理输出…' : active?.body.status==='submitting' ? '正在提交…' : active?.body.status==='queued' ? '排队等待生成…' : '正在生成 / 加载模型或处理媒体…';
+    const progress = active ? `<div class="generation-progress"><span>${esc(phase)}</span><progress max="100" ${determinate?`value="${percent}"`:''} aria-label="${esc(phase)}"></progress></div>` : '';
+    if(progressOnly){
+      const current=el.querySelector('.generation-progress');
+      if(current)current.outerHTML=progress;
+      else if(progress)el.insertAdjacentHTML('afterbegin',progress);
+      return;
+    }
+    el.innerHTML = `${progress}<div class="result-stage">${selected?.body.outputs.length ? jobMedia(selected) : `<div class="result-placeholder"><span>${card.type==='image'?'◧':'▷'}</span><p>${selected ? esc(labels[selected.body.status] || selected.body.status) : '你的下一帧，从这里诞生'}</p></div>`}</div><div class="pin-toolbar"><span>PIN / 对比位</span><input class="pin-limit" aria-label="对比位数量" type="number" min="0" max="8" value="${card.pinLimit ?? 2}"><button class="quiet pin-current" ${selected?.body.outputs.length?'':'disabled'}>＋ 固定当前</button></div>${pins.length?`<div class="pinned-results">${pins.map(h=>`<div>${jobMedia(h)}<button class="quiet" data-unpin="${h.block_id}" title="取消固定">✕</button></div>`).join('')}</div>`:''}<div class="history-heading"><span>生成历史 / ${rows.length}</span><small>最新在左</small></div><div class="history-strip">${rows.map(h=>`<button data-history="${h.block_id}" class="${h===selected?'selected':''}" title="${esc(labels[h.body.status])} · ${date(h.createtime)}">${h.body.outputs.length?jobMedia(h,0,true):`<span>${esc(labels[h.body.status])}</span>`}</button>`).join('') || '<small>还没有生成记录</small>'}</div><details class="history-details" ${card.detailsOpen?'open':''}><summary>生成信息${selected?' · '+esc(labels[selected.body.status]):''}</summary>${selected?`<dl><dt>模型</dt><dd>${esc(selected.body.model)}</dd><dt>创建时间</dt><dd>${date(selected.createtime)}</dd><dt>参数</dt><dd>${selected.body.params.width} × ${selected.body.params.height} · ${selected.body.params.steps} 步 · seed ${selected.body.params.seed}</dd><dt>耗时</dt><dd>${selected.body.elapsed_ms!=null?(selected.body.elapsed_ms/1000).toFixed(1)+' 秒':'待返回'}</dd><dt>Tokens</dt><dd>${selected.body.usage.tokens ?? '未提供（本地模型不按 token 计费）'}</dd><dt>提示词</dt><dd>${esc(selected.body.params.prompt)}</dd>${selected.body.error?`<dt>错误</dt><dd>${esc(selected.body.error)}</dd>`:''}</dl><button class="quiet reuse-params" data-job="${selected.block_id}">复用这次参数</button>`:'<p>选择一条历史查看模型、参数和用量。</p>'}</details>`;
+    scroller.scrollTop = scrollTop;
+    el.querySelector('.history-details').scrollTop = detailScroll;
   }
   async function pollHistory() {
     clearTimeout(state.polling);
@@ -147,9 +164,13 @@
     try {
       const rows = (await request('/api/projects/'+projectId+'/history')).history;
       if (state.project?.block_id !== projectId) return;
-      if (JSON.stringify(rows)!==JSON.stringify(state.history)) {state.history=rows;for(const card of cards())renderResults(card);}
+      if (JSON.stringify(rows)!==JSON.stringify(state.history)) {
+        const stable = list => JSON.stringify(list.map(row=>({...row,body:{...row.body,progress:undefined}})));
+        const progressOnly = stable(rows)===stable(state.history);
+        state.history=rows;for(const card of cards())renderResults(card,progressOnly);
+      }
     } catch(error) {tell(error.message);}
-    if(state.project?.block_id===projectId)state.polling=setTimeout(pollHistory,5000);
+    if(state.project?.block_id===projectId)state.polling=setTimeout(pollHistory,state.history.some(h=>['submitting','queued','running'].includes(h.body.status))?1000:5000);
   }
   function addCard(type) {
     if(cards().length>=200){tell('当前画布最多 200 张卡片');return;}

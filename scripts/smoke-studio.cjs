@@ -83,11 +83,14 @@ app.on('browser-window-created', (_, window) => {
         fs.writeFileSync(path.join(directory,'generation-history.png'),(await window.webContents.capturePage()).toPNG());
         await js("document.querySelector('.result-stage img').click()");
         await waitFor("document.querySelector('#image-preview').open && document.querySelector('.preview-stage img').naturalWidth > 0");
+        await new Promise(r=>setTimeout(r,500));
         await js("document.querySelector('[data-action=actual]').click();document.querySelector('[data-action=in]').click()");
         if(!await js("document.querySelector('.preview-scale').textContent==='125%'"))throw Error('Preview zoom failed');
         const previewBox=await js("(()=>{const r=document.querySelector('.preview-stage').getBoundingClientRect();return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}})()");
         window.webContents.sendInputEvent({type:'mouseDown',...previewBox,button:'left',clickCount:1});
+        await new Promise(r=>setTimeout(r,80));
         window.webContents.sendInputEvent({type:'mouseMove',x:previewBox.x+40,y:previewBox.y+25,button:'left'});
+        await new Promise(r=>setTimeout(r,80));
         window.webContents.sendInputEvent({type:'mouseUp',x:previewBox.x+40,y:previewBox.y+25,button:'left',clickCount:1});
         await waitFor("document.querySelector('.preview-stage img').style.transform.replaceAll(' ','').includes('translate(40px,25px)')");
         await js("document.querySelector('[data-action=fullscreen]').click()",true);
@@ -105,10 +108,9 @@ app.on('browser-window-created', (_, window) => {
         await waitFor("document.querySelector('#image-preview').open");
         await js("document.querySelector('[data-action=close]').click()");
         await js("document.querySelector('.history-strip img').click()");
-        await waitFor("document.querySelector('#image-preview').open");
-        await js("document.querySelector('[data-action=close]').click()");
+        await waitFor("!document.querySelector('#image-preview').open && document.querySelector('.history-strip .selected img').src === document.querySelector('.result-stage img').src");
         await waitFor("document.querySelector('#save-status').textContent.startsWith('已自动保存')");
-        console.log('Image preview verified: result/history/pins, zoom, pan, system fullscreen, exit fullscreen, and Escape.');
+        console.log('Image preview verified: result/pins, history selects without opening preview, zoom, pan, system fullscreen, exit fullscreen, and Escape.');
       }
       console.log('Studio UI verified: project creation, two cards, independent tab drafts, 8 resize handles, autosave/reopen, narrow layout. Project '+result);
       app.quit();
