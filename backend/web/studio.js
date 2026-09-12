@@ -5,6 +5,7 @@
   const uid = () => crypto.randomUUID().replaceAll('-', '');
   const date = v => new Date(v).toLocaleString('zh-CN', {hour12:false});
   const state = {user:null, projects:[], project:null, models:[], history:[], version:0, saved:0, saving:null, timer:null, polling:null, conflict:false};
+  let elapsedTicker = null;
   let dialogCovers = [], editing = false, uploading = false, importing = false, drag = null;
   async function request(path, body) {
     const headers = {};
@@ -51,6 +52,7 @@
     await save();
     clearTimeout(state.polling);
     state.project = null;
+    updateElapsedClocks();
     $('#editor').hidden = true; $('#dashboard').hidden = false;
     state.projects = (await request('/api/projects')).projects;
     renderProjects();
@@ -163,6 +165,18 @@
     const url = `/api/outputs/${row.block_id}/${index}`;
     return row.body.type === 'video' ? `<video src="${url}" ${mini?'preload="none"':'controls preload="metadata"'}></video>` : `<img src="${url}" data-preview="${url}" data-preview-title="${esc(row.body.model)} · ${date(row.createtime)}" ${mini?'':'role="button" tabindex="0"'} title="${mini?'点击切换当前图片':'点击放大预览'}" alt="生成图片" loading="lazy">`;
   }
+  function elapsedText(start){
+    const seconds=Math.max(0,Math.floor((Date.now()-start)/1000));
+    const hours=Math.floor(seconds/3600),minutes=Math.floor(seconds/60)%60;
+    return (hours?String(hours).padStart(2,'0')+':':'')+String(minutes).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0');
+  }
+  function updateElapsedClocks(){
+    const clocks=state.project?[...document.querySelectorAll('.generation-elapsed')]:[];
+    for(const clock of clocks)clock.textContent='已等待 '+elapsedText(Number(clock.dataset.started));
+    if(clocks.length&&!elapsedTicker)elapsedTicker=setInterval(updateElapsedClocks,1000);
+    if(!clocks.length&&elapsedTicker){clearInterval(elapsedTicker);elapsedTicker=null;}
+  }
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)updateElapsedClocks();});
   function renderResults(card, progressOnly=false) {
     const el = document.querySelector(`[data-card="${card.id}"] .card-results`); if (!el) return;
     const scroller = el.closest('.card-content'), scrollTop = scroller.scrollTop;
@@ -177,8 +191,9 @@
     const determinate = sampler && p?.phase==='sampling' && p.maximum>0 && p.value<p.maximum;
     const percent = determinate ? Math.floor(p.value/p.maximum*100) : null;
     const phase = p?.phase==='unavailable' ? '进度暂不可用，正在等待结果' : determinate ? `采样 ${p.value} / ${p.maximum} · ${percent}%` : p?.phase==='finishing' || (sampler && p?.value>=p?.maximum) ? '采样完成，正在处理输出…' : active?.body.status==='submitting' ? '正在提交…' : active?.body.status==='queued' ? '排队等待生成…' : '正在生成 / 加载模型或处理媒体…';
-    const progress = active ? `<div class="generation-progress"><span>${esc(phase)}</span><progress max="100" ${determinate?`value="${percent}"`:''} aria-label="${esc(phase)}"></progress></div>` : '';
+    const progress = active ? `<div class="generation-progress"><div class="generation-status"><span title="${esc(phase)}">${esc(phase)}</span><span class="generation-elapsed" data-started="${Number(active.body.submitted_at || active.createtime)}" title="从任务提交开始累计，包含排队、加载和生成时间">已等待 ${elapsedText(Number(active.body.submitted_at || active.createtime))}</span></div><progress max="100" ${determinate?`value="${percent}"`:''} aria-label="${esc(phase)}"></progress></div>` : '';
     el.closest('[data-card]').querySelector('.card-progress').innerHTML=progress;
+    updateElapsedClocks();
     if(progressOnly)return;
     el.innerHTML = `<div class="result-stage">${selected?.body.outputs.length ? jobMedia(selected) : `<div class="result-placeholder"><span>${card.type==='image'?'◧':'▷'}</span><p>${selected ? esc(labels[selected.body.status] || selected.body.status) : '你的下一帧，从这里诞生'}</p></div>`}</div><div class="pin-toolbar"><span>PIN / 对比位</span><input class="pin-limit" aria-label="对比位数量" type="number" min="0" max="8" value="${card.pinLimit ?? 2}"><button class="quiet pin-current" ${selected?.body.outputs.length?'':'disabled'}>＋ 固定当前</button></div>${pins.length?`<div class="pinned-results">${pins.map(h=>`<div>${jobMedia(h)}<button class="quiet" data-unpin="${h.block_id}" title="取消固定">✕</button></div>`).join('')}</div>`:''}<div class="history-heading"><span>生成历史 / ${rows.length}</span><small>最新在左</small></div><div class="history-strip">${rows.map(h=>`<button data-history="${h.block_id}" class="${h===selected?'selected':''}" title="${esc(labels[h.body.status])} · ${date(h.createtime)}">${h.body.outputs.length?jobMedia(h,0,true):`<span>${esc(labels[h.body.status])}</span>`}</button>`).join('') || '<small>还没有生成记录</small>'}</div><details class="history-details" ${card.detailsOpen?'open':''}><summary>生成信息${selected?' · '+esc(labels[selected.body.status]):''}</summary>${selected?`<dl><dt>模型</dt><dd>${esc(selected.body.model)}</dd><dt>创建时间</dt><dd>${date(selected.createtime)}</dd><dt>参数</dt><dd>${selected.body.params.width} × ${selected.body.params.height} · ${selected.body.params.steps} 步 · seed ${selected.body.params.seed}</dd>${selected.body.model==='z-image'?`<dt>CFG</dt><dd>${selected.body.params.cfg ?? 4}</dd><dt>反向提示词</dt><dd>${esc(selected.body.params.negative_prompt || '未填写')}</dd>`:''}<dt>耗时</dt><dd>${selected.body.elapsed_ms!=null?(selected.body.elapsed_ms/1000).toFixed(1)+' 秒':'待返回'}</dd><dt>Tokens</dt><dd>${selected.body.usage.tokens ?? '未提供（本地模型不按 token 计费）'}</dd><dt>提示词</dt><dd>${esc(selected.body.params.prompt)}</dd>${selected.body.error?`<dt>错误</dt><dd>${esc(selected.body.error)}</dd>`:''}</dl><button class="quiet reuse-params" data-job="${selected.block_id}">复用这次参数</button>`:'<p>选择一条历史查看模型、参数和用量。</p>'}</details>`;
     scroller.scrollTop = scrollTop;
@@ -338,6 +353,6 @@
   window.addEventListener('beforeunload',event=>{if(importing||uploading||state.version!==state.saved){event.preventDefault();event.returnValue='';}});
   window.directorStudio={
     async enter(user){state.user=user;document.body.classList.add('studio-active');$('#studio').hidden=false;$('#studio-account').textContent=user.login;try{const data=await request('/api/models');state.models=data.models;if(!data.online)tell('ComfyUI 未启动，仍可编辑项目；生成前请启动 ComfyUI。');await dashboard();}catch(error){tell(error.message);}},
-    leave(){clearTimeout(state.polling);clearTimeout(state.timer);state.user=null;state.project=null;state.version=state.saved=0;$('#studio').hidden=true;document.body.classList.remove('studio-active');}
+    leave(){clearTimeout(state.polling);clearTimeout(state.timer);state.user=null;state.project=null;updateElapsedClocks();state.version=state.saved=0;$('#studio').hidden=true;document.body.classList.remove('studio-active');}
   };
 })();
