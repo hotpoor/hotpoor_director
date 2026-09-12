@@ -110,7 +110,7 @@ PyInstaller 将 Python/Tornado 打包为独立后端；Electron Builder 将后�
 
 本地 ComfyUI 不返回 token 计费用量，历史中 `usage.tokens` 为 `null`，界面显示“未提供”，并保留模型、提示词、seed、尺寸、步数及实际返回的耗时。输出文件由 ComfyUI 持有，播放/查看时仍需 ComfyUI 运行；工作台通过已认证的接口访问相应任务输出。
 
-图片上传支持 PNG/JPEG/WebP，单张不超过 20MB。当前最多 200 张卡片/项目。历史暂未分页，海量记录时需增加分页与缩略图。提交超时不会自动重复入队；先检查 ComfyUI 队列再手动重试。ComfyUI 清空历史或重启后，未回传结果的任务可能需要人工确认。
+素材支持图片 PNG/JPEG/WebP（单张 20MB），视频 MP4/WebM、音频 MP3/WAV/OGG/M4A/WebM（单文件 200MB，播放取决于浏览器对文件编码的支持）。画布顶部“导入素材”按钮、文件拖入和剪贴板文件/图片粘贴均可创建独立素材卡片；卡片可移动、八向缩放，图片可放大，音视频支持分段播放。拖入/粘贴到参考图区域时作为生成输入；项目设置中则添加封面。文件选择器仅由按钮唤起，不显示原生文件 input。普通文字粘贴仍由输入框处理。当前最多 200 张卡片/项目。历史暂未分页，海量记录时需增加分页与缩略图。提交超时不会自动重复入队；先检查 ComfyUI 队列再手动重试。ComfyUI 清空历史或重启后，未回传结果的任务可能需要人工确认。
 
 官方模型说明：[Z Image](https://comfyanonymous.github.io/ComfyUI_examples/z_image/)、[MiniMax H3](https://docs.comfy.org/tutorials/video/minimax/minimax-h3)。
 
@@ -123,3 +123,5 @@ Logo 使用用户提供的透明原图，`scripts/prepare_brand.py` 可使用 Pi
 ### 图片放大预览
 
 点击卡片大图、历史缩略图或 Pin 图片即可进入独立预览。滚轮/加减按钮缩放，拖动平移，100% 查看原尺寸，双击切换原尺寸与适应窗口；可切换同一卡片的历史图片。右上角支持系统全屏，Esc 关闭预览。此操作不会改变画布视角。
+
+设置 `DIRECTOR_MATERIAL_SMOKE=1` 运行 `scripts/smoke-studio.cjs` 可追加素材交互检查，使用本机已生成的 `ComfyUI/output/director/smoke-video_00001_.mp4` 测试文件。

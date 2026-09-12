@@ -225,3 +225,34 @@ def test_generation_records_are_private(service):
             row = conn.execute("INSERT INTO entities(body) VALUES (%s::jsonb) RETURNING block_id", (json.dumps({'kind':'generation', 'owner_id':owner, 'project_id':project['block_id'], 'status':'failed', 'outputs':[]}),)).fetchone()
         assert first.get('/api/projects/' + project['block_id'] + '/history').json()['history'][0]['block_id'] == row[0]
         assert second.get('/api/outputs/' + row[0] + '/0').status_code == 404
+
+
+def test_imported_media_cards_and_range_requests(service):
+    import io
+    import wave
+    _, url = service
+    buffer = io.BytesIO()
+    with wave.open(buffer, 'wb') as audio:
+        audio.setnchannels(1); audio.setsampwidth(2); audio.setframerate(8000)
+        audio.writeframes(bytes(16000))
+    source = buffer.getvalue()
+    with signed_in(url) as first, signed_in(url, 'second-director', 'second-test-password-123') as second:
+        result = first.post('/api/assets', files={'file':('test.wav', source, 'audio/wav')})
+        assert result.status_code == 200, result.text
+        asset = result.json()
+        assert asset['mime'] == 'audio/wav' and asset['size'] == len(source)
+        path = asset['url']
+        partial = first.get(path, headers={'Range':'bytes=10-49'})
+        assert partial.status_code == 206 and partial.content == source[10:50]
+        assert partial.headers['content-range'] == f'bytes 10-49/{len(source)}'
+        assert first.get(path, headers={'Range':'bytes=-20'}).content == source[-20:]
+        assert first.get(path, headers={'Range':'bytes=999999-'}).status_code == 416
+        assert int(first.head(path).headers['content-length']) == len(source)
+        assert second.get(path, headers={'Range':'bytes=0-5'}).status_code == 404
+        body={'title':'素材项目','canvas':{'viewport':{'x':0,'y':0,'zoom':1},'cards':[{'id':'c'*32,'type':'asset','mode':'media','asset_id':asset['id'],'x':0,'y':0,'w':420,'h':240,'mime':'video/mp4','name':'spoof'}]}}
+        saved = first.post('/api/projects', json=body)
+        assert saved.status_code == 200, saved.text
+        card = saved.json()['body']['canvas']['cards'][0]
+        assert card['mime']=='audio/wav' and card['name']=='test.wav'
+        assert second.post('/api/projects', json=body).status_code == 404
+        assert first.post('/api/projects',json={'title':'invalid cover','covers':[asset['id']]}).status_code == 400

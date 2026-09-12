@@ -5,7 +5,7 @@
   const uid = () => crypto.randomUUID().replaceAll('-', '');
   const date = v => new Date(v).toLocaleString('zh-CN', {hour12:false});
   const state = {user:null, projects:[], project:null, models:[], history:[], version:0, saved:0, saving:null, timer:null, polling:null, conflict:false};
-  let dialogCovers = [], editing = false, uploading = false, drag = null;
+  let dialogCovers = [], editing = false, uploading = false, importing = false, drag = null;
   async function request(path, body) {
     const headers = {};
     if (body !== undefined) headers['X-XSRFToken'] = decodeURIComponent(document.cookie.split('; ').find(x => x.startsWith('_xsrf='))?.slice(6) || '');
@@ -47,6 +47,7 @@
     if (state.saved !== state.version) return save();
   }
   async function dashboard() {
+    if(importing)throw Error('请等待素材导入完成');
     await save();
     clearTimeout(state.polling);
     state.project = null;
@@ -61,6 +62,7 @@
     $('#project-list').innerHTML = list.length ? list.map(p => `<button class="project-tile" data-project="${p.block_id}"><div class="project-cover">${p.body.covers.length ? `<img src="/api/assets/${p.body.covers[0]}" alt="${esc(p.body.title)} 的封面" loading="lazy">` : '<span>◧<small>UNTITLED FRAME / 等待你的第一帧</small></span>'}<b>${p.body.covers.length ? p.body.covers.length + ' 张封面' : 'DIRECTOR PROJECT'}</b></div><div class="project-copy"><h3>${esc(p.body.title)}</h3><p>${esc(p.body.subtitle || '为下一个故事留白')}</p><div class="project-description">${esc(p.body.description)}</div><small>创建 ${date(p.createtime)}<br>更新 ${date(p.updatetime)}</small><code>${p.block_id}</code></div></button>`).join('') : '<div class="empty-projects"><span>01 / 第一部作品</span><h2>你的创作现场，尚未开场。</h2><p>创建项目，收集灵感，让画面和故事一起生长。</p><button id="empty-create">＋ 创建第一个项目</button></div>';
   }
   async function openProject(id) {
+    if(importing)throw Error('请等待素材导入完成');
     await save();
     const project = await request('/api/projects/' + id);
     state.project = project; state.version = 0; state.saved = 0; state.conflict = false; state.history = [];
@@ -77,17 +79,25 @@
     renderCovers(); $('#project-dialog').showModal();
   }
   function renderCovers() { $('#cover-list').innerHTML = dialogCovers.map((id,i) => `<div><img src="/api/assets/${id}" alt="封面 ${i+1}"><button type="button" data-remove-cover="${i}" aria-label="移除封面">✕</button><small>${i ? i+1:'主封面'}</small></div>`).join(''); }
-  async function upload(file) {
-    if (file.size > 20*1024*1024) throw new Error('单张图片不能超过 20 MB');
-    const form = new FormData(); form.append('file',file); return (await request('/api/assets',form)).id;
+  async function uploadMedia(file) {
+    const limit=file.type.startsWith('image/')?20:200;
+    if(file.size>limit*1024*1024)throw new Error(`${file.name} 不能超过 ${limit} MB`);
+    const form=new FormData();form.append('file',file);return request('/api/assets',form);
   }
-  $('#cover-upload').onchange = async event => {
-    if (dialogCovers.length + event.target.files.length > 20) { $('#project-form-error').textContent = '最多 20 张封面'; return; }
-    uploading = true; $('#save-project').disabled = true;
-    try { for (const file of event.target.files) { dialogCovers.push(await upload(file)); renderCovers(); } }
-    catch (error) { $('#project-form-error').textContent = error.message; }
-    finally { uploading = false; $('#save-project').disabled = false; }
-  };
+  async function upload(file) {
+    if(!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('封面和参考图只支持 PNG、JPEG、WebP 图片');
+    return (await uploadMedia(file)).id;
+  }
+  async function addCovers(files) {
+    if(uploading)return;
+    if(dialogCovers.length+files.length>20){$('#project-form-error').textContent='最多 20 张封面';return;}
+    uploading=true;$('#save-project').disabled=true;
+    try{for(const file of files){dialogCovers.push(await upload(file));renderCovers();}}
+    catch(error){$('#project-form-error').textContent=error.message;}
+    finally{uploading=false;$('#save-project').disabled=false;$('#cover-upload').value='';}
+  }
+  $('#cover-upload').onchange=event=>addCovers([...event.target.files]);
+  $('#choose-covers').onclick=()=>$('#cover-upload').click();
   $('#cover-list').onclick = event => { const button = event.target.closest('[data-remove-cover]'); if (button) {dialogCovers.splice(Number(button.dataset.removeCover),1);renderCovers();} };
   $('#close-dialog').onclick = () => $('#project-dialog').close();
   $('#project-form').onsubmit = async event => {
@@ -128,6 +138,13 @@
   function renderCard(card) {
     const el = document.querySelector(`[data-card="${card.id}"]`); if (!el) return;
     position(card,el);
+    if(card.type==='asset'){
+      const url='/api/assets/'+card.asset_id;
+      const media=card.mime?.startsWith('image/')?`<img src="${url}" data-preview="${url}" data-preview-title="${esc(card.name)}" role="button" tabindex="0" alt="${esc(card.name)}">`:card.mime?.startsWith('video/')?`<video src="${url}" controls preload="metadata"></video>`:`<div class="audio-art">♫</div><audio src="${url}" controls preload="metadata"></audio>`;
+      el.classList.add('asset-card');
+      el.innerHTML=`<header class="card-heading"><span class="card-grip">⠿</span><strong title="${esc(card.name)}">${esc(card.name)}</strong><button class="quiet remove-card" title="移除素材卡片">✕</button></header><div class="asset-content">${media}<small>${esc(card.mime)} · ${((card.size||0)/1024/1024).toFixed(2)} MB</small><p class="media-error" hidden>浏览器无法播放此文件，请检查编码格式。</p></div>${['n','s','e','w','ne','nw','se','sw'].map(dir=>`<div class="resize-handle resize-${dir}" data-resize="${dir}"></div>`).join('')}`;
+      return;
+    }
     const available = state.models.filter(m => m.type === card.type);
     const model = available.find(m => m.id === (card.model || draft(card).model)) || available[0];
     if(model) {
@@ -139,7 +156,7 @@
     }
     const d = draft(card), unsupported = !model?.modes.includes(card.mode);
     const tabLabels = card.type === 'image' ? ['文生图','图生图','参考图'] : ['文生视频','图生视频','多元素参考'];
-    el.innerHTML = `<header class="card-heading"><span class="card-grip">⠿</span><strong>${card.type === 'image'?'◧ 图片生成':'▷ 视频生成'}</strong><small>${card.id.slice(0,6).toUpperCase()}</small><button class="quiet remove-card" title="移除卡片">✕</button></header><div class="card-progress"></div><div class="card-content"><section class="card-results"></section><label class="model-picker">模型<select data-field="model" ${available.length?'':'disabled'}>${available.map(m=>`<option value="${m.id}" ${m.id===d.model?'selected':''}>${esc(m.name)}</option>`).join('') || '<option>暂无可用模型</option>'}</select></label><div class="generation-tabs" role="tablist">${['text','image','reference'].map((m,i)=>model?.modes.includes(m)?`<button role="tab" aria-selected="${m===card.mode}" data-mode="${m}">${tabLabels[i]}</button>`:'').join('')}</div><div class="generation-settings">${unsupported ? `<p class="mode-note">${esc(model?.note || '模型不可用')}</p>` : ''}<label>提示词<textarea data-field="prompt" rows="3" placeholder="描述画面、镜头、光线与情绪…">${esc(d.prompt)}</textarea></label>${d.model==='z-image'?`<label>反向提示词<textarea data-field="negative_prompt" rows="2" placeholder="希望避免的内容…">${esc(d.negative_prompt)}</textarea></label>`:''}${card.mode!=='text' ? `<label>${card.type==='video'&&card.mode==='image'?'首帧 / 尾帧（可选）':'输入图片'}<input class="ref-upload" type="file" accept="image/png,image/jpeg,image/webp" ${card.type==='video'||card.mode==='reference'?'multiple':''}></label><div class="ref-list">${d.refs.map((r,i)=>`<div><img src="/api/assets/${esc(r)}" alt="输入图片 ${i+1}"><button class="quiet" data-remove-ref="${i}" title="移除图片">✕</button><small>${card.type==='video'&&card.mode==='image'?(i?'尾帧':'首帧'):i+1}</small></div>`).join('')}</div>`:''}<div class="parameter-grid"><label>宽度<input data-field="width" type="number" min="256" max="1536" step="${card.type==='image'?16:32}" value="${d.width}"></label><label>高度<input data-field="height" type="number" min="256" max="1536" step="${card.type==='image'?16:32}" value="${d.height}"></label><label>步数<input data-field="steps" type="number" min="1" max="${d.model==='z-image'?60:40}" value="${d.steps}"></label>${d.model==='z-image'?`<label>CFG / 提示词引导<input data-field="cfg" type="number" min="1" max="20" step="0.5" value="${d.cfg}"></label>`:''}${card.type==='video'?`<label>时长 / 秒<input data-field="duration" type="number" min="1" max="15" step="1" value="${d.duration}"></label>`:`<label>重绘强度<input data-field="denoise" type="number" min="0.01" max="1" step="0.05" value="${d.denoise}" ${card.mode==='text'?'disabled':''}></label>`}</div><label>种子 <small>−1 为随机</small><input data-field="seed" type="number" min="-1" max="9007199254740991" value="${d.seed}"></label><button class="generate" ${unsupported?'disabled':''}>${unsupported?'当前模式暂不可生成':'生成'+(card.type==='image'?'图片':'视频')+' ↗'}</button><p class="card-feedback" role="status"></p></div></div>${['n','s','e','w','ne','nw','se','sw'].map(dir=>`<div class="resize-handle resize-${dir}" data-resize="${dir}"></div>`).join('')}`;
+    el.innerHTML = `<header class="card-heading"><span class="card-grip">⠿</span><strong>${card.type === 'image'?'◧ 图片生成':'▷ 视频生成'}</strong><small>${card.id.slice(0,6).toUpperCase()}</small><button class="quiet remove-card" title="移除卡片">✕</button></header><div class="card-progress"></div><div class="card-content"><section class="card-results"></section><label class="model-picker">模型<select data-field="model" ${available.length?'':'disabled'}>${available.map(m=>`<option value="${m.id}" ${m.id===d.model?'selected':''}>${esc(m.name)}</option>`).join('') || '<option>暂无可用模型</option>'}</select></label><div class="generation-tabs" role="tablist">${['text','image','reference'].map((m,i)=>model?.modes.includes(m)?`<button role="tab" aria-selected="${m===card.mode}" data-mode="${m}">${tabLabels[i]}</button>`:'').join('')}</div><div class="generation-settings">${unsupported ? `<p class="mode-note">${esc(model?.note || '模型不可用')}</p>` : ''}<label>提示词<textarea data-field="prompt" rows="3" placeholder="描述画面、镜头、光线与情绪…">${esc(d.prompt)}</textarea></label>${d.model==='z-image'?`<label>反向提示词<textarea data-field="negative_prompt" rows="2" placeholder="希望避免的内容…">${esc(d.negative_prompt)}</textarea></label>`:''}${card.mode!=='text' ? `<div class="ref-zone" tabindex="0"><span>${card.type==='video'&&card.mode==='image'?'首帧 / 尾帧（可选）':'输入图片'}</span><button class="quiet choose-ref">＋ 添加图片 · 拖入 / 粘贴</button><input hidden class="ref-upload" type="file" accept="image/png,image/jpeg,image/webp" ${card.type==='video'||card.mode==='reference'?'multiple':''}></div><div class="ref-list">${d.refs.map((r,i)=>`<div><img src="/api/assets/${esc(r)}" alt="输入图片 ${i+1}"><button class="quiet" data-remove-ref="${i}" title="移除图片">✕</button><small>${card.type==='video'&&card.mode==='image'?(i?'尾帧':'首帧'):i+1}</small></div>`).join('')}</div>`:''}<div class="parameter-grid"><label>宽度<input data-field="width" type="number" min="256" max="1536" step="${card.type==='image'?16:32}" value="${d.width}"></label><label>高度<input data-field="height" type="number" min="256" max="1536" step="${card.type==='image'?16:32}" value="${d.height}"></label><label>步数<input data-field="steps" type="number" min="1" max="${d.model==='z-image'?60:40}" value="${d.steps}"></label>${d.model==='z-image'?`<label>CFG / 提示词引导<input data-field="cfg" type="number" min="1" max="20" step="0.5" value="${d.cfg}"></label>`:''}${card.type==='video'?`<label>时长 / 秒<input data-field="duration" type="number" min="1" max="15" step="1" value="${d.duration}"></label>`:`<label>重绘强度<input data-field="denoise" type="number" min="0.01" max="1" step="0.05" value="${d.denoise}" ${card.mode==='text'?'disabled':''}></label>`}</div><label>种子 <small>−1 为随机</small><input data-field="seed" type="number" min="-1" max="9007199254740991" value="${d.seed}"></label><button class="generate" ${unsupported?'disabled':''}>${unsupported?'当前模式暂不可生成':'生成'+(card.type==='image'?'图片':'视频')+' ↗'}</button><p class="card-feedback" role="status"></p></div></div>${['n','s','e','w','ne','nw','se','sw'].map(dir=>`<div class="resize-handle resize-${dir}" data-resize="${dir}"></div>`).join('')}`;
     renderResults(card);
   }
   function jobMedia(row,index=0,mini=false) {
@@ -203,19 +220,15 @@
       el.querySelector('[data-field=model]').focus({preventScroll:true});changed();
     }
     if(event.target.classList.contains('pin-limit')){card.pinLimit=Math.max(0,Math.min(8,Number(event.target.value)||0));card.pins=(card.pins||[]).slice(0,card.pinLimit);changed();renderResults(card);}
-    if(event.target.classList.contains('ref-upload')){
-      const d=draft(card),limit=card.mode==='reference'?8:card.type==='video'?2:1;
-      if(d.refs.length+event.target.files.length>limit){tell(`当前模式最多 ${limit} 张输入图片`);event.target.value='';return;}
-      event.target.disabled=true;
-      try{for(const file of event.target.files){d.refs.push(await upload(file));changed();}renderCard(card);}catch(error){tell(error.message);event.target.disabled=false;}
-    }
+    if(event.target.classList.contains('ref-upload')){await addReferences(card,[...event.target.files]);}
   });
   $('#canvas-world').addEventListener('toggle',event=>{if(event.target.isConnected&&event.target.classList.contains('history-details')){const card=cardById(event.target.closest('[data-card]').dataset.card);card.detailsOpen=event.target.open;}},true);
   $('#canvas-world').addEventListener('click',async event=>{
     const button=event.target.closest('button'),el=event.target.closest('[data-card]');if(!button||!el)return;
     const card=cardById(el.dataset.card);
+    if(button.classList.contains('choose-ref'))el.querySelector('.ref-upload').click();
     if(button.dataset.mode){if(!state.models.find(m=>m.id===card.model)?.modes.includes(button.dataset.mode))return;card.mode=button.dataset.mode;draft(card);renderCard(card);changed();}
-    if(button.classList.contains('remove-card')){if(!confirm('移除此卡片？项目中的生成历史仍会保留。'))return;state.project.body.canvas.cards=cards().filter(c=>c.id!==card.id);renderCanvas();changed();}
+    if(button.classList.contains('remove-card')){if(!confirm(card.type==='asset'?'移除此素材卡片？':'移除此卡片？项目中的生成历史仍会保留。'))return;state.project.body.canvas.cards=cards().filter(c=>c.id!==card.id);renderCanvas();changed();}
     if(button.dataset.history){card.selected=button.dataset.history;card.detailsOpen=true;renderResults(card);changed();}
     if(button.dataset.unpin){card.pins=card.pins.filter(id=>id!==button.dataset.unpin);renderResults(card);changed();}
     if(button.classList.contains('pin-current')){const selected=card.selected||state.history.find(h=>h.body.card_id===card.id)?.block_id;card.pins||=[];if(card.pins.includes(selected))return;if(card.pins.length>=(card.pinLimit??2)){tell('对比位已满，可增加数量或取消已有固定。');return;}card.pins.push(selected);renderResults(card);changed();}
@@ -244,9 +257,9 @@
     if(!c){v.x=o.x+event.clientX-drag.px;v.y=o.y+event.clientY-drag.py;transform();return;}
     if(!drag.dir){c.x=o.x+dx;c.y=o.y+dy;}else{
       if(drag.dir.includes('e'))c.w=Math.max(380,Math.min(3000,o.w+dx));
-      if(drag.dir.includes('s'))c.h=Math.max(520,Math.min(4000,o.h+dy));
+      if(drag.dir.includes('s'))c.h=Math.max(c.type==='asset'?200:520,Math.min(4000,o.h+dy));
       if(drag.dir.includes('w')){c.w=Math.max(380,Math.min(3000,o.w-dx));c.x=o.x+o.w-c.w;}
-      if(drag.dir.includes('n')){c.h=Math.max(520,Math.min(4000,o.h-dy));c.y=o.y+o.h-c.h;}
+      if(drag.dir.includes('n')){c.h=Math.max(c.type==='asset'?200:520,Math.min(4000,o.h-dy));c.y=o.y+o.h-c.h;}
     }position(c,drag.el);
   };
   function finishDrag(){if(drag){if(drag.el)drag.el.style.zIndex='';drag=null;changed();}}
@@ -263,10 +276,66 @@
   $('#project-list').onclick=event=>{const tile=event.target.closest('[data-project]');if(tile)openProject(tile.dataset.project).catch(e=>tell(e.message));if(event.target.closest('#empty-create'))openDialog();};
   $('#project-search').oninput=renderProjects;
   $('#back-dashboard').onclick=()=>dashboard().catch(e=>tell(e.message));
+  async function addReferences(card,files){
+    if(importing)return;
+    const project=state.project,d=draft(card),limit=card.mode==='reference'?8:card.type==='video'?2:1;
+    if(d.refs.length+files.length>limit){tell(`当前模式最多 ${limit} 张输入图片`);return;}
+    importing=true;
+    try{for(const file of files){const id=await upload(file);if(state.project!==project)throw Error('项目已切换，已停止添加参考图');d.refs.push(id);changed();}renderCard(card);}
+    catch(error){tell(error.message);if(state.project===project)renderCard(card);}
+    finally{importing=false;}
+  }
+  async function importAssets(files,point){
+    if(!state.project||importing)return;
+    if(cards().length+files.length>200){tell('当前画布最多 200 张卡片');return;}
+    const project=state.project,v=project.body.canvas.viewport,r=$('#canvas').getBoundingClientRect();
+    const x=point?(point.x-r.left-v.x)/v.zoom:cards().length?Math.max(...cards().map(c=>c.x+c.w))+40:(40-v.x)/v.zoom;
+    const y=point?(point.y-r.top-v.y)/v.zoom:(40-v.y)/v.zoom;
+    importing=true;$('#add-assets').disabled=true;
+    try{
+      for(let i=0;i<files.length;i++){
+        tell(`正在导入 ${i+1}/${files.length}：${files[i].name}`);
+        const asset=await uploadMedia(files[i]);
+        if(state.project!==project)throw Error('项目已切换，已停止导入');
+        const card={id:uid(),type:'asset',mode:'media',asset_id:asset.id,name:asset.name,mime:asset.mime,size:asset.size,x:x+(i%3)*460,y:y+Math.floor(i/3)*400,w:420,h:asset.mime.startsWith('audio/')?240:360};
+        cards().push(card);const el=document.createElement('article');el.className='generation-card';el.dataset.card=card.id;$('#canvas-world').append(el);renderCard(card);changed();$('#canvas-empty').hidden=true;
+      }
+      if(!point){v.x=40-x*v.zoom;v.y=40-y*v.zoom;transform();changed();}
+      tell('');await save();
+    }catch(error){tell(error.message);}
+    finally{importing=false;$('#add-assets').disabled=false;$('#asset-upload').value='';}
+  }
+  function receiveFiles(files,target,point){
+    if($('#project-dialog').open){addCovers(files);return;}
+    if(!state.project)return;
+    const ref=target.closest('.ref-zone');
+    if(ref){addReferences(cardById(ref.closest('[data-card]').dataset.card),files);return;}
+    importAssets(files,point);
+  }
+  $('#add-assets').onclick=()=>$('#asset-upload').click();
+  $('#asset-upload').onchange=event=>importAssets([...event.target.files]);
+  document.addEventListener('dragover',event=>{
+    if(!event.dataTransfer?.types.includes('Files'))return;
+    event.preventDefault();event.dataTransfer.dropEffect='copy';
+    const zone=event.target.closest('.ref-zone')||($('#project-dialog').open?$('#project-dialog'):state.project?$('#canvas'):null);
+    document.querySelectorAll('.file-dragover').forEach(el=>{if(el!==zone)el.classList.remove('file-dragover');});zone?.classList.add('file-dragover');
+  });
+  document.addEventListener('dragleave',event=>{if(!event.relatedTarget)document.querySelectorAll('.file-dragover').forEach(el=>el.classList.remove('file-dragover'));});
+  document.addEventListener('drop',event=>{
+    document.querySelectorAll('.file-dragover').forEach(el=>el.classList.remove('file-dragover'));
+    const files=[...(event.dataTransfer?.files||[])];if(!files.length)return;
+    event.preventDefault();receiveFiles(files,event.target,{x:event.clientX,y:event.clientY});
+  });
+  document.addEventListener('paste',event=>{
+    const files=[...(event.clipboardData?.files||[])];if(!files.length)return;
+    if(!state.project&&!$('#project-dialog').open)return;
+    event.preventDefault();receiveFiles(files,event.target);
+  });
+  $('#canvas-world').addEventListener('error',event=>{const el=event.target.closest('.asset-card');if(el)el.querySelector('.media-error').hidden=false;},true);
   $('#add-image').onclick=()=>addCard('image');$('#add-video').onclick=()=>addCard('video');
   $('.studio-brand').onclick=event=>{event.preventDefault();dashboard().catch(e=>tell(e.message));};
-  $('#studio-logout').onclick=async()=>{try{await save();await request('/api/logout',{});location.reload();}catch(e){tell(e.message);}};
-  window.addEventListener('beforeunload',event=>{if(state.version!==state.saved){event.preventDefault();event.returnValue='';}});
+  $('#studio-logout').onclick=async()=>{try{if(importing)throw Error('请等待素材导入完成');await save();await request('/api/logout',{});location.reload();}catch(e){tell(e.message);}};
+  window.addEventListener('beforeunload',event=>{if(importing||uploading||state.version!==state.saved){event.preventDefault();event.returnValue='';}});
   window.directorStudio={
     async enter(user){state.user=user;document.body.classList.add('studio-active');$('#studio').hidden=false;$('#studio-account').textContent=user.login;try{const data=await request('/api/models');state.models=data.models;if(!data.online)tell('ComfyUI 未启动，仍可编辑项目；生成前请启动 ComfyUI。');await dashboard();}catch(error){tell(error.message);}},
     leave(){clearTimeout(state.polling);clearTimeout(state.timer);state.user=null;state.project=null;state.version=state.saved=0;$('#studio').hidden=true;document.body.classList.remove('studio-active');}

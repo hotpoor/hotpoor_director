@@ -5,6 +5,9 @@ import math
 import re
 import time
 import uuid
+from pathlib import Path
+from urllib.parse import quote
+from tornado.iostream import StreamClosedError
 
 from psycopg.types.json import Jsonb
 import tornado.web
@@ -51,10 +54,12 @@ def validate_project(data):
         if not isinstance(card, dict) or not isinstance(card.get('id'), str) or not ID.fullmatch(card['id']) or card['id'] in seen:
             raise ValueError('卡片 UUID 不正确或重复')
         seen.add(card['id'])
-        if card.get('type') not in ('image', 'video') or card.get('mode') not in ('text', 'image', 'reference'):
+        if card.get('type') not in ('image', 'video', 'asset') or card.get('mode') not in (('media',) if card.get('type') == 'asset' else ('text', 'image', 'reference')):
             raise ValueError('卡片模式不正确')
-        if not all(finite(card.get(k), lo, hi) for k, lo, hi in [('x', -1e7, 1e7), ('y', -1e7, 1e7), ('w', 380, 3000), ('h', 520, 4000)]):
+        if not all(finite(card.get(k), lo, hi) for k, lo, hi in [('x', -1e7, 1e7), ('y', -1e7, 1e7), ('w', 380, 3000), ('h', 200 if card.get('type') == 'asset' else 520, 4000)]):
             raise ValueError('卡片尺寸不正确')
+        if card['type'] == 'asset' and (not isinstance(card.get('asset_id'), str) or not ID.fullmatch(card['asset_id'])):
+            raise ValueError('素材 UUID 不正确')
         drafts = card.get('drafts', {})
         if not isinstance(drafts, dict) or set(drafts) - {'text', 'image', 'reference'}:
             raise ValueError('卡片参数格式不正确')
@@ -132,7 +137,13 @@ async def save_project(handler, project_id=None):
                 raise tornado.web.HTTPError(400, reason='参考素材格式不正确')
             asset_ids.update(x for x in draft.get('refs', []) if isinstance(x, str))
     for asset_id in asset_ids:
-        await owned(handler.projects, asset_id, handler.owner, 'asset')
+        asset = await owned(handler.projects, asset_id, handler.owner, 'asset')
+        if not asset['body']['mime'].startswith('image/'):
+            raise tornado.web.HTTPError(400, reason='封面和参考图必须是图片')
+    for card in body['canvas']['cards']:
+        if card['type'] == 'asset':
+            asset = await owned(handler.projects, card['asset_id'], handler.owner, 'asset')
+            card.update(name=asset['body']['name'], mime=asset['body']['mime'], size=asset['body'].get('size', 0))
     body.update(kind='project', owner_id=handler.owner)
     async with handler.projects.connection() as conn:
         if project_id:
@@ -152,36 +163,95 @@ async def save_project(handler, project_id=None):
 class UploadHandler(PrivateHandler):
     async def post(self):
         files = self.request.files.get('file', [])
-        if len(files) != 1 or len(files[0]['body']) > 20 * 1024 * 1024:
-            raise tornado.web.HTTPError(400, reason='请选择一张不超过 20 MB 的图片')
+        if len(files) != 1 or len(files[0]['body']) > 200 * 1024 * 1024:
+            raise tornado.web.HTTPError(400, reason='请选择一个不超过 200 MB 的素材文件')
         raw = files[0]['body']
+        suffix = Path(files[0]['filename']).suffix.lower()
         if raw.startswith(b'\x89PNG\r\n\x1a\n'):
             ext, mime = 'png', 'image/png'
         elif raw.startswith(b'\xff\xd8\xff'):
             ext, mime = 'jpg', 'image/jpeg'
         elif raw.startswith(b'RIFF') and raw[8:12] == b'WEBP':
             ext, mime = 'webp', 'image/webp'
+        elif raw[4:8] == b'ftyp' and suffix in ('.mp4', '.m4v', '.m4a'):
+            ext, mime = ('m4a', 'audio/mp4') if suffix == '.m4a' else ('mp4', 'video/mp4')
+        elif raw.startswith(b'\x1a\x45\xdf\xa3') and suffix in ('.webm', '.weba'):
+            ext, mime = ('weba', 'audio/webm') if suffix == '.weba' else ('webm', 'video/webm')
+        elif raw.startswith(b'RIFF') and raw[8:12] == b'WAVE':
+            ext, mime = 'wav', 'audio/wav'
+        elif raw.startswith(b'OggS') and suffix in ('.ogg', '.oga', '.opus'):
+            ext, mime = 'ogg', 'audio/ogg'
+        elif suffix == '.mp3' and (raw.startswith(b'ID3') or (len(raw) > 1 and raw[0] == 255 and raw[1] & 224 == 224)):
+            ext, mime = 'mp3', 'audio/mpeg'
         else:
-            raise tornado.web.HTTPError(400, reason='支持 PNG、JPEG 和 WebP 图片')
+            raise tornado.web.HTTPError(400, reason='支持 PNG/JPEG/WebP、MP4/WebM 和 MP3/WAV/OGG/M4A 音视频')
+        if mime.startswith('image/') and len(raw) > 20 * 1024 * 1024:
+            raise tornado.web.HTTPError(400, reason='图片不能超过 20 MB')
         asset_id = uuid.uuid4().hex
         directory = self.settings['config']['data_dir'] / 'media'
         directory.mkdir(exist_ok=True)
         filename = asset_id + '.' + ext
         await asyncio.to_thread((directory / filename).write_bytes, raw)
-        body = dict(kind='asset', owner_id=self.owner, filename=filename, mime=mime, name=files[0]['filename'][:254])
+        body = dict(kind='asset', owner_id=self.owner, filename=filename, mime=mime, name=files[0]['filename'][:254], size=len(raw))
         async with self.projects.connection() as conn:
             await conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s)', (asset_id, Jsonb(body)))
-        self.finish({'id': asset_id, 'url': '/api/assets/' + asset_id})
+        self.finish({'id': asset_id, 'url': '/api/assets/' + asset_id, 'name': body['name'], 'mime': mime, 'size': len(raw)})
 
 
 class AssetHandler(PrivateHandler):
-    async def get(self, asset_id):
+    async def head(self, asset_id):
+        await self.get(asset_id, include_body=False)
+
+    async def get(self, asset_id, include_body=True):
         row = await owned(self.projects, asset_id, self.owner, 'asset')
         path = self.settings['config']['data_dir'] / 'media' / row['body']['filename']
         if not path.is_file():
             raise tornado.web.HTTPError(404)
+        size = path.stat().st_size
+        start, end = 0, size - 1
+        requested = self.request.headers.get('Range')
+        if requested:
+            match = re.fullmatch(r'bytes=(\d*)-(\d*)', requested)
+            try:
+                if not match or not any(match.groups()):
+                    raise ValueError()
+                first, last = match.groups()
+                if not first:
+                    suffix = int(last)
+                    if suffix <= 0:
+                        raise ValueError()
+                    start = max(0, size - suffix)
+                else:
+                    start = int(first)
+                    end = min(int(last), end) if last else end
+                if start > end or start >= size:
+                    raise ValueError()
+            except ValueError:
+                self.set_status(416)
+                self.set_header('Content-Range', f'bytes */{size}')
+                self.finish()
+                return
+            self.set_status(206)
+            self.set_header('Content-Range', f'bytes {start}-{end}/{size}')
         self.set_header('Content-Type', row['body']['mime'])
-        self.finish(await asyncio.to_thread(path.read_bytes))
+        self.set_header('Accept-Ranges', 'bytes')
+        self.set_header('Content-Length', max(0, end-start+1))
+        self.set_header('Content-Disposition', "inline; filename*=UTF-8''" + quote(row['body']['name'], safe=''))
+        if include_body:
+            try:
+                with path.open('rb') as stream:
+                    stream.seek(start)
+                    remaining = end-start+1
+                    while remaining > 0:
+                        chunk = await asyncio.to_thread(stream.read, min(1024*1024, remaining))
+                        if not chunk:
+                            break
+                        self.write(chunk)
+                        await self.flush()
+                        remaining -= len(chunk)
+            except StreamClosedError:
+                return
+        self.finish()
 
 
 def workspace_routes():

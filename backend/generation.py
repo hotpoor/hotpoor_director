@@ -136,6 +136,8 @@ class GenerateHandler(PrivateHandler):
         if p['seed'] == -1:
             p['seed'] = secrets.randbelow(2**53)
         assets = [await owned(self.projects, ref, self.owner, 'asset') for ref in refs]
+        if any(not asset['body']['mime'].startswith('image/') for asset in assets):
+            raise tornado.web.HTTPError(400, reason='当前生成模式只接受参考图片')
         body = dict(kind='generation', owner_id=self.owner, project_id=project_id, card_id=card['id'], type=kind,
                     model=expected_model, mode=mode, params=p, refs=refs, status='submitting', outputs=[],
                     usage={'tokens': None, 'note': '本地 ComfyUI 未提供 token 用量；不按 token 计费'}, submitted_at=time.time_ns()//1_000_000)

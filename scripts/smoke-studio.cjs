@@ -131,6 +131,40 @@ app.on('browser-window-created', (_, window) => {
         console.log('Image preview verified: result/pins, history selects without opening preview, zoom, pan, system fullscreen, exit fullscreen, and Escape.');
       }
       console.log('Studio UI verified: project creation, two cards, independent tab drafts, 8 resize handles, autosave/reopen, narrow layout. Project '+result);
+      if(process.env.DIRECTOR_MATERIAL_SMOKE==='1'){
+      await js("document.querySelector('#back-dashboard').click()");
+      await waitFor("!document.querySelector('#dashboard').hidden");
+      await js("document.querySelector('#new-project').click();document.querySelector('#project-form').elements.title.value='Imported media smoke';document.querySelector('#project-form').requestSubmit()");
+      await waitFor("!document.querySelector('#editor').hidden && !document.querySelector('#project-dialog').open");
+      const png=fs.readFileSync(path.join(root,'assets/icon.png')).toString('base64');
+      const video=fs.readFileSync('J:/codex_projects/ComfyUI/output/director/smoke-video_00001_.mp4').toString('base64');
+      const wav=Buffer.alloc(16044);wav.write('RIFF');wav.writeUInt32LE(16036,4);wav.write('WAVEfmt ',8);wav.writeUInt32LE(16,16);wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);wav.writeUInt32LE(8000,24);wav.writeUInt32LE(16000,28);wav.writeUInt16LE(2,32);wav.writeUInt16LE(16,34);wav.write('data',36);wav.writeUInt32LE(16000,40);
+      await js(`window.makeMaterial=(base64,name,type)=>new File([Uint8Array.from(atob(base64),c=>c.charCodeAt(0))],name,{type});undefined;`);
+      await js(`(()=>{
+        const input=document.querySelector('#asset-upload');let clicked=false;const original=input.click;input.click=()=>{clicked=true};document.querySelector('#add-assets').click();input.click=original;if(!clicked)throw Error('Import button disconnected');
+        const dt=new DataTransfer();dt.items.add(window.makeMaterial('${png}','source.png','image/png'));input.files=dt.files;input.dispatchEvent(new Event('change',{bubbles:true}));
+      })()`);
+      await waitFor("document.querySelectorAll('.asset-card').length===1 && !document.querySelector('#add-assets').disabled");
+      await js(`(()=>{const dt=new DataTransfer();dt.items.add(window.makeMaterial('${video}','source.mp4','video/mp4'));document.querySelector('#canvas').dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:dt,clientX:540,clientY:300}));})()`);
+      await waitFor("document.querySelectorAll('.asset-card').length===2 && !document.querySelector('#add-assets').disabled");
+      await js(`(()=>{const dt=new DataTransfer();dt.items.add(window.makeMaterial('${wav.toString('base64')}','source.wav','audio/wav'));const e=new Event('paste',{bubbles:true,cancelable:true});Object.defineProperty(e,'clipboardData',{value:dt});document.querySelector('#canvas').dispatchEvent(e);})()`);
+      await waitFor("document.querySelectorAll('.asset-card').length===3 && !document.querySelector('#add-assets').disabled");
+      await waitFor("document.querySelector('.asset-card video').readyState>=1 && document.querySelector('.asset-card audio').readyState>=1");
+      await js("document.querySelector('.asset-card img').click()");await waitFor("document.querySelector('#image-preview').open");await js("document.querySelector('[data-action=close]').click()");
+      await js("document.querySelector('#add-image').click();document.querySelectorAll('[data-card]')[3].querySelector('[data-mode=image]').click()");
+      await js(`(()=>{const dt=new DataTransfer();dt.items.add(window.makeMaterial('${png}','reference.png','image/png'));document.querySelector('.ref-zone').dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:dt}));})()`);
+      await waitFor("document.querySelector('.ref-list img')?.naturalWidth>0");
+      await waitFor("document.querySelector('#save-status').textContent.startsWith('已自动保存')");
+      await js("document.querySelector('#back-dashboard').click()");await waitFor("!document.querySelector('#dashboard').hidden");await js("document.querySelector('.project-tile').click()");
+      await waitFor("document.querySelectorAll('.asset-card').length===3 && document.querySelector('.ref-list img')?.naturalWidth>0");
+      if(await js("[...document.querySelectorAll('input[type=file]')].some(e=>getComputedStyle(e).display!=='none')"))throw Error('Native file input visible');
+      await js("document.querySelector('#fit-cards').click()");
+      window.webContents.invalidate();
+      await new Promise(r=>setTimeout(r,1500));
+      await window.webContents.capturePage(undefined,{stayHidden:true,stayAwake:true});await new Promise(r=>setTimeout(r,1500));
+      fs.writeFileSync(path.join(directory,'imported-materials.png'),(await window.webContents.capturePage(undefined,{stayHidden:true,stayAwake:true})).toPNG());
+      console.log('PASS: button image import, video drop, audio paste, playback metadata, image preview, reference drop, persistence, hidden file inputs.');
+      }
       app.quit();
     } catch(error) { console.error(error);process.exitCode=1;app.quit(); }
   });

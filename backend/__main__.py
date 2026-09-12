@@ -56,7 +56,7 @@ async def run(args):
             entity_pools.append(entity_pool)
             await entity_pool.open(wait=True)
         app = application(config, pool, *entity_pools)
-        server = tornado.httpserver.HTTPServer(app, max_body_size=25 * 1024 * 1024)
+        server = tornado.httpserver.HTTPServer(app, max_body_size=210 * 1024 * 1024)
         sockets = tornado.netutil.bind_sockets(args.port, '127.0.0.1')
         server.add_sockets(sockets)
         print(json.dumps({'event': 'ready', 'port': sockets[0].getsockname()[1]}), flush=True)
