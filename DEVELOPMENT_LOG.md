@@ -147,3 +147,5 @@
 - 准备官方 Comfy INT8 主模型、Gemma 4 12B 编码器、音视频 VAE 与空间放大器的固定 revision / SHA-256 清单，共 5 文件、39,709,872,236 字节；下载与逐文件校验脚本在 ComfyUI/setup/download-ltx25.ps1。
 - 当前 Hugging Face 令牌访问官方 Lightricks/LTX-2.5 权重返回 403 GatedRepo，账号未获准；尚未启动权重下载，需用户先在官方页面开通权限。没有将该模型标记为已安装或加入工作台可用列表。
 - 当前 CUDA 12.6 环境禁用了 Comfy Kitchen CUDA 量化加速，INT8 convrot 的运行兼容性及显存表现需在模型下载后检查；尚未调整现有 Torch 环境或做生成测试。
+
+LTX 安装跟进：用户开通访问后，官方权重 HEAD 请求返回 200；已启动五文件断点续传与 SHA-256 校验脚本，并将 LTX 与 H3-Ref2VA 合并纳入每 15 分钟提醒。尚待文件下载完成和实际生成验证。
