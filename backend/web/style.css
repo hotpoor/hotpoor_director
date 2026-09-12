@@ -38,6 +38,6 @@ img[data-preview]{cursor:zoom-in}#image-preview{position:fixed;inset:0;width:100
 
 .model-picker{display:block;margin:16px 0 8px;font-size:12px;color:#aaa}
 
-.generation-progress{position:sticky;top:0;z-index:5;height:64px;box-sizing:border-box;grid-template-rows:18px 8px;align-content:center;margin-bottom:10px;box-shadow:0 5px 10px #0005}
+.card-progress{flex:none;padding:10px 14px 0;z-index:5;background:#1b1b1b}.card-progress:empty{display:none}.card-content{min-height:0}
+.generation-progress{height:64px;box-sizing:border-box;grid-template-rows:18px 8px;align-content:center;margin-bottom:0;box-shadow:0 5px 10px #0005}
 .generation-progress>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.card-content:has(.generation-progress) .history-details{top:74px;max-height:min(240px,calc(100% - 86px))}
