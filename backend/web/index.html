@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#101010">
+  <title>Hotpoor Director · 导演工作站</title>
+  <link rel="icon" href="/static/brand/favicon.ico" sizes="any"><link rel="apple-touch-icon" href="/static/brand/apple-touch-icon.png"><link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="masthead"><a class="wordmark" href="/" aria-label="Hotpoor Director 首页"><img src="/static/brand/logo.png" alt="" width="38" height="38"><span>HOTPOOR <strong>DIRECTOR</strong></span></a><span class="masthead-caption">THE FILMMAKER’S WORKSPACE</span></header>
+  <main>
+    <section class="identity" aria-label="品牌介绍">
+      <div class="eyebrow"><span class="rule"></span> DIRECTOR WORKSTATION</div>
+      <div class="logo-frame"><img class="hero-logo" src="/static/brand/logo.png" alt="Di · 猫与播放符号构成的 Director Workstation 标志" width="640" height="640"></div>
+      <div class="identity-caption"><h1>每一个镜头，<br>从这里开始。</h1><p>导演工作站<br><span>AN IDEA. A FRAME. A FILM.</span></p></div>
+    </section>
+    <div class="access">
+      <section id="login-panel">
+        <div class="eyebrow">YOUR NEXT PRODUCTION</div><h2>登录工作空间</h2><p class="form-intro">回到创作现场，让故事继续。</p>
+        <form id="login-form">
+          <label for="login">账号 <span>ACCOUNT</span></label><input id="login" name="login" autocomplete="username" maxlength="254" placeholder="输入你的账号" required autofocus>
+          <label for="password">密码 <span>PASSWORD</span></label><input id="password" name="password" type="password" autocomplete="current-password" maxlength="256" placeholder="输入密码" required>
+          <button type="submit">登录</button>
+        </form><p id="message" role="status" aria-live="polite"></p>
+      </section>
+      <section id="workspace" hidden><div class="eyebrow">BACK ON SET</div><h2>欢迎回来</h2><p id="identity"></p><p class="form-intro">工作空间已连接。项目编辑功能待开发。</p><button id="logout">退出登录</button></section>
+      <div class="access-signature"><span class="signature-line"></span><span>从灵感到银幕</span><span class="signature-line"></span></div>
+    </div>
+  </main>
+  <footer><span>HOTPOOR DIRECTOR</span><span>为创作而生 · BUILT FOR THE STORY</span><span class="footer-mark" aria-hidden="true">◧</span></footer>
+  <section id="studio" hidden aria-label="导演工作空间">
+    <nav class="studio-nav"><a class="studio-brand" href="#"><img src="/static/brand/logo.png" width="30" height="30" alt="Director Logo"> HOTPOOR DIRECTOR</a><span id="studio-account"></span><button id="studio-logout" class="quiet">退出登录</button></nav>
+    <section id="dashboard">
+      <div class="dash-heading"><div><span class="eyebrow">YOUR PRODUCTIONS / 作品档案</span><h1>故事，从这里开始。</h1><p>每个项目，一片属于你的创作现场。</p></div><button id="new-project">＋ 创建项目</button></div>
+      <div class="dash-bar"><h2>我的项目 <small id="project-count">00</small></h2><input id="project-search" placeholder="搜索标题、描述…" aria-label="搜索项目"></div>
+      <div id="project-list" class="project-grid"></div>
+    </section>
+    <section id="editor" hidden>
+      <div class="canvas-toolbar"><button id="back-dashboard" class="quiet">← 项目列表</button><div class="canvas-title"><strong id="project-title"></strong><span id="save-status" role="status">已保存</span></div><button id="edit-project" class="quiet">项目设置</button><button id="add-image">＋ 图片卡片</button><button id="add-video">＋ 视频卡片</button></div>
+      <div id="canvas" tabindex="0" aria-label="无限画布：拖动空白处平移，滚轮缩放"><div id="canvas-world"></div><div id="canvas-empty">一张卡片，开启一个镜头。<br><small>添加图片或视频卡片，开始创作。</small></div></div>
+      <div class="canvas-bottom"><span>拖动空白处平移 · 滚轮缩放 · 拖动卡片标题移动 · 四边四角缩放</span><button id="export-draft" class="quiet">导出 JSON</button><button id="zoom-out" class="quiet">−</button><button id="zoom-reset" class="quiet">100%</button><button id="zoom-in" class="quiet">＋</button><button id="fit-cards" class="quiet">适配</button></div>
+    </section>
+    <p id="studio-message" role="status" hidden></p>
+    <dialog id="project-dialog"><form id="project-form"><div class="dialog-heading"><h2 id="dialog-title">新建项目</h2><button type="button" id="close-dialog" class="quiet" aria-label="关闭">✕</button></div><label>主标题<input name="title" maxlength="160" placeholder="例如：雨夜来信" required></label><label>副标题<input name="subtitle" maxlength="240" placeholder="一句话，定义这部作品"></label><label>描述<textarea name="description" maxlength="10000" rows="4" placeholder="故事梗概、视觉方向、创作备忘…"></textarea></label><label>封面照片 <small>可多张，第一张为主封面</small><input id="cover-upload" type="file" accept="image/png,image/jpeg,image/webp" multiple></label><div id="cover-list" class="cover-list"></div><p id="project-form-error" role="status"></p><button id="save-project" type="submit">创建项目</button></form></dialog>
+  </section>
+  <script src="/static/studio.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+tornado==6.5.8
+psycopg[binary,pool]==3.3.5
+psycopg-pool==3.3.1
+argon2-cffi==25.1.0

@@ -216,3 +216,14 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local credentials, database files and platform builds
+.local/
+.test-data/
+.secrets/
+runtime/
+downloads/
+release/
+node_modules/
+*.log
+!director-backend.spec

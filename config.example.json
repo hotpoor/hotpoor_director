@@ -1,0 +1,12 @@
+{
+  "postgres": {
+    "mode": "embedded",
+    "host": "127.0.0.1",
+    "port": 55432,
+    "admin_user": "director_owner",
+    "admin_password": "GENERATED_ON_FIRST_RUN",
+    "user": "director_app",
+    "password": "GENERATED_ON_FIRST_RUN"
+  },
+  "cookie_secret": "GENERATED_ON_FIRST_RUN"
+}

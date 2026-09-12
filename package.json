@@ -1,0 +1,35 @@
+{
+  "name": "hotpoor-director",
+  "version": "0.1.0",
+  "description": "Hotpoor Director desktop workspace",
+  "author": "hotpoor",
+  "private": true,
+  "engines": {"node": ">=22.12.0"},
+  "license": "Apache-2.0",
+  "main": "desktop/main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "backend": "node scripts/python.cjs -m backend serve",
+    "db:init": "node scripts/python.cjs -m backend init-db",
+    "user:create": "node scripts/python.cjs -m backend create-user",
+    "test": "node scripts/python.cjs -m pytest -q",
+    "build:backend": "node scripts/python.cjs -m PyInstaller director-backend.spec --noconfirm",
+    "pack": "npm run build:backend && electron-builder --dir",
+    "dist": "npm run build:backend && electron-builder --win nsis"
+  },
+  "devDependencies": {"electron": "44.3.0", "electron-builder": "26.15.3"},
+  "build": {
+    "appId": "com.hotpoor.director",
+    "productName": "Hotpoor Director",
+    "directories": {"output": "release"},
+    "files": ["desktop/**/*", "assets/icon.ico", "assets/icon.png", "package.json"],
+    "extraResources": [
+      {"from": "dist/director-backend", "to": "backend"},
+      {"from": "runtime/pgsql", "to": "pgsql", "filter": ["bin/**/*", "lib/**/*", "share/**/*", "*.txt"]}
+    ],
+    "icon": "assets/icon.png",
+    "win": {"target": "nsis", "icon": "assets/icon.ico", "signExecutable": false},
+    "nsis": {"oneClick": false, "perMachine": false, "allowToChangeInstallationDirectory": true, "deleteAppDataOnUninstall": false, "installerIcon": "assets/icon.ico", "uninstallerIcon": "assets/icon.ico"}
+  }
+}
