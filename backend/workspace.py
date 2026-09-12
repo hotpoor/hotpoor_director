@@ -61,12 +61,14 @@ def validate_project(data):
         for draft in drafts.values():
             if not isinstance(draft, dict) or not isinstance(draft.get('prompt', ''), str) or len(draft.get('prompt', '')) > 12000:
                 raise ValueError('提示词格式不正确')
-            if 'model' in draft and draft['model'] not in ('z-image-turbo', 'minimax-h3'):
+            if 'model' in draft and draft['model'] not in ('z-image-turbo', 'z-image', 'minimax-h3'):
                 raise ValueError('未知模型')
+            if not isinstance(draft.get('negative_prompt', ''), str) or len(draft.get('negative_prompt', '')) > 12000:
+                raise ValueError('反向提示词格式不正确')
             refs = draft.get('refs', [])
             if not isinstance(refs, list) or len(refs) > 8 or any(not isinstance(ref, str) or not ID.fullmatch(ref) for ref in refs):
                 raise ValueError('参考图片列表不正确')
-            for key in ('width', 'height', 'steps', 'seed', 'denoise', 'duration'):
+            for key in ('width', 'height', 'steps', 'seed', 'denoise', 'duration', 'cfg'):
                 if key in draft and not finite(draft[key], -1, 2**53 - 1):
                     raise ValueError('卡片数值参数不正确')
         pins = card.get('pins', [])

@@ -14,6 +14,10 @@ DIRECTORY = ROOT / '.test-data' / 'studio-smoke'
 
 
 def main():
+    model = os.environ.get('DIRECTOR_TEST_MODEL', 'z-image-turbo')
+    mode = os.environ.get('DIRECTOR_TEST_MODE', 'image')
+    standard = model == 'z-image'
+    suffix = '-standard-' + mode if standard else ''
     env = {**os.environ, 'DIRECTOR_DATA_DIR': str(DIRECTORY)}
     with (DIRECTORY / 'generation-backend.log').open('w') as errors:
         process = subprocess.Popen([sys.executable, '-m', 'backend', 'serve', '--port', '0', '--desktop'],
@@ -37,8 +41,8 @@ def main():
                 project = post('/api/projects', {'title':'Generation API smoke', 'canvas':{'viewport':{'x':0,'y':0,'zoom':1},'cards':[
                     {'id':card_id,'type':'image','mode':'image','x':0,'y':0,'w':480,'h':720,'drafts':{'image':{'refs':[asset]}}}]}})
                 path = '/api/projects/' + project['block_id']
-                payload = {'request_id':uuid.uuid4().hex,'card_id':card_id,'mode':'image','model':'z-image-turbo',
-                           'prompt':'A monochrome cinema emblem on a dark background','width':256,'height':256,'steps':4,'seed':42,'denoise':.5,'refs':[asset]}
+                payload = {'request_id':uuid.uuid4().hex,'card_id':card_id,'mode':mode,'model':model,
+                           'prompt':'A monochrome cinema emblem on a dark background','width':512 if standard else 256,'height':512 if standard else 256,'steps':30 if standard else 4,'seed':42,'denoise':.5,'refs':[asset], 'negative_prompt':'blurry, low quality', 'cfg':4}
                 job = post(path + '/generate', payload)
                 assert job['body']['status'] == 'queued', job['body']
                 assert post(path + '/generate', payload)['block_id'] == job['block_id']
@@ -53,13 +57,17 @@ def main():
                         print('Real sampling progress:', progress, flush=True)
                     if record['body']['status'] in ('completed','failed'):
                         assert record['body']['status'] == 'completed', record['body'].get('error')
+                        if standard:
+                            assert record['body']['model'] == model
+                            assert record['body']['params']['negative_prompt'] == payload['negative_prompt']
+                            assert record['body']['params']['cfg'] == 4
                         assert observed_progress, 'No real sampling progress observed'
                         media = client.get('/api/outputs/' + record['block_id'] + '/0')
                         assert media.status_code == 200 and media.headers['content-type'].startswith('image/')
                         assert record['body']['usage']['tokens'] is None
-                        (DIRECTORY / 'generated.png').write_bytes(media.content)
-                        (DIRECTORY / 'generation-record.json').write_text(json.dumps(record,ensure_ascii=False,indent=2),encoding='utf-8')
-                        print('PASS: reference upload, image-to-image generation, persisted history, private output, idempotency, and honest token usage.', flush=True)
+                        (DIRECTORY / ('generated'+suffix+'.png')).write_bytes(media.content)
+                        (DIRECTORY / ('generation-record'+suffix+'.json')).write_text(json.dumps(record,ensure_ascii=False,indent=2),encoding='utf-8')
+                        print(f'PASS: {model} / {mode}, real progress, persisted history, private output, idempotency, and honest token usage.', flush=True)
                         return
                     if attempt % 6 == 0:
                         print('Waiting for local GPU:', record['body']['status'], flush=True)

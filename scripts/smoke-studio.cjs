@@ -56,6 +56,17 @@ app.on('browser-window-created', (_, window) => {
         card.querySelector('[data-field=prompt]').value='Image draft';card.querySelector('[data-field=prompt]').dispatchEvent(new Event('input',{bubbles:true}));
         card.querySelector('[data-mode=text]').click();
         if(card.querySelector('[data-field=prompt]').value!=='A white cup on a black table')throw Error('Tab drafts lost');
+        const selectModel = id => {const select=card.querySelector('[data-field=model]');select.value=id;select.dispatchEvent(new Event('change',{bubbles:true}));};
+        selectModel('z-image');
+        if(card.querySelector('[data-field=steps]').value!=='40' || card.querySelector('[data-field=cfg]').value!=='4')throw Error('Standard defaults incorrect');
+        const negative=card.querySelector('[data-field=negative_prompt]');negative.value='blur';negative.dispatchEvent(new Event('input',{bubbles:true}));
+        card.querySelector('[data-mode=image]').click();
+        if(card.querySelector('[data-field=model]').value!=='z-image' || card.querySelector('[data-field=steps]').value!=='40')throw Error('Standard mode lost model/defaults');
+        card.querySelector('[data-mode=text]').click();
+        if(card.querySelector('[data-field=negative_prompt]').value!=='blur')throw Error('Negative draft lost');
+        selectModel('z-image-turbo');
+        if(card.querySelector('[data-field=negative_prompt]') || card.querySelector('[data-field=cfg]') || card.querySelector('[data-field=steps]').value!=='8')throw Error('Turbo controls incorrect');
+        selectModel('z-image');
         if(card.querySelectorAll('[data-resize]').length!==8)throw Error('Resize handles missing');
         return id;
       })()`);
@@ -68,6 +79,7 @@ app.on('browser-window-created', (_, window) => {
       fs.writeFileSync(path.join(directory,'dashboard.png'),(await window.webContents.capturePage()).toPNG());
       await js("document.querySelector('.project-tile').click()");
       await waitFor("!document.querySelector('#editor').hidden && document.querySelectorAll('[data-card]').length===2");
+      if(!await js("document.querySelector('[data-field=model]').value==='z-image' && document.querySelector('[data-field=negative_prompt]').value==='blur'"))throw Error('Standard settings not persisted');
       window.setContentSize(640,760);
       await new Promise(r=>setTimeout(r,400));
       if(await js('document.documentElement.scrollWidth > innerWidth'))throw Error('Horizontal page overflow');

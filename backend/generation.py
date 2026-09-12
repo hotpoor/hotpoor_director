@@ -16,6 +16,8 @@ COMFY = 'http://127.0.0.1:8188'
 MODELS = [
     dict(id='z-image-turbo', name='Z Image Turbo · 本地', type='image', modes=['text', 'image'],
          note='图生图使用原图潜空间重绘；参考图模式需另接支持参考条件的模型，当前未配置。'),
+    dict(id='z-image', name='Z Image 标准版 BF16 · 本地', type='image', modes=['text', 'image'],
+         note='支持反向提示词；建议 30–50 步、CFG 3–5。图生图为潜空间重绘。'),
     dict(id='minimax-h3', name='MiniMax H3 · 本地', type='video', modes=['text', 'image'],
          note='图生视频支持首帧和可选尾帧；多元素参考需要 ref2va 权重，当前未安装。'),
 ]
@@ -36,16 +38,17 @@ def node(kind, **inputs):
 def workflow(kind, mode, p, refs, job_id):
     width, height, seed, steps = p['width'], p['height'], p['seed'], p['steps']
     if kind == 'image':
+        standard = p.get('model') == 'z-image'
         graph = {
-            '1': node('UNETLoader', unet_name='z_image_turbo_bf16.safetensors', weight_dtype='default'),
+            '1': node('UNETLoader', unet_name='z_image_bf16.safetensors' if standard else 'z_image_turbo_bf16.safetensors', weight_dtype='default'),
             '2': node('CLIPLoader', clip_name='qwen_3_4b.safetensors', type='lumina2', device='default'),
             '3': node('VAELoader', vae_name='ae.safetensors'),
             '4': node('CLIPTextEncode', clip=['2', 0], text=p['prompt']),
-            '5': node('ConditioningZeroOut', conditioning=['4', 0]),
+            '5': node('CLIPTextEncode', clip=['2', 0], text=p.get('negative_prompt', '')) if standard else node('ConditioningZeroOut', conditioning=['4', 0]),
             '6': node('ModelSamplingAuraFlow', model=['1', 0], shift=3),
             '7': node('EmptySD3LatentImage', width=width, height=height, batch_size=1),
             '8': node('KSampler', model=['6', 0], positive=['4', 0], negative=['5', 0], latent_image=['7', 0],
-                      seed=seed, steps=steps, cfg=1, sampler_name='res_multistep', scheduler='simple', denoise=p['denoise'] if mode == 'image' else 1),
+                      seed=seed, steps=steps, cfg=p.get('cfg', 4) if standard else 1, sampler_name='res_multistep', scheduler='simple', denoise=p['denoise'] if mode == 'image' else 1),
             '9': node('VAEDecode', samples=['8', 0], vae=['3', 0]),
             '10': node('SaveImage', images=['9', 0], filename_prefix='director/' + job_id),
         }
@@ -103,8 +106,8 @@ class GenerateHandler(PrivateHandler):
         kind, mode = card['type'], data.get('mode')
         if mode not in ('text', 'image'):
             raise tornado.web.HTTPError(400, reason='当前模型未配置参考模式所需权重')
-        expected_model = 'z-image-turbo' if kind == 'image' else 'minimax-h3'
-        if data.get('model') != expected_model:
+        expected_model = data.get('model')
+        if not any(m['id'] == expected_model and m['type'] == kind and mode in m['modes'] for m in MODELS):
             raise tornado.web.HTTPError(400, reason='模型与卡片类型不匹配')
         try:
             prompt = data['prompt']
@@ -112,12 +115,18 @@ class GenerateHandler(PrivateHandler):
                 raise ValueError()
             p = dict(prompt=prompt, width=int(data['width']), height=int(data['height']), steps=int(data['steps']),
                      seed=int(data.get('seed', -1)), denoise=float(data.get('denoise', .65)), duration=float(data.get('duration', 2)))
+            p['model'] = expected_model
+            if expected_model == 'z-image':
+                p['negative_prompt'] = data.get('negative_prompt', '')
+                p['cfg'] = float(data.get('cfg', 4))
+                if not isinstance(p['negative_prompt'], str) or len(p['negative_prompt']) > 12000 or not 1 <= p['cfg'] <= 20:
+                    raise ValueError()
             grid = 16 if kind == 'image' else 32
             if any(p[k] < 256 or p[k] > 1536 or p[k] % grid for k in ('width', 'height')):
                 raise ValueError()
             if p['width'] * p['height'] > (1536**2 if kind == 'image' else 1344*768):
                 raise ValueError()
-            if not 1 <= p['steps'] <= 40 or not 0 < p['denoise'] <= 1 or not 1 <= p['duration'] <= 15 or not -1 <= p['seed'] <= 2**53 - 1:
+            if not 1 <= p['steps'] <= (60 if expected_model == 'z-image' else 40) or not 0 < p['denoise'] <= 1 or not 1 <= p['duration'] <= 15 or not -1 <= p['seed'] <= 2**53 - 1:
                 raise ValueError()
             refs = data.get('refs', []) if mode == 'image' else []
             if not isinstance(refs, list) or any(not isinstance(ref, str) or not ID.fullmatch(ref) for ref in refs) or (mode == 'image' and not 1 <= len(refs) <= (1 if kind == 'image' else 2)):
