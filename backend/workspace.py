@@ -82,6 +82,8 @@ def validate_project(data):
         pins = card.get('pins', [])
         if not isinstance(pins, list) or len(pins) > 8 or any(not isinstance(pin, str) or not ID.fullmatch(pin) for pin in pins):
             raise ValueError('固定对比项格式不正确')
+        if not isinstance(card.get('syncPinPlayback', False), bool):
+            raise ValueError('视频同时播放设置不正确')
         if not finite(card.get('pinLimit', 2), 0, 8):
             raise ValueError('对比位数量不正确')
     connections = canvas.get('connections', [])
@@ -277,11 +279,12 @@ class AssetHandler(PrivateHandler):
 
 
 def workspace_routes():
-    from backend.generation import ModelsHandler, GenerateHandler, HistoryHandler, OutputHandler, CancelGenerationHandler
+    from backend.generation import ModelsHandler, GenerateHandler, HistoryHandler, OutputHandler, CancelGenerationHandler, QueueOrderHandler
     return [
         (r'/api/projects', ProjectsHandler), (r'/api/projects/([0-9a-f]{32})', ProjectHandler),
         (r'/api/assets', UploadHandler), (r'/api/assets/([0-9a-f]{32})', AssetHandler),
         (r'/api/generations/([0-9a-f]{32})/cancel', CancelGenerationHandler),
+        (r'/api/projects/([0-9a-f]{32})/queue-order', QueueOrderHandler),
         (r'/api/models', ModelsHandler), (r'/api/projects/([0-9a-f]{32})/generate', GenerateHandler),
         (r'/api/projects/([0-9a-f]{32})/history', HistoryHandler),
         (r'/api/outputs/([0-9a-f]{32})/(\d+)', OutputHandler),

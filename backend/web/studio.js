@@ -6,6 +6,7 @@
   const date = v => new Date(v).toLocaleString('zh-CN', {hour12:false});
   const state = {user:null, projects:[], project:null, models:[], history:[], version:0, saved:0, saving:null, timer:null, polling:null, conflict:false};
   const stoppingJobs = new Set();
+  let reorderAvailable=false, queueMoving=false, queueDrag=null;
   let elapsedTicker = null, wireDrag = null, keyboardPort = null;
   let dialogCovers = [], editing = false, uploading = false, importing = false, drag = null;
   async function request(path, body) {
@@ -70,7 +71,7 @@
     const project = await request('/api/projects/' + id);
     state.project = project; state.version = 0; state.saved = 0; state.conflict = false; state.history = [];
     $('#dashboard').hidden = true; $('#editor').hidden = false; $('#project-title').textContent = project.body.title;
-    saveLabel('已保存'); tell(''); renderCanvas(); await pollHistory();
+    saveLabel('已保存'); tell(''); renderCanvas(); renderQueue(); await pollHistory();
   }
   function openDialog(edit = false) {
     editing = edit; const body = edit ? state.project.body : {title:'',subtitle:'',description:'',covers:[]};
@@ -150,6 +151,9 @@
   function rememberRef(d,asset){(d.ref_info ||= {})[asset.id]={mime:asset.mime,name:asset.name};}
   function checkRefCount(card,d,mime){const kind=mime.split('/')[0];if(!acceptsReference(card,mime))throw Error('当前模型不支持此参考类型');if(d.refs.length>=referenceLimit(card))throw Error(`最多 ${referenceLimit(card)} 项参考素材`);if(kind!=='image'&&d.refs.filter(r=>refKind(d,r)===kind).length>=3)throw Error('视频和音频各最多 3 项');}
   function refPreview(d,id){const kind=refKind(d,id),url='/api/assets/'+esc(id);return kind==='image'?`<img src="${url}" alt="参考图片">`:`<${kind} src="${url}" controls preload="metadata"></${kind}>`;}
+  function sizeHelp(card,model){const l=model?.size_limits;if(!l)return '';return `<section class="size-help"><strong>推荐尺寸</strong><div>${l.presets.map(([w,h])=>`<button class="quiet" data-size-preset="${w},${h}">${w} × ${h}</button>`).join('')}</div><small>宽高各 ${l.minimum}–${l.maximum} px，${l.step} 的倍数；总像素 ≤ ${l.max_pixels.toLocaleString()}。这是当前工作台的本机限制；分辨率越高越耗显存。${card.type==='video'?'建议先用 512×320 短片测试。':''}</small><p class="size-error" role="status" hidden></p></section>`;}
+  function checkSize(card){const d=draft(card),l=state.models.find(m=>m.id===d.model)?.size_limits;if(!l)return '';for(const [key,label] of [['width','宽度'],['height','高度']]){const n=d[key];if(!Number.isInteger(n)||n<l.minimum||n>l.maximum)return `${label}需为 ${l.minimum}–${l.maximum} px 的整数`;if(n%l.step)return `${label} ${n} px 不符合要求，需为 ${l.step} 的倍数`;}return d.width*d.height>l.max_pixels?`总像素 ${(d.width*d.height).toLocaleString()} 超过本机上限 ${l.max_pixels.toLocaleString()}，请减小宽高或选择推荐尺寸。`:'';}
+  function updateSizeFeedback(card){const el=document.querySelector(`[data-card="${card.id}"]`),error=checkSize(card),hint=el?.querySelector('.size-error');if(hint){hint.textContent=error;hint.hidden=!error;}for(const key of ['width','height'])el?.querySelector(`[data-field="${key}"]`)?.setAttribute('aria-invalid',String(!!error));return error;}
   function cardPorts(){return '<button class="card-port port-input" data-port="input" aria-label="输入连接点，接收其他卡片素材" title="左侧输入：从其他卡片右侧拖线到这里"></button><button class="card-port port-output" data-port="output" aria-label="输出连接点，拖向另一张卡片左侧" title="右侧输出：拖向另一张卡片左侧"></button>';}
   function portPoint(card,side){return {x:side==='output'?card.x+card.w+15:card.x-15,y:card.y+card.h/2};}
   function wirePath(a,b){const bend=Math.max(70,Math.abs(b.x-a.x)*.45);return `M ${a.x} ${a.y} C ${a.x+bend} ${a.y}, ${b.x-bend} ${b.y}, ${b.x} ${b.y}`;}
@@ -231,9 +235,9 @@
     }
     const d = draft(card), unsupported = !model?.modes.includes(card.mode);
     const tabLabels = card.type === 'image' ? ['文生图','图生图','参考图'] : ['文生视频','图生视频','多元素参考'];
-    el.innerHTML = `<header class="card-heading"><span class="card-grip">⠿</span><strong>${card.type === 'image'?'◧ 图片生成':'▷ 视频生成'}</strong><small>${card.id.slice(0,6).toUpperCase()}</small><button class="quiet remove-card" title="移除卡片">✕</button></header><div class="card-progress"></div><div class="card-content"><section class="card-results"></section><details class="imported-library" open></details><label class="model-picker">模型<select data-field="model" ${available.length?'':'disabled'}>${available.map(m=>`<option value="${m.id}" ${m.id===d.model?'selected':''}>${esc(m.name)}</option>`).join('') || '<option>暂无可用模型</option>'}</select></label><div class="generation-tabs" role="tablist">${['text','image','reference'].map((m,i)=>model?.modes.includes(m)?`<button role="tab" aria-selected="${m===card.mode}" data-mode="${m}">${tabLabels[i]}</button>`:'').join('')}</div><div class="generation-settings">${model?.note?`<p class="mode-note">${esc(model.note)}</p>`:''}<label>提示词<textarea data-field="prompt" rows="3" placeholder="描述画面、镜头、光线与情绪…">${esc(d.prompt)}</textarea></label>${d.model==='z-image'?`<label>反向提示词<textarea data-field="negative_prompt" rows="2" placeholder="希望避免的内容…">${esc(d.negative_prompt)}</textarea></label>`:''}${card.mode!=='text' ? `<div class="ref-zone" tabindex="0"><span>${card.mode==='reference'?'参考素材（按类型编号）':card.type==='video'?(referenceLimit(card)>1?'首帧 / 尾帧（可选）':'首帧图片'):'输入图片'}</span><button class="quiet choose-ref">＋ 添加${model?.ref_types?'素材':'图片'} · 拖入 / 粘贴</button><input hidden class="ref-upload" type="file" accept="${model?.ref_types?'image/png,image/jpeg,image/webp,video/mp4,video/webm,audio/*':'image/png,image/jpeg,image/webp'}" ${card.type==='video'||card.mode==='reference'?'multiple':''}></div><div class="ref-list">${d.refs.map((r,i)=>`<div>${refPreview(d,r)}<button class="quiet" data-remove-ref="${i}" title="移除参考素材">✕</button><small>${referenceLabel(card,i)}</small></div>`).join('')}</div>`:''}<div class="parameter-grid"><label>宽度<input data-field="width" type="number" min="256" max="1536" step="${model?.dimension_step || (card.type==='image'?16:32)}" value="${d.width}"></label><label>高度<input data-field="height" type="number" min="256" max="1536" step="${model?.dimension_step || (card.type==='image'?16:32)}" value="${d.height}"></label><label>步数<input data-field="steps" type="number" min="1" max="${d.model==='z-image'?60:40}" value="${d.steps}" ${model?.fixed_steps?'readonly':''}></label>${d.model==='z-image'?`<label>CFG / 提示词引导<input data-field="cfg" type="number" min="1" max="20" step="0.5" value="${d.cfg}"></label>`:''}${card.type==='video'?`<label>时长 / 秒<input data-field="duration" type="number" min="1" max="15" step="1" value="${d.duration}"></label>`:`<label>重绘强度<input data-field="denoise" type="number" min="0.01" max="1" step="0.05" value="${d.denoise}" ${card.mode==='text'?'disabled':''}></label>`}</div><label>种子 <small>−1 为随机</small><input data-field="seed" type="number" min="-1" max="9007199254740991" value="${d.seed}"></label><button class="generate" ${unsupported?'disabled':''}>${unsupported?'当前模式暂不可生成':'生成'+(card.type==='image'?'图片':'视频')+' ↗'}</button><p class="card-feedback" role="status"></p></div></div>${['n','s','e','w','ne','nw','se','sw'].map(dir=>`<div class="resize-handle resize-${dir}" data-resize="${dir}"></div>`).join('')}`;
+    el.innerHTML = `<header class="card-heading"><span class="card-grip">⠿</span><strong>${card.type === 'image'?'◧ 图片生成':'▷ 视频生成'}</strong><small>${card.id.slice(0,6).toUpperCase()}</small><button class="quiet remove-card" title="移除卡片">✕</button></header><div class="card-progress"></div><div class="card-content"><section class="card-results"></section><details class="imported-library" open></details><label class="model-picker">模型<select data-field="model" ${available.length?'':'disabled'}>${available.map(m=>`<option value="${m.id}" ${m.id===d.model?'selected':''}>${esc(m.name)}</option>`).join('') || '<option>暂无可用模型</option>'}</select></label><div class="generation-tabs" role="tablist">${['text','image','reference'].map((m,i)=>model?.modes.includes(m)?`<button role="tab" aria-selected="${m===card.mode}" data-mode="${m}">${tabLabels[i]}</button>`:'').join('')}</div><div class="generation-settings">${model?.note?`<p class="mode-note">${esc(model.note)}</p>`:''}<label>提示词<textarea data-field="prompt" rows="3" placeholder="描述画面、镜头、光线与情绪…">${esc(d.prompt)}</textarea></label>${d.model==='z-image'?`<label>反向提示词<textarea data-field="negative_prompt" rows="2" placeholder="希望避免的内容…">${esc(d.negative_prompt)}</textarea></label>`:''}${card.mode!=='text' ? `<div class="ref-zone" tabindex="0"><span>${card.mode==='reference'?'参考素材（按类型编号）':card.type==='video'?(referenceLimit(card)>1?'首帧 / 尾帧（可选）':'首帧图片'):'输入图片'}</span><button class="quiet choose-ref">＋ 添加${model?.ref_types?'素材':'图片'} · 拖入 / 粘贴</button><input hidden class="ref-upload" type="file" accept="${model?.ref_types?'image/png,image/jpeg,image/webp,video/mp4,video/webm,audio/*':'image/png,image/jpeg,image/webp'}" ${card.type==='video'||card.mode==='reference'?'multiple':''}></div><div class="ref-list">${d.refs.map((r,i)=>`<div>${refPreview(d,r)}<button class="quiet" data-remove-ref="${i}" title="移除参考素材">✕</button><small>${referenceLabel(card,i)}</small></div>`).join('')}</div>`:''}${sizeHelp(card,model)}<div class="parameter-grid"><label>宽度<input data-field="width" type="number" min="256" max="1536" step="${model?.dimension_step || (card.type==='image'?16:32)}" value="${d.width}"></label><label>高度<input data-field="height" type="number" min="256" max="1536" step="${model?.dimension_step || (card.type==='image'?16:32)}" value="${d.height}"></label><label>步数<input data-field="steps" type="number" min="1" max="${d.model==='z-image'?60:40}" value="${d.steps}" ${model?.fixed_steps?'readonly':''}></label>${d.model==='z-image'?`<label>CFG / 提示词引导<input data-field="cfg" type="number" min="1" max="20" step="0.5" value="${d.cfg}"></label>`:''}${card.type==='video'?`<label>时长 / 秒<input data-field="duration" type="number" min="1" max="15" step="1" value="${d.duration}"></label>`:`<label>重绘强度<input data-field="denoise" type="number" min="0.01" max="1" step="0.05" value="${d.denoise}" ${card.mode==='text'?'disabled':''}></label>`}</div><label>种子 <small>−1 为随机</small><input data-field="seed" type="number" min="-1" max="9007199254740991" value="${d.seed}"></label><button class="generate" ${unsupported?'disabled':''}>${unsupported?'当前模式暂不可生成':'生成'+(card.type==='image'?'图片':'视频')+' ↗'}</button><p class="card-feedback" role="status"></p></div></div>${['n','s','e','w','ne','nw','se','sw'].map(dir=>`<div class="resize-handle resize-${dir}" data-resize="${dir}"></div>`).join('')}`;
     el.insertAdjacentHTML('beforeend',cardPorts());
-    renderResults(card);renderLibrary(card);
+    renderResults(card);renderLibrary(card);updateSizeFeedback(card);
   }
   function videoFrameTools(url){
     return `<div class="video-frame-tools" data-frame-url="${esc(url)}" role="group" aria-label="视频提帧"><span class="frame-tools-caption">提帧</span><button class="quiet" data-extract-frame="last" title="提取视频最后一帧">最后一帧</button><span class="frame-tools-divider" aria-hidden="true"></span><div class="frame-time-group"><label class="frame-time-input"><input class="frame-seconds" type="number" min="0" step="0.1" value="0" aria-label="提取帧的秒数"><span>秒</span></label><button class="quiet" data-extract-frame="time" title="提取指定秒数的画面">按秒提取</button></div></div>`;
@@ -288,6 +292,23 @@
     if(!clocks.length&&elapsedTicker){clearInterval(elapsedTicker);elapsedTicker=null;}
   }
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)updateElapsedClocks();});
+  const pinEvents=new WeakMap();
+  function pinVideos(card){return [...document.querySelectorAll(`[data-card="${card.id}"] .pinned-results video`)];}
+  function pinAction(video,event,action){const expected=pinEvents.get(video)||new Set();expected.add(event);pinEvents.set(video,expected);try{const result=action();if(result?.catch)result.catch(()=>{expected.delete(event);tell('部分视频暂不能播放，请等待加载后再点击播放。');});}catch(error){expected.delete(event);tell(error.message);}}
+  function alignPin(video,time){if(video.readyState<1){video.addEventListener('loadedmetadata',()=>{if(video.isConnected)alignPin(video,time);},{once:true});return;}const target=Math.min(time,Number.isFinite(video.duration)?video.duration:time);if(Math.abs(video.currentTime-target)>.08)pinAction(video,'seeking',()=>{video.currentTime=target;});}
+  function startPins(card){for(const video of pinVideos(card)){alignPin(video,0);if(video.paused)pinAction(video,'play',()=>video.play());}}
+  for(const event of ['play','pause','seeking','ratechange'])$('#canvas-world').addEventListener(event,e=>{
+    const source=e.target;if(!state.project||!source.isConnected||source.tagName!=='VIDEO'||!source.closest('.pinned-results'))return;
+    const expected=pinEvents.get(source);if(expected?.has(event)){expected.delete(event);return;}
+    const card=cardById(source.closest('[data-card]').dataset.card);if(!card?.syncPinPlayback)return;
+    if(event==='pause'&&source.ended)return;
+    for(const video of pinVideos(card)){if(video===source)continue;
+      if(event==='play'||event==='seeking')alignPin(video,source.currentTime);
+      if(event==='play'&&video.paused&&(!Number.isFinite(video.duration)||source.currentTime<video.duration))pinAction(video,'play',()=>video.play());
+      if(event==='pause'&&!video.paused)pinAction(video,'pause',()=>video.pause());
+      if(event==='ratechange'&&video.playbackRate!==source.playbackRate)pinAction(video,'ratechange',()=>{video.playbackRate=source.playbackRate;});
+    }
+  },true);
   function renderResults(card, progressOnly=false) {
     const el = document.querySelector(`[data-card="${card.id}"] .card-results`); if (!el) return;
     const scroller = el.closest('.card-content'), scrollTop = scroller.scrollTop;
@@ -315,7 +336,9 @@
     if(queueOpen&&progressEl.querySelector('.generation-queue'))progressEl.querySelector('.generation-queue').open=true;
     updateElapsedClocks();
     if(progressOnly)return;
-    el.innerHTML = `<div class="result-stage">${selected?.body.outputs.length ? jobMedia(selected,0,false,false) : `<div class="result-placeholder"><span>${card.type==='image'?'◧':'▷'}</span><p>${selected ? esc(labels[selected.body.status] || selected.body.status) : '你的下一帧，从这里诞生'}</p></div>`}</div>${selected?.body.type==='video'&&selected.body.outputs.length?videoFrameTools(`/api/outputs/${selected.block_id}/0`):''}${selected?.body.outputs.length?`<label class="hide-result"><input type="checkbox" data-hide-job="${selected.block_id}"> 隐藏当前生成结果</label>`:''}<div class="pin-toolbar"><span>PIN / 对比位</span><input class="pin-limit" aria-label="对比位数量" type="number" min="0" max="8" value="${card.pinLimit ?? 2}"><button class="quiet pin-current" ${selected?.body.outputs.length?'':'disabled'}>＋ 固定当前</button></div>${pins.length?`<div class="pinned-results">${pins.map(h=>`<div>${jobMedia(h,0,false,false)}<button class="quiet" data-unpin="${h.block_id}" title="取消固定">✕</button></div>`).join('')}</div>`:''}<div class="history-heading"><span>生成历史 / ${rows.length}</span><small>最新在左</small></div><div class="history-strip">${rows.map(h=>`<button data-history="${h.block_id}" class="${h===selected?'selected':''}" title="${esc(labels[h.body.status])} · ${date(h.createtime)}">${h.body.outputs.length?jobMedia(h,0,true):`<span>${esc(labels[h.body.status])}</span>`}</button>`).join('') || '<small>还没有生成记录</small>'}</div><details class="hidden-history" ${card.hiddenOpen?'open':''}><summary>已隐藏 / ${hiddenRows.length}</summary><div class="hidden-items">${hiddenRows.map(h=>`<div class="hidden-item">${jobMedia(h,0,false,false)}<small>${esc(h.body.model)} · ${date(h.createtime)}</small><button data-restore-job="${h.block_id}">恢复到生成历史</button></div>`).join('')||'<p>没有隐藏的结果</p>'}</div></details><details class="history-details" ${card.detailsOpen?'open':''}><summary>生成信息${selected?' · '+esc(labels[selected.body.status]):''}</summary>${selected?`<dl><dt>模型</dt><dd>${esc(selected.body.model)}</dd><dt>创建时间</dt><dd>${date(selected.createtime)}</dd><dt>参数</dt><dd>${selected.body.params.width} × ${selected.body.params.height} · ${selected.body.params.steps} 步 · seed ${selected.body.params.seed}</dd>${selected.body.model==='z-image'?`<dt>CFG</dt><dd>${selected.body.params.cfg ?? 4}</dd><dt>反向提示词</dt><dd>${esc(selected.body.params.negative_prompt || '未填写')}</dd>`:''}<dt>耗时</dt><dd>${selected.body.elapsed_ms!=null?(selected.body.elapsed_ms/1000).toFixed(1)+' 秒':'待返回'}</dd><dt>Tokens</dt><dd>${selected.body.usage.tokens ?? '未提供（本地模型不按 token 计费）'}</dd><dt>提示词</dt><dd>${esc(selected.body.params.prompt)}</dd>${selected.body.error?`<dt>错误</dt><dd>${esc(selected.body.error)}</dd>`:''}</dl><button class="quiet reuse-params" data-job="${selected.block_id}">复用这次参数</button>`:'<p>选择一条历史查看模型、参数和用量。</p>'}</details>`;
+    const savedPins=new Map([...el.querySelectorAll('[data-pinned-job]')].map(node=>[node.dataset.pinnedJob,{node,playing:!node.querySelector('video')?.paused}]));
+    el.innerHTML = `<div class="result-stage">${selected?.body.outputs.length ? jobMedia(selected,0,false,false) : `<div class="result-placeholder"><span>${card.type==='image'?'◧':'▷'}</span><p>${selected ? esc(labels[selected.body.status] || selected.body.status) : '你的下一帧，从这里诞生'}</p></div>`}</div>${selected?.body.type==='video'&&selected.body.outputs.length?videoFrameTools(`/api/outputs/${selected.block_id}/0`):''}${selected?.body.outputs.length?`<label class="hide-result"><input type="checkbox" data-hide-job="${selected.block_id}"> 隐藏当前生成结果</label>`:''}<div class="pin-toolbar"><span>PIN / 对比位</span>${card.type==='video'?`<label class="sync-pins-label" title="至少固定两个视频；联动播放、暂停、进度和倍速"><input type="checkbox" class="sync-pins" ${card.syncPinPlayback?'checked':''} ${pins.length<2?'disabled':''}> 同时播放</label>`:''}<input class="pin-limit" aria-label="对比位数量" type="number" min="0" max="8" value="${card.pinLimit ?? 2}"><button class="quiet pin-current" ${selected?.body.outputs.length?'':'disabled'}>＋ 固定当前</button></div>${pins.length?`<div class="pinned-results">${pins.map(h=>`<div data-pinned-job="${h.block_id}">${jobMedia(h,0,false,false)}<button class="quiet" data-unpin="${h.block_id}" title="取消固定">✕</button></div>`).join('')}</div>`:''}<div class="history-heading"><span>生成历史 / ${rows.length}</span><small>最新在左</small></div><div class="history-strip">${rows.map(h=>`<button data-history="${h.block_id}" class="${h===selected?'selected':''}" title="${esc(labels[h.body.status])} · ${date(h.createtime)}">${h.body.outputs.length?jobMedia(h,0,true):`<span>${esc(labels[h.body.status])}</span>`}</button>`).join('') || '<small>还没有生成记录</small>'}</div><details class="hidden-history" ${card.hiddenOpen?'open':''}><summary>已隐藏 / ${hiddenRows.length}</summary><div class="hidden-items">${hiddenRows.map(h=>`<div class="hidden-item">${jobMedia(h,0,false,false)}<small>${esc(h.body.model)} · ${date(h.createtime)}</small><button data-restore-job="${h.block_id}">恢复到生成历史</button></div>`).join('')||'<p>没有隐藏的结果</p>'}</div></details><details class="history-details" ${card.detailsOpen?'open':''}><summary>生成信息${selected?' · '+esc(labels[selected.body.status]):''}</summary>${selected?`<dl><dt>模型</dt><dd>${esc(selected.body.model)}</dd><dt>创建时间</dt><dd>${date(selected.createtime)}</dd><dt>参数</dt><dd>${selected.body.params.width} × ${selected.body.params.height} · ${selected.body.params.steps} 步 · seed ${selected.body.params.seed}</dd>${selected.body.model==='z-image'?`<dt>CFG</dt><dd>${selected.body.params.cfg ?? 4}</dd><dt>反向提示词</dt><dd>${esc(selected.body.params.negative_prompt || '未填写')}</dd>`:''}<dt>耗时</dt><dd>${selected.body.elapsed_ms!=null?(selected.body.elapsed_ms/1000).toFixed(1)+' 秒':'待返回'}</dd><dt>Tokens</dt><dd>${selected.body.usage.tokens ?? '未提供（本地模型不按 token 计费）'}</dd><dt>提示词</dt><dd>${esc(selected.body.params.prompt)}</dd>${selected.body.error?`<dt>错误</dt><dd>${esc(selected.body.error)}</dd>`:''}</dl><button class="quiet reuse-params" data-job="${selected.block_id}">复用这次参数</button>`:'<p>选择一条历史查看模型、参数和用量。</p>'}</details>`;
+    for(const node of el.querySelectorAll('[data-pinned-job]')){const previous=savedPins.get(node.dataset.pinnedJob);if(previous){node.replaceWith(previous.node);const video=previous.node.querySelector('video');if(previous.playing&&video?.paused)pinAction(video,'play',()=>video.play());}}
     scroller.scrollTop = scrollTop;
     el.querySelector('.history-details').scrollTop = detailScroll;
   }
@@ -323,16 +346,60 @@
     clearTimeout(state.polling);
     const projectId = state.project?.block_id; if (!projectId) return;
     try {
-      const rows = (await request('/api/projects/'+projectId+'/history')).history;
+      const response = await request('/api/projects/'+projectId+'/history');
+      const rows = response.history;
+      reorderAvailable=!!response.reorder_available;
       if (state.project?.block_id !== projectId) return;
       if (JSON.stringify(rows)!==JSON.stringify(state.history)) {
         const stable = list => JSON.stringify(list.map(row=>({...row,body:{...row.body,progress:undefined}})));
         const progressOnly = stable(rows)===stable(state.history);
         state.history=rows;for(const card of cards())renderResults(card,progressOnly);if(!progressOnly)renderLibraries();
       }
+      renderQueue();
     } catch(error) {tell(error.message);}
     if(state.project?.block_id===projectId)state.polling=setTimeout(pollHistory,state.history.some(h=>['submitting','queued','running','stopping'].includes(h.body.status))?1000:5000);
   }
+  function queueRows(){return state.history.filter(h=>['submitting','queued','running','stopping'].includes(h.body.status)).sort((a,b)=>{
+    const rank=h=>h.body.status==='running'||h.body.status==='stopping'?0:h.body.queue_position?1:2;
+    return rank(a)-rank(b)||(a.body.queue_position||0)-(b.body.queue_position||0)||a.createtime-b.createtime;
+  });}
+  function pendingQueue(){return queueRows().filter(h=>h.body.status==='queued'&&h.body.queue_position).map(h=>h.block_id);}
+  function renderQueue(){
+    const rows=queueRows();$('#queue-count').textContent=rows.length;
+    $('#queue-notice').textContent=reorderAvailable?'拖动待执行任务调整顺序，也可用 ↑ ↓。其他项目或用户任务保留原队列位置。':'排序扩展尚未加载；仍可查看、定位和停止任务。';
+    if(queueDrag)return;
+    const pending=pendingQueue(),labels={running:'生成中',queued:'排队中',submitting:'提交中',stopping:'正在停止'};
+    const html=rows.map(h=>{const b=h.body,index=pending.indexOf(h.block_id),movable=index>=0&&reorderAvailable&&!queueMoving;
+      return `<article class="queue-item" data-queue-job="${h.block_id}" draggable="${movable}"><div class="queue-item-heading"><span>${movable?'⠿ ':''}${labels[b.status]}${b.queue_position?' · 第 '+b.queue_position+' 位':''}</span><code>${h.block_id.slice(0,6)}</code></div><strong>${esc(state.models.find(m=>m.id===b.model)?.name||b.model)}</strong><p>${esc(b.params.prompt)}</p><small>${b.params.width} × ${b.params.height} · ${b.params.steps} 步</small><div class="queue-actions"><button class="quiet" data-locate-card="${b.card_id}" ${cardById(b.card_id)?'':'disabled'}>定位卡片</button><button class="quiet" data-queue-stop="${h.block_id}" ${stoppingJobs.has(h.block_id)||['submitting','stopping'].includes(b.status)?'disabled':''}>${b.status==='queued'?'取消排队':b.status==='stopping'?'正在停止':'停止生成'}</button><button class="quiet" data-queue-up="${h.block_id}" aria-label="上移任务" ${movable&&index>0?'':'disabled'}>↑</button><button class="quiet" data-queue-down="${h.block_id}" aria-label="下移任务" ${movable&&index<pending.length-1?'':'disabled'}>↓</button></div></article>`;
+    }).join('')||'<div class="queue-empty">暂无排队任务<br><small>从画布卡片提交生成后会显示在这里。</small></div>';
+    if($('#queue-items')._markup!==html){$('#queue-items').innerHTML=html;$('#queue-items')._markup=html;}
+  }
+  function toggleQueue(open){$('#queue-panel').hidden=!open;$('#toggle-queue').setAttribute('aria-expanded',String(open));}
+  $('#toggle-queue').onclick=()=>toggleQueue($('#queue-panel').hidden);
+  $('#close-queue').onclick=()=>toggleQueue(false);
+  async function moveQueue(id,target){
+    if(queueMoving||!reorderAvailable)return;
+    const previous=pendingQueue(),order=[...previous],from=order.indexOf(id),to=order.indexOf(target);
+    if(from<0||to<0||from===to)return;
+    order.splice(from,1);order.splice(to,0,id);
+    queueMoving=true;renderQueue();
+    try{await request('/api/projects/'+state.project.block_id+'/queue-order',{order,previous});tell('执行顺序已更新');}
+    catch(error){tell(error.message);}
+    finally{queueMoving=false;await pollHistory();renderQueue();}
+  }
+  $('#queue-items').onclick=async event=>{
+    const button=event.target.closest('button');if(!button||button.disabled)return;
+    if(button.dataset.locateCard){const card=cardById(button.dataset.locateCard);if(!card)return;const v=state.project.body.canvas.viewport;
+      v.zoom=Math.min(1,Math.max(.15,($('#canvas').clientWidth-60)/card.w,0));v.x=30-card.x*v.zoom;v.y=30-card.y*v.zoom;transform();changed();return;}
+    if(button.dataset.queueStop){const id=button.dataset.queueStop;if(stoppingJobs.has(id))return;stoppingJobs.add(id);renderQueue();
+      try{await request('/api/generations/'+id+'/cancel',{});await pollHistory();}catch(error){tell(error.message);}finally{stoppingJobs.delete(id);renderQueue();}return;}
+    const id=button.dataset.queueUp||button.dataset.queueDown,order=pendingQueue(),index=order.indexOf(id);
+    if(index>=0)await moveQueue(id,order[index+(button.dataset.queueUp?-1:1)]);
+  };
+  $('#queue-items').ondragstart=event=>{const item=event.target.closest('[data-queue-job]');if(!item||item.draggable!==true)return;queueDrag=item.dataset.queueJob;event.dataTransfer.setData('text/plain',queueDrag);event.dataTransfer.effectAllowed='move';};
+  $('#queue-items').ondragover=event=>{if(queueDrag){event.preventDefault();event.dataTransfer.dropEffect='move';}};
+  $('#queue-items').ondrop=event=>{if(!queueDrag)return;event.preventDefault();const id=queueDrag,target=event.target.closest('[data-queue-job]')?.dataset.queueJob;queueDrag=null;moveQueue(id,target);};
+  $('#queue-items').ondragend=()=>{queueDrag=null;renderQueue();};
   function addCard(type) {
     if(cards().length>=200){tell('当前画布最多 200 张卡片');return;}
     const v=state.project.body.canvas.viewport;
@@ -342,7 +409,7 @@
   }
   $('#canvas-world').addEventListener('input',event=>{
     const el=event.target.closest('[data-card]');if(!el)return;const card=cardById(el.dataset.card);
-    if(event.target.dataset.field && event.target.dataset.field!=='model'){const key=event.target.dataset.field;draft(card)[key]=['model','prompt','negative_prompt'].includes(key)?event.target.value:Number(event.target.value);changed();}
+    if(event.target.dataset.field && event.target.dataset.field!=='model'){const key=event.target.dataset.field;draft(card)[key]=['model','prompt','negative_prompt'].includes(key)?event.target.value:Number(event.target.value);changed();if(['width','height'].includes(key))updateSizeFeedback(card);}
   });
   $('#canvas-world').addEventListener('change',async event=>{
     const el=event.target.closest('[data-card]');if(!el)return;const card=cardById(el.dataset.card);
@@ -355,6 +422,7 @@
       el.querySelector('[data-field=model]').focus({preventScroll:true});changed();
     }
     if(event.target.dataset.hideJob){const id=event.target.dataset.hideJob;card.hiddenJobs=[...new Set([...(card.hiddenJobs||[]),id])];card.pins=(card.pins||[]).filter(p=>p!==id);if(card.selected===id)delete card.selected;renderResults(card);changed();}
+    if(event.target.classList.contains('sync-pins')){card.syncPinPlayback=event.target.checked;changed();if(card.syncPinPlayback)startPins(card);}
     if(event.target.classList.contains('pin-limit')){card.pinLimit=Math.max(0,Math.min(8,Number(event.target.value)||0));card.pins=(card.pins||[]).slice(0,card.pinLimit);changed();renderResults(card);}
     if(event.target.classList.contains('ref-upload')){await addReferences(card,[...event.target.files]);}
   });
@@ -362,6 +430,7 @@
   $('#canvas-world').addEventListener('click',async event=>{
     const button=event.target.closest('button'),el=event.target.closest('[data-card]');if(!button||!el)return;
     const card=cardById(el.dataset.card);
+    if(button.dataset.sizePreset){const [w,h]=button.dataset.sizePreset.split(',').map(Number);Object.assign(draft(card),{width:w,height:h});el.querySelector('[data-field=width]').value=w;el.querySelector('[data-field=height]').value=h;updateSizeFeedback(card);changed();return;}
     if(button.dataset.extractFrame){await extractFrame(card,button);return;}
     if(button.dataset.restoreJob){card.hiddenJobs=(card.hiddenJobs||[]).filter(id=>id!==button.dataset.restoreJob);card.selected=button.dataset.restoreJob;renderResults(card);changed();return;}
     if(button.dataset.disconnect){disconnect(button.dataset.disconnect);return;}
@@ -383,6 +452,7 @@
     if(button.dataset.removeRef!==undefined){draft(card).refs.splice(Number(button.dataset.removeRef),1);renderCard(card);changed();}
     if(button.classList.contains('reuse-params')){const h=state.history.find(h=>h.block_id===button.dataset.job);card.model=h.body.model;card.mode=h.body.mode;card.drafts[card.mode]={...h.body.params,model:h.body.model,refs:[...h.body.refs],ref_info:h.body.ref_info||{}};renderCard(card);changed();}
     if(button.classList.contains('generate')){
+      const dimensionError=updateSizeFeedback(card);if(dimensionError){el.querySelector('.size-help').scrollIntoView({block:'center'});tell(dimensionError);return;}
       button.disabled=true;const feedback=el.querySelector('.card-feedback');feedback.textContent='保存并提交…';
       const projectId=state.project.block_id;
       try{await save();const row=await request(`/api/projects/${projectId}/generate`,{...structuredClone(draft(card)),card_id:card.id,mode:card.mode,request_id:uid()});if(state.project?.block_id!==projectId)return;state.history.unshift(row);card.selected=row.block_id;changed();renderResults(card);feedback.textContent=row.body.error||'已提交到本地 ComfyUI，结果会自动出现。';}

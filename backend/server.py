@@ -24,7 +24,11 @@ class BaseHandler(tornado.web.RequestHandler):
             raise tornado.web.HTTPError(403)
 
     def write_error(self, status_code, **kwargs):
-        self.finish({'error': self._reason})
+        exception = kwargs.get('exc_info', (None, None, None))[1]
+        message = exception.reason if isinstance(exception, tornado.web.HTTPError) and exception.reason else self._reason
+        # HTTP reason phrases are ASCII; localized validation belongs in JSON.
+        self.set_status(status_code)
+        self.finish({'error': message})
 
     async def session_user(self):
         token = self.get_cookie('director_session')

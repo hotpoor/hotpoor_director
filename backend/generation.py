@@ -33,6 +33,26 @@ MODELS = [
 ]
 
 
+for model in MODELS:
+    is_image = model['type'] == 'image'
+    model['size_limits'] = dict(minimum=256, maximum=1536,
+        step=64 if model['id']=='ltx-2.5' else 16 if is_image else 32,
+        max_pixels=1536**2 if is_image else 1344*768,
+        presets=[[1024,1024],[1280,720],[720,1280]] if is_image else [[512,320],[768,512],[512,768]])
+
+
+def size_error(model_id, width, height):
+    limits = next(m['size_limits'] for m in MODELS if m['id']==model_id)
+    for label,value in [('宽度',width),('高度',height)]:
+        if not isinstance(value,int) or isinstance(value,bool) or not limits['minimum'] <= value <= limits['maximum']:
+            return f"{label}需为 {limits['minimum']}–{limits['maximum']} px 的整数"
+        if value % limits['step']:
+            return f"{label} {value} px 不符合要求，需为 {limits['step']} 的倍数"
+    if width*height > limits['max_pixels']:
+        return f"总像素 {width*height:,} 超过本机上限 {limits['max_pixels']:,}，请降低宽度或高度（例如 768×512）"
+    return ''
+
+
 async def comfy(path, data=None):
     response = await AsyncHTTPClient().fetch(HTTPRequest(COMFY + path,
         method='GET' if data is None else 'POST',
@@ -173,11 +193,11 @@ class GenerateHandler(PrivateHandler):
                 p['cfg'] = float(data.get('cfg', 4))
                 if not isinstance(p['negative_prompt'], str) or len(p['negative_prompt']) > 12000 or not 1 <= p['cfg'] <= 20:
                     raise ValueError()
-            grid = 64 if expected_model == 'ltx-2.5' else 16 if kind == 'image' else 32
-            if any(p[k] < 256 or p[k] > 1536 or p[k] % grid for k in ('width', 'height')):
-                raise ValueError()
-            if p['width'] * p['height'] > (1536**2 if kind == 'image' else 1344*768):
-                raise ValueError()
+            if any(float(data[k]) != p[k] or isinstance(data[k], bool) for k in ('width','height')):
+                raise tornado.web.HTTPError(400, reason='宽度和高度必须是整数像素')
+            dimension_error = size_error(expected_model, p['width'], p['height'])
+            if dimension_error:
+                raise tornado.web.HTTPError(400, reason=dimension_error)
             if not 1 <= p['steps'] <= (60 if expected_model == 'z-image' else 40) or not 0 < p['denoise'] <= 1 or not 1 <= p['duration'] <= 15 or not -1 <= p['seed'] <= 2**53 - 1:
                 raise ValueError()
             if expected_model == 'ltx-2.5' and p['steps'] != 11:
@@ -265,6 +285,35 @@ class CancelGenerationHandler(PrivateHandler):
         self.finish(await owned(self.jobs, job_id, self.owner, 'generation'))
 
 
+class QueueOrderHandler(PrivateHandler):
+    async def post(self, project_id):
+        await owned(self.projects, project_id, self.owner, 'project')
+        order = self.data().get('order')
+        if not isinstance(order, list) or len(order) > 1000 or any(not isinstance(x, str) or not ID.fullmatch(x) for x in order) or len(set(order)) != len(order):
+            raise tornado.web.HTTPError(400, reason='排序列表不正确')
+        async with self.jobs.connection() as conn:
+            rows = await (await conn.execute("SELECT * FROM entities WHERE body->>'kind'='generation' AND body->>'owner_id'=%s AND body->>'project_id'=%s", (self.owner, project_id))).fetchall()
+        jobs = {r['block_id']: r['body'].get('prompt_id') for r in rows}
+        if any(job not in jobs for job in order):
+            raise tornado.web.HTTPError(404, reason='任务不存在或无权操作')
+        try:
+            queue = await comfy('/queue')
+            expected = [item[1] for item in sorted(queue.get('queue_pending', []))]
+            pending = {job for job, prompt in jobs.items() if prompt in expected}
+            previous = self.data().get('previous')
+            current = [job for prompt in expected for job in pending if jobs[job] == prompt]
+            if set(order) != pending or previous != current:
+                raise tornado.web.HTTPError(409, reason='排队任务已变化，请刷新后重新排序')
+            await comfy('/director/queue-order', {'expected': expected, 'order': [jobs[job] for job in order]})
+        except HTTPClientError as error:
+            if error.code == 409:
+                raise tornado.web.HTTPError(409, reason='队列已变化，请刷新后重试')
+            raise tornado.web.HTTPError(503, reason='队列排序扩展未就绪，请确认 ComfyUI 已加载 Director Queue 扩展')
+        except (OSError, ValueError):
+            raise tornado.web.HTTPError(503, reason='无法读取生成队列，请稍后重试')
+        self.finish({'reordered': True})
+
+
 class HistoryHandler(PrivateHandler):
     async def get(self, project_id):
         await owned(self.projects, project_id, self.owner, 'project')
@@ -337,7 +386,15 @@ class HistoryHandler(PrivateHandler):
                 updated = await (await conn.execute('UPDATE entities SET body=%s WHERE block_id=%s AND body=%s RETURNING *', (Jsonb(body), row['block_id'], Jsonb(original)))).fetchone()
             if not updated:
                 row.update(await owned(self.jobs, row['block_id'], self.owner, 'generation'))
-        self.finish({'history': rows})
+        pending_ids = [item[1] for item in sorted((queue or {}).get('queue_pending', []))]
+        positions = {prompt: i+1 for i, prompt in enumerate(pending_ids)}
+        for row in rows:
+            row['body']['queue_position'] = positions.get(row['body'].get('prompt_id'))
+        try:
+            reorder_available = bool((await comfy('/director/queue-capabilities')).get('reorder'))
+        except (HTTPClientError, OSError, ValueError):
+            reorder_available = False
+        self.finish({'history': rows, 'reorder_available': reorder_available})
 
 
 class OutputHandler(PrivateHandler):
