@@ -4,6 +4,7 @@ import json
 import secrets
 import time
 import uuid
+from pathlib import Path
 from urllib.parse import urlencode
 
 from psycopg.types.json import Jsonb
@@ -19,7 +20,13 @@ MODELS = [
     dict(id='z-image', name='Z Image 标准版 BF16 · 本地', type='image', modes=['text', 'image'],
          note='支持反向提示词；建议 30–50 步、CFG 3–5。图生图为潜空间重绘。'),
     dict(id='minimax-h3', name='MiniMax H3 · 本地', type='video', modes=['text', 'image'],
-         note='图生视频支持首帧和可选尾帧；多元素参考需要 ref2va 权重，当前未安装。'),
+         note='图生视频支持首帧和可选尾帧；多图参考请选择 H3-Base-Ref2VA。'),
+    dict(id='minimax-h3-ref2va', name='H3-Base-Ref2VA · 多图参考', type='video', modes=['reference'],
+         ref_limit=8, default_steps=20, default_duration=5, default_width=512, default_height=320,
+         note='支持 1–8 张参考图片；在提示词中用 <Picture 1>、<Picture 2> 引用。当前入口仅接收图片，建议时长至少 5 秒。'),
+    dict(id='ltx-2.5', name='LTX-2.5 22B 蒸馏版 · 本地', type='video', modes=['text', 'image'],
+         ref_limit=1, default_steps=11, fixed_steps=True, default_width=512, default_height=320, dimension_step=64,
+         sampler_nodes=['344', '368'], note='首帧图生视频；固定 8＋3 步并进行 2 倍潜空间放大，尺寸为最终输出，需为 64 的倍数。'),
 ]
 
 
@@ -57,6 +64,8 @@ def workflow(kind, mode, p, refs, job_id):
                 '12': node('ImageScale', image=['11', 0], upscale_method='lanczos', width=width, height=height, crop='center'),
                 '7': node('VAEEncode', pixels=['12', 0], vae=['3', 0])})
         return graph
+    if p.get('model') == 'ltx-2.5':
+        return ltx_workflow(mode, p, refs, job_id)
     length = round(p['duration'] * 24)
     length += (5 - length % 17) % 17
     graph = {
@@ -74,12 +83,38 @@ def workflow(kind, mode, p, refs, job_id):
         '12': node('VAEDecode', samples=['11', 0], vae=['3', 0]),
         '13': node('VAEDecodeAudio', samples=['11', 0], vae=['4', 0]),
         '14': node('CreateVideo', images=['12', 0], audio=['13', 0], fps=24),
-        '15': node('SaveVideo', video=['14', 0], filename_prefix='director/' + job_id, format='mp4', codec='h264'),
+        '15': node('SaveVideo', video=['14', 0], filename_prefix='director/' + job_id, format='mp4', **{'format.codec': 'h264'}),
     }
+    reference = p.get('model') == 'minimax-h3-ref2va'
+    if reference:
+        graph['1']['inputs']['unet_name'] = 'minimax_h3_ref2va_pruned_fp8_scaled.safetensors'
+        graph['5'] = node('MiniMaxH3ReferenceToVideo', clip=['2', 0], vae=['3', 0], audio_vae=['4', 0], prompt=p['prompt'], width=width, height=height, length=length, ref_image_size='match')
+        del graph['6']
+        graph['7']['inputs']['model'] = ['1', 0]
+        graph['10']['inputs']['model'] = ['1', 0]
     for i, image in enumerate(refs):
         key = str(20 + i)
         graph[key] = node('LoadImage', image=image)
-        graph['5']['inputs']['first_frame' if i == 0 else 'last_frame'] = [key, 0]
+        graph['5']['inputs'][f'ref_images.ref_image_{i}' if reference else ('first_frame' if i == 0 else 'last_frame')] = [key, 0]
+    return graph
+
+
+def ltx_workflow(mode, p, refs, job_id):
+    # Based on the official two-stage distilled workflow, verified on local cu126.
+    graph = json.loads((Path(__file__).parent / 'workflows' / 'ltx25.json').read_text())
+    length = round(p['duration'] * 24 / 8) * 8 + 1
+    graph['356']['inputs'].update(width=p['width']//2, height=p['height']//2, length=length)
+    graph['366']['inputs']['frames_number'] = length
+    graph['364']['inputs']['text'] = p['prompt']
+    graph['339']['inputs']['noise_seed'] = p['seed']
+    graph['338']['inputs']['noise_seed'] = p['seed']
+    graph['75']['inputs']['filename_prefix'] = 'director/' + job_id
+    if mode == 'image':
+        graph['500'] = node('LoadImage', image=refs[0])
+        graph['501'] = node('LTXVImgToVideoInplace', vae=['385', 0], image=['500', 0], latent=['356', 0], strength=.7, bypass=False)
+        graph['502'] = node('LTXVImgToVideoInplace', vae=['385', 0], image=['500', 0], latent=['348', 0], strength=1., bypass=False)
+        graph['377']['inputs']['video_latent'] = ['501', 0]
+        graph['340']['inputs']['video_latent'] = ['502', 0]
     return graph
 
 
@@ -104,7 +139,7 @@ class GenerateHandler(PrivateHandler):
         if not isinstance(job_id, str) or not ID.fullmatch(job_id):
             raise tornado.web.HTTPError(400, reason='请求 UUID 不正确')
         kind, mode = card['type'], data.get('mode')
-        if mode not in ('text', 'image'):
+        if mode not in ('text', 'image', 'reference'):
             raise tornado.web.HTTPError(400, reason='当前模型未配置参考模式所需权重')
         expected_model = data.get('model')
         if not any(m['id'] == expected_model and m['type'] == kind and mode in m['modes'] for m in MODELS):
@@ -121,15 +156,18 @@ class GenerateHandler(PrivateHandler):
                 p['cfg'] = float(data.get('cfg', 4))
                 if not isinstance(p['negative_prompt'], str) or len(p['negative_prompt']) > 12000 or not 1 <= p['cfg'] <= 20:
                     raise ValueError()
-            grid = 16 if kind == 'image' else 32
+            grid = 64 if expected_model == 'ltx-2.5' else 16 if kind == 'image' else 32
             if any(p[k] < 256 or p[k] > 1536 or p[k] % grid for k in ('width', 'height')):
                 raise ValueError()
             if p['width'] * p['height'] > (1536**2 if kind == 'image' else 1344*768):
                 raise ValueError()
             if not 1 <= p['steps'] <= (60 if expected_model == 'z-image' else 40) or not 0 < p['denoise'] <= 1 or not 1 <= p['duration'] <= 15 or not -1 <= p['seed'] <= 2**53 - 1:
                 raise ValueError()
-            refs = data.get('refs', []) if mode == 'image' else []
-            if not isinstance(refs, list) or any(not isinstance(ref, str) or not ID.fullmatch(ref) for ref in refs) or (mode == 'image' and not 1 <= len(refs) <= (1 if kind == 'image' else 2)):
+            if expected_model == 'ltx-2.5' and p['steps'] != 11:
+                raise ValueError()
+            refs = data.get('refs', []) if mode != 'text' else []
+            limit = 8 if expected_model == 'minimax-h3-ref2va' else 1 if kind == 'image' or expected_model == 'ltx-2.5' else 2
+            if not isinstance(refs, list) or any(not isinstance(ref, str) or not ID.fullmatch(ref) for ref in refs) or (mode != 'text' and not 1 <= len(refs) <= limit):
                 raise ValueError()
         except (ValueError, TypeError, KeyError, OverflowError):
             raise tornado.web.HTTPError(400, reason='请检查提示词、尺寸、步数、种子和参考图数量')

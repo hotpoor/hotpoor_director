@@ -102,11 +102,16 @@ PyInstaller 将 Python/Tornado 打包为独立后端；Electron Builder 将后�
 | --- | --- | --- |
 | Z Image Turbo | 文生图；单张原图的 VAE 重绘（图生图） | 独立参考图条件模型/工作流 |
 | Z Image 标准版 BF16 | 文生图、单图 VAE 重绘；反向提示词、CFG（默认 40 步 / CFG 4） | 独立参考图条件模型/工作流 |
-| MiniMax H3 fl2va | 文生视频；首帧、可选尾帧图生视频，带原生音频，使用已安装的 8-step Turbo LoRA | 多元素 ref2va 权重及工作流 |
+| MiniMax H3 fl2va | 文生视频；首帧、可选尾帧图生视频，带原生音频，使用已安装的 8-step Turbo LoRA | 多图参考请选择 Ref2VA 模型 |
+
+| H3-Base-Ref2VA FP8 | 多图参考视频，1–8 张图片，默认 20 步；提示词用 `<Picture 1>` 等引用，带原生音频 | 视频/音频作为参考输入暂未接入 |
+| LTX-2.5 22B 蒸馏版 INT8 | 文生视频、单首帧图生视频；固定 8＋3 步、2 倍潜空间放大，带音频 | 尾帧/多元素参考暂未接入 |
 
 先选择模型，再显示其支持的模式 tab；未接入的参考模式隐藏，原有草稿保留。Z Image 的图生图是原图重绘，不等同于人物身份保持或多图参考。H3 时长按 24fps 和模型帧数网格向上对齐，实际时长可能略长于输入值。
 
 标准版使用 `diffusion_models/z_image_bf16.safetensors`，与 Turbo 共用 `text_encoders/qwen_3_4b.safetensors` 和 `vae/ae.safetensors`。步数范围 1–60，CFG 范围 1–20；[官方建议](https://blog.comfy.org/p/z-image-day-0-support-in-comfyui)为 30–50 步、CFG 3–5。
+
+LTX 的宽高是最终输出尺寸，须为 64 的倍数，默认 512×320；帧数按 24fps、8k+1 对齐。H3 Ref2VA 默认 512×320、5 秒，建议先用少量参考图；这版不混用 fl2va 的 Turbo LoRA。上游连线的生成图片也可添加到 Ref2VA 的参考列表。
 
 本地 ComfyUI 不返回 token 计费用量，历史中 `usage.tokens` 为 `null`，界面显示“未提供”，并保留模型、提示词、seed、尺寸、步数及实际返回的耗时。输出文件由 ComfyUI 持有，播放/查看时仍需 ComfyUI 运行；工作台通过已认证的接口访问相应任务输出。
 
@@ -125,3 +130,5 @@ Logo 使用用户提供的透明原图，`scripts/prepare_brand.py` 可使用 Pi
 点击卡片大图、历史缩略图或 Pin 图片即可进入独立预览。滚轮/加减按钮缩放，拖动平移，100% 查看原尺寸，双击切换原尺寸与适应窗口；可切换同一卡片的历史图片。右上角支持系统全屏，Esc 关闭预览。此操作不会改变画布视角。
 
 设置 `DIRECTOR_MATERIAL_SMOKE=1` 运行 `scripts/smoke-studio.cjs` 可追加素材交互检查，使用本机已生成的 `ComfyUI/output/director/smoke-video_00001_.mp4` 测试文件。
+
+视频模型接口实测可设置 `DIRECTOR_TEST_MODEL=ltx-2.5`、`DIRECTOR_TEST_MODE=image`，或 `DIRECTOR_TEST_MODEL=minimax-h3-ref2va`、`DIRECTOR_TEST_MODE=reference`，运行 `scripts/smoke-generation.py`；使用隔离测试数据库，实际占用 GPU。
