@@ -4,9 +4,17 @@
   dialog.id = 'image-preview';
   dialog.setAttribute('aria-label', '图片放大预览');
   dialog.innerHTML = `<header class="preview-toolbar"><div><strong>图片预览</strong><span id="preview-caption"></span></div><button data-action="out" aria-label="缩小">−</button><button data-action="in" aria-label="放大">＋</button><button data-action="actual">100%</button><button data-action="fit">适应窗口</button><button data-action="fullscreen">全屏</button><button data-action="close" aria-label="关闭预览">✕</button></header><div class="preview-stage"><img alt="放大预览图片" draggable="false"><p class="preview-error" hidden>图片加载失败，请确认 ComfyUI 正在运行。</p></div><footer class="preview-footer"><button data-action="previous" aria-label="上一张">← 上一张</button><span class="preview-counter"></span><span class="preview-help">滚轮缩放 · 拖动查看 · 双击切换原尺寸 · Esc 关闭</span><span class="preview-scale"></span><button data-action="next" aria-label="下一张">下一张 →</button></footer>`;
+  dialog.querySelector('[data-action=fullscreen]').insertAdjacentHTML('beforebegin', '<button data-action="copy" disabled title="复制完整图片（Ctrl+C）">复制图片</button>');
+  dialog.querySelector('.preview-toolbar>div').insertAdjacentHTML('beforeend', '<span class="preview-copy-status" role="status" aria-live="polite"></span>');
   document.body.append(dialog);
   const stage = dialog.querySelector('.preview-stage'), img = stage.querySelector('img');
   const error = dialog.querySelector('.preview-error');
+  const copyButton = dialog.querySelector('[data-action=copy]'), copyStatus = dialog.querySelector('.preview-copy-status');
+  const copyMenu = document.createElement('div');
+  copyMenu.className = 'preview-copy-menu'; copyMenu.hidden = true; copyMenu.setAttribute('role','menu');
+  copyMenu.innerHTML = '<button role="menuitem" data-action="copy">复制图片</button>';
+  dialog.append(copyMenu);
+  let copying = false, imageVersion = 0;
   let gallery = [], current = 0, scale = 1, x = 0, y = 0, dragging = null, ownsFullscreen = false, origin = null;
   function draw() {
     img.style.transform = `translate(-50%, -50%) translate(${x}px,${y}px) scale(${scale})`;
@@ -23,6 +31,8 @@
     x = px - (px-x)*scale/previous; y = py - (py-y)*scale/previous; draw();
   }
   function show(index) {
+    copyMenu.hidden = true;
+    imageVersion++; copyButton.disabled = true; copyStatus.textContent = '';
     current = index; dragging = null; error.hidden = true; img.style.visibility = 'hidden';
     img.src = gallery[index].src;
     dialog.querySelector('#preview-caption').textContent = gallery[index].title;
@@ -30,8 +40,30 @@
     dialog.querySelector('[data-action=previous]').disabled = index === 0;
     dialog.querySelector('[data-action=next]').disabled = index === gallery.length-1;
   }
-  img.onload = () => { img.style.visibility = ''; fit(); };
-  img.onerror = () => { error.hidden = false; };
+  img.onload = () => { img.style.visibility = ''; copyButton.disabled = copying; fit(); };
+  img.onerror = () => { error.hidden = false; copyButton.disabled = true; };
+  async function copyImage() {
+    if (copying || !img.complete || !img.naturalWidth || !error.hidden) return;
+    const version = imageVersion;
+    copying = true; copyButton.disabled = true; copyStatus.textContent = '正在复制…';
+    try {
+      if (!navigator.clipboard?.write || !window.ClipboardItem) throw Error('当前环境不支持复制图片，请使用桌面工作台或允许剪贴板权限。');
+      // Capture native pixels before any gallery navigation; zoom/cropping is only CSS.
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+      const context = canvas.getContext('2d');
+      if (!context) throw Error('图片太大，无法准备剪贴板内容。');
+      context.drawImage(img, 0, 0);
+      const png = new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(Error('无法编码图片，请重试。')), 'image/png'));
+      await navigator.clipboard.write([new ClipboardItem({'image/png': png})]);
+      if (dialog.open && version === imageVersion) copyStatus.textContent = '图片已复制，可直接粘贴';
+    } catch (failure) {
+      if (dialog.open && version === imageVersion) copyStatus.textContent = failure.name === 'NotAllowedError' ? '未获得剪贴板权限，请允许后重试。' : failure.message || '复制失败，请重试。';
+    } finally {
+      copying = false;
+      copyButton.disabled = !dialog.open || !img.complete || !img.naturalWidth || !error.hidden;
+    }
+  }
   function open(target) {
     origin = target;
     const card = target.closest('[data-card]');
@@ -44,6 +76,8 @@
     dialog.querySelector('[data-action=close]').focus({preventScroll:true});
   }
   async function close() {
+    copyMenu.hidden = true;
+    imageVersion++; copyStatus.textContent = ''; copyButton.disabled = true;
     if (ownsFullscreen && document.fullscreenElement) { ownsFullscreen=false; await document.exitFullscreen().catch(()=>{}); }
     dialog.close(); img.removeAttribute('src'); gallery=[]; dragging=null;
     if (origin?.isConnected) origin.focus({preventScroll:true});
@@ -64,15 +98,27 @@
     if(action==='in')zoom(1.25);
     if(action==='out')zoom(.8);
     if(action==='fullscreen')fullscreen();
+    if(action==='copy'){copyMenu.hidden=true;copyImage();}
     if(action==='previous'&&current>0)show(current-1);
     if(action==='next'&&current<gallery.length-1)show(current+1);
   });
   dialog.addEventListener('keydown',event=>{
+    if(event.key==='Escape'&&!copyMenu.hidden){event.preventDefault();event.stopPropagation();copyMenu.hidden=true;return;}
+    if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='c'&&!window.getSelection()?.toString()) {event.preventDefault();copyImage();return;}
     if(event.key==='ArrowLeft'&&current>0){event.preventDefault();show(current-1);}
     if(event.key==='ArrowRight'&&current<gallery.length-1){event.preventDefault();show(current+1);}
     if(event.key==='+'||event.key==='='){event.preventDefault();zoom(1.25);}
     if(event.key==='-'){event.preventDefault();zoom(.8);}
   });
+  stage.addEventListener('contextmenu',event=>{
+    event.preventDefault();
+    if(copyButton.disabled)return;
+    copyMenu.hidden=false;
+    copyMenu.style.left=Math.max(8,Math.min(event.clientX,window.innerWidth-copyMenu.offsetWidth-8))+'px';
+    copyMenu.style.top=Math.max(8,Math.min(event.clientY,window.innerHeight-copyMenu.offsetHeight-8))+'px';
+    copyMenu.querySelector('button').focus({preventScroll:true});
+  });
+  dialog.addEventListener('pointerdown',event=>{if(!copyMenu.contains(event.target))copyMenu.hidden=true;},true);
   stage.addEventListener('wheel',event=>{event.preventDefault();const r=stage.getBoundingClientRect();zoom(Math.exp(-event.deltaY*.0015),event.clientX-r.left-r.width/2,event.clientY-r.top-r.height/2);},{passive:false});
   stage.onpointerdown=event=>{if(event.button!==0)return;event.preventDefault();dragging={px:event.clientX,py:event.clientY,x,y};stage.setPointerCapture(event.pointerId);stage.classList.add('dragging');};
   stage.onpointermove=event=>{if(dragging){x=dragging.x+event.clientX-dragging.px;y=dragging.y+event.clientY-dragging.py;draw();}};
