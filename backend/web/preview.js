@@ -67,7 +67,8 @@
   function open(target) {
     origin = target;
     const card = target.closest('[data-card]');
-    const images = card ? [...card.querySelectorAll('.history-strip img[data-preview]')] : [target];
+    const materials = target.closest('.history-materials');
+    const images = materials ? [...materials.querySelectorAll('img[data-preview]')] : card ? [...card.querySelectorAll('.history-strip img[data-preview]')] : [target];
     const unique = new Map(images.map(el => [el.dataset.preview, {src:el.dataset.preview,title:el.dataset.previewTitle || '图片预览'}]));
     if (!unique.has(target.dataset.preview)) unique.set(target.dataset.preview,{src:target.dataset.preview,title:target.dataset.previewTitle || '图片预览'});
     gallery = [...unique.values()];
