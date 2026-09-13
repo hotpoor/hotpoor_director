@@ -1,8 +1,10 @@
 # Hotpoor Director · 导演编辑台
 
-Electron 桌面端，内置 Python/Tornado 后端和 PostgreSQL。当前实现账号创建、登录、退出与数据库初始化；导演编辑功能尚未实现。
+Electron 桌面端，内置 Python/Tornado 后端和 PostgreSQL，提供私有项目列表、无限画布、素材管理，以及通过 ComfyUI 进行图片和视频生成。
 
 开发过程、验证结果和待办见 [开发日志](DEVELOPMENT_LOG.md)。
+
+首次部署、架构原理与维护排查见 [SKILL.md](SKILL.md)。也可以让代码助手先阅读仓库根目录的 `SKILL.md`，再按你的环境执行部署；该文件不包含个人账号或本地数据。
 
 ## 日常开发：直接启动源码
 
