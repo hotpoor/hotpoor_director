@@ -279,8 +279,10 @@ class AssetHandler(PrivateHandler):
 
 
 def workspace_routes():
+    from backend.comfy_settings import ComfySettingsHandler, ComfyTestHandler
     from backend.generation import ModelsHandler, GenerateHandler, HistoryHandler, OutputHandler, CancelGenerationHandler, QueueOrderHandler
     return [
+        (r'/api/settings/comfyui', ComfySettingsHandler), (r'/api/settings/comfyui/test', ComfyTestHandler),
         (r'/api/projects', ProjectsHandler), (r'/api/projects/([0-9a-f]{32})', ProjectHandler),
         (r'/api/assets', UploadHandler), (r'/api/assets/([0-9a-f]{32})', AssetHandler),
         (r'/api/generations/([0-9a-f]{32})/cancel', CancelGenerationHandler),

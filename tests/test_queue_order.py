@@ -52,7 +52,7 @@ def test_api_ownership_and_snapshot_validation(foreign,stale):
     async def connection():
         yield SimpleNamespace(execute=AsyncMock(return_value=SimpleNamespace(fetchall=AsyncMock(return_value=rows))))
     payload={'order':['c'*32,a] if foreign else [b,a],'previous':[b,a] if stale else [a,b]}
-    h=SimpleNamespace(owner='alice',projects=object(),jobs=SimpleNamespace(connection=connection),data=lambda:payload,finish=Mock())
+    h=SimpleNamespace(owner='alice',projects=object(),jobs=SimpleNamespace(connection=connection),data=lambda:payload,finish=Mock(),settings={})
     async def remote(path,data=None):
         if path=='/queue':
             return {'queue_pending':[(1,'p-a'),(2,'someone-else'),(3,'p-b')]}

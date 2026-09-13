@@ -30,7 +30,7 @@
   <section id="studio" hidden aria-label="导演工作空间">
     <nav class="studio-nav"><a class="studio-brand" href="#"><img src="/static/brand/logo.png" width="30" height="30" alt="Director Logo"> HOTPOOR DIRECTOR</a><span id="studio-account"></span><button id="studio-logout" class="quiet">退出登录</button></nav>
     <section id="dashboard">
-      <div class="dash-heading"><div><span class="eyebrow">YOUR PRODUCTIONS / 作品档案</span><h1>故事，从这里开始。</h1><p>每个项目，一片属于你的创作现场。</p></div><button id="new-project">＋ 创建项目</button></div>
+      <div class="dash-heading"><div><span class="eyebrow">YOUR PRODUCTIONS / 作品档案</span><h1>故事，从这里开始。</h1><p>每个项目，一片属于你的创作现场。</p></div><div class="dashboard-actions"><button id="open-comfy-settings" class="quiet">⚙ ComfyUI 配置</button><button id="new-project">＋ 创建项目</button></div></div>
       <div class="dash-bar"><h2>我的项目 <small id="project-count">00</small></h2><input id="project-search" placeholder="搜索标题、描述…" aria-label="搜索项目"></div>
       <div id="project-list" class="project-grid"></div>
     </section>
@@ -41,9 +41,11 @@
       <div class="canvas-bottom"><span>拖动空白处平移 · 滚轮缩放 · 拖动卡片标题移动 · 四边四角缩放</span><button id="export-draft" class="quiet">导出 JSON</button><button id="zoom-out" class="quiet">−</button><button id="zoom-reset" class="quiet">100%</button><button id="zoom-in" class="quiet">＋</button><button id="fit-cards" class="quiet">适配</button></div>
     </section>
     <p id="studio-message" role="status" hidden></p>
+    <dialog id="comfy-dialog"><form id="comfy-form"><div class="dialog-heading"><h2>ComfyUI 连接配置</h2><button type="button" id="close-comfy-settings" class="quiet" aria-label="关闭">✕</button></div><p class="mode-note">此电脑的所有项目共用。配置保存在本机，保存后立即生效；有未结束的生成任务时不能切换地址。</p><label>主机地址 / Host<input name="host" required maxlength="253" placeholder="127.0.0.1" autocomplete="off" spellcheck="false"></label><label>端口 / Port<input name="port" type="number" min="1" max="65535" step="1" required value="8188"></label><p class="comfy-address" id="comfy-url"></p><p class="comfy-help">本机通常使用 127.0.0.1:8188。局域网 ComfyUI 需要允许此电脑连接。无需填写路径或 API Key；这里只配置连接，不会启动或安装模型。历史结果仍从生成时的服务读取。</p><p id="comfy-status" role="status" aria-live="polite"></p><div class="comfy-actions"><button type="button" id="default-comfy" class="quiet">填入默认值</button><button type="button" id="test-comfy" class="quiet">测试连接</button><button type="submit" id="save-comfy">保存配置</button></div></form></dialog>
     <dialog id="project-dialog"><form id="project-form"><div class="dialog-heading"><h2 id="dialog-title">新建项目</h2><button type="button" id="close-dialog" class="quiet" aria-label="关闭">✕</button></div><label>主标题<input name="title" maxlength="160" placeholder="例如：雨夜来信" required></label><label>副标题<input name="subtitle" maxlength="240" placeholder="一句话，定义这部作品"></label><label>描述<textarea name="description" maxlength="10000" rows="4" placeholder="故事梗概、视觉方向、创作备忘…"></textarea></label><label>封面照片 <small>可多张，第一张为主封面</small><button type="button" id="choose-covers" class="quiet">＋ 添加封面 · 可拖入或粘贴</button><input hidden id="cover-upload" type="file" accept="image/png,image/jpeg,image/webp" multiple></label><div id="cover-list" class="cover-list"></div><p id="project-form-error" role="status"></p><button id="save-project" type="submit">创建项目</button></form></dialog>
   </section>
   <script src="/static/studio.js"></script>
+  <script src="/static/comfy-settings.js"></script>
   <script src="/static/preview.js"></script>
   <script src="/static/app.js"></script>
 </body>

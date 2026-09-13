@@ -119,13 +119,15 @@ class LogoutHandler(BaseHandler):
 def application(config, pool, projects_pool=None, jobs_pool=None):
     from backend.workspace import workspace_routes
     from backend.progress import ProgressTracker
+    from backend.comfy_settings import load_connection, connection_url
+    connection = load_connection(config)
     return tornado.web.Application([
         (r'/', IndexHandler), (r'/api/login', LoginHandler), (r'/api/setup', SetupHandler),
         (r'/favicon.ico', tornado.web.RedirectHandler, {'url': '/static/brand/favicon.ico'}),
         (r'/api/me', MeHandler), (r'/api/logout', LogoutHandler),
         *workspace_routes(),
         (r'/static/(.*)', tornado.web.StaticFileHandler, {'path': str(WEB)}),
-    ], progress_tracker=ProgressTracker(), pool=pool, projects_pool=projects_pool, jobs_pool=jobs_pool, config=config,
+    ], comfy_connection=connection, comfy_lock=asyncio.Lock(), progress_tracker=ProgressTracker(connection_url(connection)), pool=pool, projects_pool=projects_pool, jobs_pool=jobs_pool, config=config,
        cookie_secret=config['cookie_secret'], xsrf_cookies=True,
        xsrf_cookie_kwargs={'samesite': 'Strict'}, login_attempts=OrderedDict(),
        auth_slots=asyncio.Semaphore(4), bootstrap_token=os.environ.get('DIRECTOR_BOOTSTRAP_TOKEN', ''),

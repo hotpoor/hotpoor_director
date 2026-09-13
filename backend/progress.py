@@ -7,7 +7,8 @@ from tornado.websocket import websocket_connect
 
 
 class ProgressTracker:
-    def __init__(self):
+    def __init__(self, base_url='http://127.0.0.1:8188'):
+        self.base_url = base_url
         self.connections = {}
         self.tasks = {}
         self.values = OrderedDict()
@@ -19,7 +20,7 @@ class ProgressTracker:
                 return
             try:
                 connection = await websocket_connect(
-                    'ws://127.0.0.1:8188/ws?clientId=director-' + owner,
+                    self.base_url.replace('http://', 'ws://', 1) + '/ws?clientId=director-' + owner,
                     connect_timeout=3, ping_interval=20, ping_timeout=20)
             except Exception:
                 # Generation remains usable when progress is unavailable.
@@ -76,3 +77,8 @@ class ProgressTracker:
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+        for connection in self.connections.values():
+            connection.close()
+        self.connections.clear()
+        self.tasks.clear()
+        self.values.clear()

@@ -14,6 +14,7 @@ from tornado.httpclient import AsyncHTTPClient, HTTPClientError, HTTPRequest
 import tornado.web
 
 from backend.reference_media import prepare_reference
+from backend.comfy_settings import endpoint
 from backend.workspace import PrivateHandler, owned, ID
 
 COMFY = 'http://127.0.0.1:8188'
@@ -53,12 +54,18 @@ def size_error(model_id, width, height):
     return ''
 
 
-async def comfy(path, data=None):
-    response = await AsyncHTTPClient().fetch(HTTPRequest(COMFY + path,
+async def comfy(path, data=None, base_url=COMFY):
+    response = await AsyncHTTPClient().fetch(HTTPRequest(base_url + path,
         method='GET' if data is None else 'POST',
         headers={'Content-Type': 'application/json'},
         body=None if data is None else json.dumps(data), request_timeout=30))
     return json.loads(response.body)
+
+
+async def comfy_at(url, path, data=None):
+    if url == COMFY:
+        return await comfy(path, data) if data is not None else await comfy(path)
+    return await comfy(path, data, base_url=url)
 
 
 def node(kind, **inputs):
@@ -158,7 +165,7 @@ def ltx_workflow(mode, p, refs, job_id):
 class ModelsHandler(PrivateHandler):
     async def get(self):
         try:
-            await comfy('/system_stats')
+            await comfy_at(endpoint(self.settings), '/system_stats')
             online = True
         except (HTTPClientError, OSError):
             online = False
@@ -167,6 +174,10 @@ class ModelsHandler(PrivateHandler):
 
 class GenerateHandler(PrivateHandler):
     async def post(self, project_id):
+        async with self.settings['comfy_lock']:
+            await self.submit(project_id)
+
+    async def submit(self, project_id):
         project = await owned(self.projects, project_id, self.owner, 'project')
         data = self.data()
         card = next((c for c in project['body']['canvas']['cards'] if c['id'] == data.get('card_id')), None)
@@ -215,7 +226,7 @@ class GenerateHandler(PrivateHandler):
         allowed = ('image', 'video', 'audio') if expected_model == 'minimax-h3-ref2va' else ('image',)
         if any(k not in allowed for k in media_kinds) or any(media_kinds.count(k) > 3 for k in ('video', 'audio')):
             raise tornado.web.HTTPError(400, reason='当前模型不支持该参考类型，或视频/音频超过各 3 项限制')
-        body = dict(kind='generation', owner_id=self.owner, project_id=project_id, card_id=card['id'], type=kind,
+        body = dict(comfy_url=endpoint(self.settings), kind='generation', owner_id=self.owner, project_id=project_id, card_id=card['id'], type=kind,
                     model=expected_model, mode=mode, params=p, refs=refs, ref_info={a['block_id']: {'mime': a['body']['mime'], 'name': a['body']['name']} for a in assets}, status='submitting', outputs=[],
                     usage={'tokens': None, 'note': '本地 ComfyUI 未提供 token 用量；不按 token 计费'}, submitted_at=time.time_ns()//1_000_000)
         async with self.jobs.connection() as conn:
@@ -239,13 +250,13 @@ class GenerateHandler(PrivateHandler):
                     filename = asset['body']['filename']
                 boundary = uuid.uuid4().hex
                 payload = (f'--{boundary}\r\nContent-Disposition: form-data; name="image"; filename="{filename}"\r\nContent-Type: {asset["body"]["mime"]}\r\n\r\n').encode() + raw + f'\r\n--{boundary}--\r\n'.encode()
-                response = await AsyncHTTPClient().fetch(HTTPRequest(COMFY + '/upload/image', method='POST', body=payload,
+                response = await AsyncHTTPClient().fetch(HTTPRequest(body['comfy_url'] + '/upload/image', method='POST', body=payload,
                     headers={'Content-Type': 'multipart/form-data; boundary=' + boundary}, request_timeout=60))
                 uploaded = json.loads(response.body)
                 name = '/'.join(filter(None, [uploaded.get('subfolder'), uploaded['name']]))
                 names.append({'name': name, 'kind': media_kind} if expected_model == 'minimax-h3-ref2va' else name)
             await self.settings['progress_tracker'].ensure(self.owner)
-            result = await comfy('/prompt', {'prompt': workflow(kind, mode, p, names, job_id), 'client_id': 'director-' + self.owner})
+            result = await comfy_at(endpoint(self.settings), '/prompt', {'prompt': workflow(kind, mode, p, names, job_id), 'client_id': 'director-' + self.owner})
             body.update(status='queued', prompt_id=result['prompt_id'])
         except (HTTPClientError, OSError, KeyError, ValueError, IndexError) as error:
             # A timed-out POST may already be accepted. Never automatically submit it again.
@@ -275,7 +286,7 @@ class CancelGenerationHandler(PrivateHandler):
         try:
             # Native job-scoped cancellation checks the running id atomically.
             # Never fall back to a global /interrupt or clearing the queue.
-            result = await comfy('/api/jobs/' + body['prompt_id'] + '/cancel', {})
+            result = await comfy_at(body.get('comfy_url', COMFY), '/api/jobs/' + body['prompt_id'] + '/cancel', {})
         except (HTTPClientError, OSError, ValueError):
             raise tornado.web.HTTPError(502, reason='停止请求未确认，请检查 ComfyUI 状态后重试')
         if result.get('cancelled'):
@@ -293,18 +304,18 @@ class QueueOrderHandler(PrivateHandler):
             raise tornado.web.HTTPError(400, reason='排序列表不正确')
         async with self.jobs.connection() as conn:
             rows = await (await conn.execute("SELECT * FROM entities WHERE body->>'kind'='generation' AND body->>'owner_id'=%s AND body->>'project_id'=%s", (self.owner, project_id))).fetchall()
-        jobs = {r['block_id']: r['body'].get('prompt_id') for r in rows}
+        jobs = {r['block_id']: r['body'].get('prompt_id') for r in rows if r['body'].get('comfy_url', COMFY) == endpoint(self.settings)}
         if any(job not in jobs for job in order):
             raise tornado.web.HTTPError(404, reason='任务不存在或无权操作')
         try:
-            queue = await comfy('/queue')
+            queue = await comfy_at(endpoint(self.settings), '/queue')
             expected = [item[1] for item in sorted(queue.get('queue_pending', []))]
             pending = {job for job, prompt in jobs.items() if prompt in expected}
             previous = self.data().get('previous')
             current = [job for prompt in expected for job in pending if jobs[job] == prompt]
             if set(order) != pending or previous != current:
                 raise tornado.web.HTTPError(409, reason='排队任务已变化，请刷新后重新排序')
-            await comfy('/director/queue-order', {'expected': expected, 'order': [jobs[job] for job in order]})
+            await comfy_at(endpoint(self.settings), '/director/queue-order', {'expected': expected, 'order': [jobs[job] for job in order]})
         except HTTPClientError as error:
             if error.code == 409:
                 raise tornado.web.HTTPError(409, reason='队列已变化，请刷新后重试')
@@ -325,7 +336,7 @@ class HistoryHandler(PrivateHandler):
         if active:
             await tracker.ensure(self.owner)
             try:
-                queue = await comfy('/queue')
+                queue = await comfy_at(endpoint(self.settings), '/queue')
             except (HTTPClientError, OSError, ValueError):
                 pass
         for row in rows:
@@ -334,7 +345,7 @@ class HistoryHandler(PrivateHandler):
             if body['status'] not in ('queued', 'running', 'stopping') or not body.get('prompt_id'):
                 continue
             try:
-                entry = (await comfy('/history/' + body['prompt_id'])).get(body['prompt_id'])
+                entry = (await comfy_at(body.get('comfy_url', COMFY), '/history/' + body['prompt_id'])).get(body['prompt_id'])
             except (HTTPClientError, OSError, ValueError):
                 body['progress'] = {'phase': 'unavailable'}
                 continue
@@ -389,9 +400,9 @@ class HistoryHandler(PrivateHandler):
         pending_ids = [item[1] for item in sorted((queue or {}).get('queue_pending', []))]
         positions = {prompt: i+1 for i, prompt in enumerate(pending_ids)}
         for row in rows:
-            row['body']['queue_position'] = positions.get(row['body'].get('prompt_id'))
+            row['body']['queue_position'] = positions.get(row['body'].get('prompt_id')) if row['body'].get('comfy_url', COMFY) == endpoint(self.settings) else None
         try:
-            reorder_available = bool((await comfy('/director/queue-capabilities')).get('reorder'))
+            reorder_available = bool((await comfy_at(endpoint(self.settings), '/director/queue-capabilities')).get('reorder'))
         except (HTTPClientError, OSError, ValueError):
             reorder_available = False
         self.finish({'history': rows, 'reorder_available': reorder_available})
@@ -407,7 +418,7 @@ class OutputHandler(PrivateHandler):
         if self.request.headers.get('Range'):
             headers['Range'] = self.request.headers['Range']
         try:
-            response = await AsyncHTTPClient().fetch(HTTPRequest(COMFY + '/view?' + urlencode(outputs[int(index)]), headers=headers, request_timeout=120))
+            response = await AsyncHTTPClient().fetch(HTTPRequest(row['body'].get('comfy_url', COMFY) + '/view?' + urlencode(outputs[int(index)]), headers=headers, request_timeout=120))
         except HTTPClientError:
             raise tornado.web.HTTPError(502, reason='生成文件暂不可用，请确认 ComfyUI 正在运行')
         self.set_status(response.code)
