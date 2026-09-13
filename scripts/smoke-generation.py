@@ -47,6 +47,26 @@ def main():
                 if model=='minimax-h3-ref2va':
                     payload['prompt']='A ceramic cup next to the cinema emblem. Use <Picture 1> and <Picture 2> as visual references. Slow camera movement.'
                     extra=client.post('/api/assets',files={'file':('second.png',(ROOT/'.test-data/studio-smoke/generated.png').read_bytes(),'image/png')});extra.raise_for_status();payload['refs'].append(extra.json()['id'])
+                if os.environ.get('DIRECTOR_TEST_MULTIMODAL'):
+                    sys.path.insert(0, str(ROOT))
+                    from backend.reference_media import prepare_reference
+                    source_video = DIRECTORY / 'generated-ltx-2.5-image.mp4'
+                    audio_file = DIRECTORY / 'reference-audio.wav'
+                    prepare_reference(source_video, audio_file, 'audio', 1, 256, 256)
+                    for file, mime in [(source_video, 'video/mp4'), (audio_file, 'audio/wav')]:
+                        extra = client.post('/api/assets', files={'file': (file.name, file.read_bytes(), mime)})
+                        extra.raise_for_status()
+                        payload['refs'].append(extra.json()['id'])
+                    payload['prompt'] = 'Use <Picture 1> and <Picture 2> for the emblem and cup. Follow the gentle camera motion in <Video 1> and ambient sound in <Audio 1>.'
+                    saved = project['body']
+                    saved['canvas']['cards'][0]['drafts'] = {'reference': {'model': model, 'refs': payload['refs']}}
+                    post(path, saved)
+                    reopened = client.get(path).json()
+                    info = reopened['body']['canvas']['cards'][0]['drafts']['reference']['ref_info']
+                    assert [info[r]['mime'].split('/')[0] for r in payload['refs']] == ['image', 'image', 'video', 'audio']
+                    for invalid_refs in [payload['refs'][-2:-1]*4, payload['refs'][-1:]*4]:
+                        assert client.post(path+'/generate', json={**payload, 'refs': invalid_refs}).status_code == 400
+                    suffix += '-multimodal'
                 if video:
                     for invalid in [{'mode':'reference' if model=='ltx-2.5' else 'image'}, {'refs':[]}, {'refs':[asset]*9}, {'width':288}] if model=='ltx-2.5' else [{'mode':'image'},{'refs':[]},{'refs':[asset]*9}]:
                         assert client.post(path+'/generate',json={**payload,**invalid}).status_code==400

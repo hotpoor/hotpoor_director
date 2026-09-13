@@ -150,11 +150,19 @@ async def save_project(handler, project_id=None):
             if not isinstance(draft, dict) or not isinstance(draft.get('refs', []), list):
                 raise tornado.web.HTTPError(400, reason='参考素材格式不正确')
             asset_ids.update(x for x in draft.get('refs', []) if isinstance(x, str))
+    asset_info = {}
     for asset_id in asset_ids:
         asset = await owned(handler.projects, asset_id, handler.owner, 'asset')
-        if not asset['body']['mime'].startswith('image/'):
+        asset_info[asset_id] = {'mime': asset['body']['mime'], 'name': asset['body']['name']}
+        if asset_id in body['covers'] and not asset['body']['mime'].startswith('image/'):
             raise tornado.web.HTTPError(400, reason='封面和参考图必须是图片')
     for card in body['canvas']['cards']:
+        for draft in card.get('drafts', {}).values():
+            draft['ref_info'] = {ref: asset_info[ref] for ref in draft.get('refs', [])}
+            kinds = [draft['ref_info'][ref]['mime'].split('/')[0] for ref in draft.get('refs', [])]
+            allowed = ('image', 'video', 'audio') if draft.get('model') == 'minimax-h3-ref2va' else ('image',)
+            if any(k not in allowed for k in kinds) or any(kinds.count(k) > 3 for k in ('video', 'audio')):
+                raise tornado.web.HTTPError(400, reason='该模型不支持此参考类型或视频/音频超过各 3 项')
         if card['type'] == 'asset':
             asset = await owned(handler.projects, card['asset_id'], handler.owner, 'asset')
             card.update(name=asset['body']['name'], mime=asset['body']['mime'], size=asset['body'].get('size', 0))

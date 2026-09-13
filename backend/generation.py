@@ -4,6 +4,7 @@ import json
 import secrets
 import time
 import uuid
+import tempfile
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -11,6 +12,7 @@ from psycopg.types.json import Jsonb
 from tornado.httpclient import AsyncHTTPClient, HTTPClientError, HTTPRequest
 import tornado.web
 
+from backend.reference_media import prepare_reference
 from backend.workspace import PrivateHandler, owned, ID
 
 COMFY = 'http://127.0.0.1:8188'
@@ -21,9 +23,9 @@ MODELS = [
          note='支持反向提示词；建议 30–50 步、CFG 3–5。图生图为潜空间重绘。'),
     dict(id='minimax-h3', name='MiniMax H3 · 本地', type='video', modes=['text', 'image'],
          note='图生视频支持首帧和可选尾帧；多图参考请选择 H3-Base-Ref2VA。'),
-    dict(id='minimax-h3-ref2va', name='H3-Base-Ref2VA · 多图参考', type='video', modes=['reference'],
-         ref_limit=8, default_steps=20, default_duration=5, default_width=512, default_height=320,
-         note='支持 1–8 张参考图片；在提示词中用 <Picture 1>、<Picture 2> 引用。当前入口仅接收图片，建议时长至少 5 秒。'),
+    dict(id='minimax-h3-ref2va', name='H3-Base-Ref2VA · 多元素参考', type='video', modes=['reference'],
+         ref_limit=8, ref_types=["image", "video", "audio"], default_steps=20, default_duration=5, default_width=512, default_height=320,
+         note='混合参考共 1–8 项，视频、音频各最多 3 项。用 <Picture 1> / <Video 1> / <Audio 1> 引用；视频取开头并转 24 fps（仅画面），声音请单独添加音频。参考片段截至生成时长，建议至少 5 秒。'),
     dict(id='ltx-2.5', name='LTX-2.5 22B 蒸馏版 · 本地', type='video', modes=['text', 'image'],
          ref_limit=1, default_steps=11, fixed_steps=True, default_width=512, default_height=320, dimension_step=64,
          sampler_nodes=['344', '368'], note='首帧图生视频；固定 8＋3 步并进行 2 倍潜空间放大，尺寸为最终输出，需为 64 的倍数。'),
@@ -92,10 +94,24 @@ def workflow(kind, mode, p, refs, job_id):
         del graph['6']
         graph['7']['inputs']['model'] = ['1', 0]
         graph['10']['inputs']['model'] = ['1', 0]
-    for i, image in enumerate(refs):
-        key = str(20 + i)
-        graph[key] = node('LoadImage', image=image)
-        graph['5']['inputs'][f'ref_images.ref_image_{i}' if reference else ('first_frame' if i == 0 else 'last_frame')] = [key, 0]
+    counts = {'image': 0, 'video': 0, 'audio': 0}
+    for i, ref in enumerate(refs):
+        media = ref if isinstance(ref, dict) else {'name': ref, 'kind': 'image'}
+        media_kind, filename = media['kind'], media['name']
+        key = str(20 + i * 3)
+        number = counts[media_kind]
+        counts[media_kind] += 1
+        if reference and media_kind == 'video':
+            graph[key] = node('LoadVideo', file=filename)
+            components = str(21 + i * 3)
+            graph[components] = node('GetVideoComponents', video=[key, 0])
+            graph['5']['inputs'][f'ref_videos.ref_video_{number}'] = [components, 0]
+        elif reference and media_kind == 'audio':
+            graph[key] = node('LoadAudio', audio=filename)
+            graph['5']['inputs'][f'ref_audios.ref_audio_{number}'] = [key, 0]
+        else:
+            graph[key] = node('LoadImage', image=filename)
+            graph['5']['inputs'][f'ref_images.ref_image_{number}' if reference else ('first_frame' if i == 0 else 'last_frame')] = [key, 0]
     return graph
 
 
@@ -174,10 +190,12 @@ class GenerateHandler(PrivateHandler):
         if p['seed'] == -1:
             p['seed'] = secrets.randbelow(2**53)
         assets = [await owned(self.projects, ref, self.owner, 'asset') for ref in refs]
-        if any(not asset['body']['mime'].startswith('image/') for asset in assets):
-            raise tornado.web.HTTPError(400, reason='当前生成模式只接受参考图片')
+        media_kinds = [asset['body']['mime'].split('/')[0] for asset in assets]
+        allowed = ('image', 'video', 'audio') if expected_model == 'minimax-h3-ref2va' else ('image',)
+        if any(k not in allowed for k in media_kinds) or any(media_kinds.count(k) > 3 for k in ('video', 'audio')):
+            raise tornado.web.HTTPError(400, reason='当前模型不支持该参考类型，或视频/音频超过各 3 项限制')
         body = dict(kind='generation', owner_id=self.owner, project_id=project_id, card_id=card['id'], type=kind,
-                    model=expected_model, mode=mode, params=p, refs=refs, status='submitting', outputs=[],
+                    model=expected_model, mode=mode, params=p, refs=refs, ref_info={a['block_id']: {'mime': a['body']['mime'], 'name': a['body']['name']} for a in assets}, status='submitting', outputs=[],
                     usage={'tokens': None, 'note': '本地 ComfyUI 未提供 token 用量；不按 token 计费'}, submitted_at=time.time_ns()//1_000_000)
         async with self.jobs.connection() as conn:
             inserted = await (await conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s) ON CONFLICT DO NOTHING RETURNING block_id', (job_id, Jsonb(body)))).fetchone()
@@ -188,20 +206,31 @@ class GenerateHandler(PrivateHandler):
             names = []
             for asset in assets:
                 path = self.settings['config']['data_dir'] / 'media' / asset['body']['filename']
-                raw = await asyncio.to_thread(path.read_bytes)
+                media_kind = asset['body']['mime'].split('/')[0]
+                if media_kind != 'image':
+                    with tempfile.TemporaryDirectory(dir=path.parent) as temporary:
+                        normalized = Path(temporary) / (asset['block_id'] + ('.mp4' if media_kind == 'video' else '.wav'))
+                        await asyncio.to_thread(prepare_reference, path, normalized, media_kind, p['duration'], p['width'], p['height'])
+                        raw = await asyncio.to_thread(normalized.read_bytes)
+                    filename = job_id + '-' + normalized.name
+                else:
+                    raw = await asyncio.to_thread(path.read_bytes)
+                    filename = asset['body']['filename']
                 boundary = uuid.uuid4().hex
-                filename = asset['body']['filename']
                 payload = (f'--{boundary}\r\nContent-Disposition: form-data; name="image"; filename="{filename}"\r\nContent-Type: {asset["body"]["mime"]}\r\n\r\n').encode() + raw + f'\r\n--{boundary}--\r\n'.encode()
                 response = await AsyncHTTPClient().fetch(HTTPRequest(COMFY + '/upload/image', method='POST', body=payload,
                     headers={'Content-Type': 'multipart/form-data; boundary=' + boundary}, request_timeout=60))
                 uploaded = json.loads(response.body)
-                names.append('/'.join(filter(None, [uploaded.get('subfolder'), uploaded['name']])))
+                name = '/'.join(filter(None, [uploaded.get('subfolder'), uploaded['name']]))
+                names.append({'name': name, 'kind': media_kind} if expected_model == 'minimax-h3-ref2va' else name)
             await self.settings['progress_tracker'].ensure(self.owner)
             result = await comfy('/prompt', {'prompt': workflow(kind, mode, p, names, job_id), 'client_id': 'director-' + self.owner})
             body.update(status='queued', prompt_id=result['prompt_id'])
-        except (HTTPClientError, OSError, KeyError, ValueError) as error:
+        except (HTTPClientError, OSError, KeyError, ValueError, IndexError) as error:
             # A timed-out POST may already be accepted. Never automatically submit it again.
             body.update(status='failed', error='ComfyUI 提交未确认，请检查服务或队列后重试。')
+            if isinstance(error, (ValueError, IndexError)):
+                body['error'] = '参考素材处理失败：' + str(error)[:300]
             if isinstance(error, HTTPClientError) and error.response and error.response.body:
                 try:
                     details = json.loads(error.response.body)

@@ -124,7 +124,7 @@
     if(card.model && card.drafts[card.mode]?.model && card.drafts[card.mode].model!==card.model){
       card.drafts[card.mode].steps=defaults.steps;card.drafts[card.mode].cfg=defaults.cfg;
       for(const k of ['width','height','duration'])card.drafts[card.mode][k]=defaults[k];
-      card.drafts[card.mode].refs=card.drafts[card.mode].refs.slice(0,spec?.ref_limit || (card.type==='video'?2:1));
+      card.drafts[card.mode].refs=card.drafts[card.mode].refs.filter(r=>(spec?.ref_types||['image']).includes(refKind(card.drafts[card.mode],r))).slice(0,spec?.ref_limit || (card.type==='video'?2:1));
     }
     return card.drafts[card.mode] = {...defaults, ...card.drafts[card.mode], ...(card.model ? {model:card.model} : {})};
   }
@@ -143,7 +143,12 @@
   function position(card, el) { Object.assign(el.style,{left:card.x+'px',top:card.y+'px',width:card.w+'px',height:card.h+'px'}); }
   const connections=()=>state.project.body.canvas.connections ||= [];
   function referenceLimit(card){return state.models.find(m=>m.id===card.model)?.ref_limit || (card.mode==='reference'?8:card.type==='video'?2:1);}
-  function referenceLabel(card,i){return card.mode==='reference'?`Picture ${i+1}`:card.type==='video'?(i?'尾帧':'首帧'):String(i+1);}
+  function referenceLabel(card,i){if(card.mode==='reference'){const d=draft(card),kind=refKind(d,d.refs[i]);return `${{image:'Picture',video:'Video',audio:'Audio'}[kind]} ${d.refs.slice(0,i+1).filter(r=>refKind(d,r)===kind).length}`;}return card.type==='video'?(i?'尾帧':'首帧'):String(i+1);}
+  function acceptsReference(card,mime){return (state.models.find(m=>m.id===card.model)?.ref_types || ['image']).includes(mime?.split('/')[0]);}
+  function refKind(d,id){return d.ref_info?.[id]?.mime?.split('/')[0] || 'image';}
+  function rememberRef(d,asset){(d.ref_info ||= {})[asset.id]={mime:asset.mime,name:asset.name};}
+  function checkRefCount(card,d,mime){const kind=mime.split('/')[0];if(!acceptsReference(card,mime))throw Error('当前模型不支持此参考类型');if(d.refs.length>=referenceLimit(card))throw Error(`最多 ${referenceLimit(card)} 项参考素材`);if(kind!=='image'&&d.refs.filter(r=>refKind(d,r)===kind).length>=3)throw Error('视频和音频各最多 3 项');}
+  function refPreview(d,id){const kind=refKind(d,id),url='/api/assets/'+esc(id);return kind==='image'?`<img src="${url}" alt="参考图片">`:`<${kind} src="${url}" controls preload="metadata"></${kind}>`;}
   function cardPorts(){return '<button class="card-port port-input" data-port="input" aria-label="输入连接点，接收其他卡片素材" title="左侧输入：从其他卡片右侧拖线到这里"></button><button class="card-port port-output" data-port="output" aria-label="输出连接点，拖向另一张卡片左侧" title="右侧输出：拖向另一张卡片左侧"></button>';}
   function portPoint(card,side){return {x:side==='output'?card.x+card.w+15:card.x-15,y:card.y+card.h/2};}
   function wirePath(a,b){const bend=Math.max(70,Math.abs(b.x-a.x)*.45);return `M ${a.x} ${a.y} C ${a.x+bend} ${a.y}, ${b.x-bend} ${b.y}, ${b.x} ${b.y}`;}
@@ -179,25 +184,27 @@
   function renderLibrary(card){
     const library=document.querySelector(`[data-card="${card.id}"] .imported-library`);if(!library)return;
     const incoming=connections().filter(e=>e.target===card.id),materials=upstreamMaterials(card);
-    const html=`<summary>引入素材库 · ${materials.length}</summary><div class="upstream-links">${incoming.map(e=>`<span>${esc(cardById(e.source)?.name||e.source.slice(0,6))}<button class="quiet" data-disconnect="${e.id}" title="断开此来源">×</button></span>`).join('')}</div>${materials.length?`<div class="imported-items">${materials.map(m=>`<div class="imported-item">${m.mime?.startsWith('image/')?`<img src="${m.url}" data-preview="${m.url}" data-preview-title="${esc(m.name)}" alt="${esc(m.name)}" tabindex="0" role="button" loading="lazy">`:m.mime?.startsWith('video/')?`<video src="${m.url}" controls preload="metadata"></video>`:`<audio src="${m.url}" controls preload="metadata"></audio>`}<small>${esc(m.name)}</small>${card.type!=='asset'?`<button class="quiet" data-use-material="${m.key}" ${m.mime?.startsWith('image/')?'':'disabled'}>${m.mime?.startsWith('image/')?'用作输入图片':'当前模型不支持此类输入'}</button>`:''}</div>`).join('')}</div>`:`<p>${incoming.length?'等待上游卡片生成素材。':'从其他卡片右侧拖线到本卡片左侧，引入素材。'}</p>`}`;
+    const html=`<summary>引入素材库 · ${materials.length}</summary><div class="upstream-links">${incoming.map(e=>`<span>${esc(cardById(e.source)?.name||e.source.slice(0,6))}<button class="quiet" data-disconnect="${e.id}" title="断开此来源">×</button></span>`).join('')}</div>${materials.length?`<div class="imported-items">${materials.map(m=>`<div class="imported-item">${m.mime?.startsWith('image/')?`<img src="${m.url}" data-preview="${m.url}" data-preview-title="${esc(m.name)}" alt="${esc(m.name)}" tabindex="0" role="button" loading="lazy">`:m.mime?.startsWith('video/')?`<video src="${m.url}" controls preload="metadata"></video>`:`<audio src="${m.url}" controls preload="metadata"></audio>`}<small>${esc(m.name)}</small>${card.type!=='asset'?`<button class="quiet" data-use-material="${m.key}" ${acceptsReference(card,m.mime)?'':'disabled'}>${acceptsReference(card,m.mime)?'用作参考素材':'当前模型不支持此类输入'}</button>`:''}</div>`).join('')}</div>`:`<p>${incoming.length?'等待上游卡片生成素材。':'从其他卡片右侧拖线到本卡片左侧，引入素材。'}</p>`}`;
     if(library._markup!==html){library.innerHTML=html;library._markup=html;}
   }
   function renderLibraries(){if(state.project)for(const card of cards())renderLibrary(card);}
   async function useMaterial(card,key){
     if(importing)return;
-    const material=upstreamMaterials(card).find(m=>m.key===key);if(!material||!material.mime.startsWith('image/'))return;
+    const material=upstreamMaterials(card).find(m=>m.key===key);if(!material||!acceptsReference(card,material.mime))return;
     const model=state.models.find(m=>m.id===card.model);
     if(!model?.modes.some(m=>m==='image'||m==='reference')){tell('当前模型不支持图片输入');return;}
     const project=state.project;
     card.mode=model.modes.includes('reference')?'reference':'image';const d=draft(card),limit=referenceLimit(card);
-    if(material.asset&&d.refs.includes(material.asset)){tell('这张图片已经在输入列表中');renderCard(card);changed();return;}
-    if(d.refs.length>=limit){tell(`当前模式最多 ${limit} 张输入图片，请先移除已有输入`);renderCard(card);changed();return;}
+    if(material.asset&&d.refs.includes(material.asset)){tell('这个素材已经在输入列表中');renderCard(card);changed();return;}
+    if(d.refs.length>=limit){tell(`当前模式最多 ${limit} 项参考素材，请先移除已有输入`);renderCard(card);changed();return;}
     importing=true;
     try{
+      checkRefCount(card,d,material.mime);
       let id=material.asset;
-      if(!id){tell('正在载入上游生成图片…');const response=await fetch(material.url);if(!response.ok)throw Error('无法读取上游结果，请确认 ComfyUI 正在运行');const blob=await response.blob();id=await upload(new File([blob],'upstream.png',{type:blob.type}));}
+      if(!id){tell('正在载入上游生成素材…');const response=await fetch(material.url);if(!response.ok)throw Error('无法读取上游结果，请确认 ComfyUI 正在运行');const blob=await response.blob();const asset=await uploadMedia(new File([blob],material.mime.startsWith('video/')?'upstream.mp4':'upstream.png',{type:material.mime}));id=asset.id;rememberRef(d,asset);}
       if(state.project!==project||!cardById(card.id))return;
-      d.refs.push(id);renderCard(card);changed();tell('已添加到输入图片；点击生成即可使用');
+      if(material.asset)rememberRef(d,{id,mime:material.mime,name:material.name});
+      d.refs.push(id);renderCard(card);changed();tell('已添加到参考素材；点击生成即可使用');
     }catch(error){tell(error.message);if(state.project===project){renderCard(card);changed();}}
     finally{importing=false;}
   }
@@ -223,7 +230,7 @@
     }
     const d = draft(card), unsupported = !model?.modes.includes(card.mode);
     const tabLabels = card.type === 'image' ? ['文生图','图生图','参考图'] : ['文生视频','图生视频','多元素参考'];
-    el.innerHTML = `<header class="card-heading"><span class="card-grip">⠿</span><strong>${card.type === 'image'?'◧ 图片生成':'▷ 视频生成'}</strong><small>${card.id.slice(0,6).toUpperCase()}</small><button class="quiet remove-card" title="移除卡片">✕</button></header><div class="card-progress"></div><div class="card-content"><section class="card-results"></section><details class="imported-library" open></details><label class="model-picker">模型<select data-field="model" ${available.length?'':'disabled'}>${available.map(m=>`<option value="${m.id}" ${m.id===d.model?'selected':''}>${esc(m.name)}</option>`).join('') || '<option>暂无可用模型</option>'}</select></label><div class="generation-tabs" role="tablist">${['text','image','reference'].map((m,i)=>model?.modes.includes(m)?`<button role="tab" aria-selected="${m===card.mode}" data-mode="${m}">${tabLabels[i]}</button>`:'').join('')}</div><div class="generation-settings">${model?.note?`<p class="mode-note">${esc(model.note)}</p>`:''}<label>提示词<textarea data-field="prompt" rows="3" placeholder="描述画面、镜头、光线与情绪…">${esc(d.prompt)}</textarea></label>${d.model==='z-image'?`<label>反向提示词<textarea data-field="negative_prompt" rows="2" placeholder="希望避免的内容…">${esc(d.negative_prompt)}</textarea></label>`:''}${card.mode!=='text' ? `<div class="ref-zone" tabindex="0"><span>${card.mode==='reference'?'参考图片（按顺序编号）':card.type==='video'?(referenceLimit(card)>1?'首帧 / 尾帧（可选）':'首帧图片'):'输入图片'}</span><button class="quiet choose-ref">＋ 添加图片 · 拖入 / 粘贴</button><input hidden class="ref-upload" type="file" accept="image/png,image/jpeg,image/webp" ${card.type==='video'||card.mode==='reference'?'multiple':''}></div><div class="ref-list">${d.refs.map((r,i)=>`<div><img src="/api/assets/${esc(r)}" alt="输入图片 ${i+1}"><button class="quiet" data-remove-ref="${i}" title="移除图片">✕</button><small>${referenceLabel(card,i)}</small></div>`).join('')}</div>`:''}<div class="parameter-grid"><label>宽度<input data-field="width" type="number" min="256" max="1536" step="${model?.dimension_step || (card.type==='image'?16:32)}" value="${d.width}"></label><label>高度<input data-field="height" type="number" min="256" max="1536" step="${model?.dimension_step || (card.type==='image'?16:32)}" value="${d.height}"></label><label>步数<input data-field="steps" type="number" min="1" max="${d.model==='z-image'?60:40}" value="${d.steps}" ${model?.fixed_steps?'readonly':''}></label>${d.model==='z-image'?`<label>CFG / 提示词引导<input data-field="cfg" type="number" min="1" max="20" step="0.5" value="${d.cfg}"></label>`:''}${card.type==='video'?`<label>时长 / 秒<input data-field="duration" type="number" min="1" max="15" step="1" value="${d.duration}"></label>`:`<label>重绘强度<input data-field="denoise" type="number" min="0.01" max="1" step="0.05" value="${d.denoise}" ${card.mode==='text'?'disabled':''}></label>`}</div><label>种子 <small>−1 为随机</small><input data-field="seed" type="number" min="-1" max="9007199254740991" value="${d.seed}"></label><button class="generate" ${unsupported?'disabled':''}>${unsupported?'当前模式暂不可生成':'生成'+(card.type==='image'?'图片':'视频')+' ↗'}</button><p class="card-feedback" role="status"></p></div></div>${['n','s','e','w','ne','nw','se','sw'].map(dir=>`<div class="resize-handle resize-${dir}" data-resize="${dir}"></div>`).join('')}`;
+    el.innerHTML = `<header class="card-heading"><span class="card-grip">⠿</span><strong>${card.type === 'image'?'◧ 图片生成':'▷ 视频生成'}</strong><small>${card.id.slice(0,6).toUpperCase()}</small><button class="quiet remove-card" title="移除卡片">✕</button></header><div class="card-progress"></div><div class="card-content"><section class="card-results"></section><details class="imported-library" open></details><label class="model-picker">模型<select data-field="model" ${available.length?'':'disabled'}>${available.map(m=>`<option value="${m.id}" ${m.id===d.model?'selected':''}>${esc(m.name)}</option>`).join('') || '<option>暂无可用模型</option>'}</select></label><div class="generation-tabs" role="tablist">${['text','image','reference'].map((m,i)=>model?.modes.includes(m)?`<button role="tab" aria-selected="${m===card.mode}" data-mode="${m}">${tabLabels[i]}</button>`:'').join('')}</div><div class="generation-settings">${model?.note?`<p class="mode-note">${esc(model.note)}</p>`:''}<label>提示词<textarea data-field="prompt" rows="3" placeholder="描述画面、镜头、光线与情绪…">${esc(d.prompt)}</textarea></label>${d.model==='z-image'?`<label>反向提示词<textarea data-field="negative_prompt" rows="2" placeholder="希望避免的内容…">${esc(d.negative_prompt)}</textarea></label>`:''}${card.mode!=='text' ? `<div class="ref-zone" tabindex="0"><span>${card.mode==='reference'?'参考素材（按类型编号）':card.type==='video'?(referenceLimit(card)>1?'首帧 / 尾帧（可选）':'首帧图片'):'输入图片'}</span><button class="quiet choose-ref">＋ 添加${model?.ref_types?'素材':'图片'} · 拖入 / 粘贴</button><input hidden class="ref-upload" type="file" accept="${model?.ref_types?'image/png,image/jpeg,image/webp,video/mp4,video/webm,audio/*':'image/png,image/jpeg,image/webp'}" ${card.type==='video'||card.mode==='reference'?'multiple':''}></div><div class="ref-list">${d.refs.map((r,i)=>`<div>${refPreview(d,r)}<button class="quiet" data-remove-ref="${i}" title="移除参考素材">✕</button><small>${referenceLabel(card,i)}</small></div>`).join('')}</div>`:''}<div class="parameter-grid"><label>宽度<input data-field="width" type="number" min="256" max="1536" step="${model?.dimension_step || (card.type==='image'?16:32)}" value="${d.width}"></label><label>高度<input data-field="height" type="number" min="256" max="1536" step="${model?.dimension_step || (card.type==='image'?16:32)}" value="${d.height}"></label><label>步数<input data-field="steps" type="number" min="1" max="${d.model==='z-image'?60:40}" value="${d.steps}" ${model?.fixed_steps?'readonly':''}></label>${d.model==='z-image'?`<label>CFG / 提示词引导<input data-field="cfg" type="number" min="1" max="20" step="0.5" value="${d.cfg}"></label>`:''}${card.type==='video'?`<label>时长 / 秒<input data-field="duration" type="number" min="1" max="15" step="1" value="${d.duration}"></label>`:`<label>重绘强度<input data-field="denoise" type="number" min="0.01" max="1" step="0.05" value="${d.denoise}" ${card.mode==='text'?'disabled':''}></label>`}</div><label>种子 <small>−1 为随机</small><input data-field="seed" type="number" min="-1" max="9007199254740991" value="${d.seed}"></label><button class="generate" ${unsupported?'disabled':''}>${unsupported?'当前模式暂不可生成':'生成'+(card.type==='image'?'图片':'视频')+' ↗'}</button><p class="card-feedback" role="status"></p></div></div>${['n','s','e','w','ne','nw','se','sw'].map(dir=>`<div class="resize-handle resize-${dir}" data-resize="${dir}"></div>`).join('')}`;
     el.insertAdjacentHTML('beforeend',cardPorts());
     renderResults(card);renderLibrary(card);
   }
@@ -360,7 +367,7 @@
     if(button.dataset.unpin){card.pins=card.pins.filter(id=>id!==button.dataset.unpin);renderResults(card);changed();}
     if(button.classList.contains('pin-current')){const selected=card.selected||state.history.find(h=>h.body.card_id===card.id&&!(card.hiddenJobs||[]).includes(h.block_id))?.block_id;card.pins||=[];if(card.pins.includes(selected))return;if(card.pins.length>=(card.pinLimit??2)){tell('对比位已满，可增加数量或取消已有固定。');return;}card.pins.push(selected);renderResults(card);changed();}
     if(button.dataset.removeRef!==undefined){draft(card).refs.splice(Number(button.dataset.removeRef),1);renderCard(card);changed();}
-    if(button.classList.contains('reuse-params')){const h=state.history.find(h=>h.block_id===button.dataset.job);card.model=h.body.model;card.mode=h.body.mode;card.drafts[card.mode]={...h.body.params,model:h.body.model,refs:[...h.body.refs]};renderCard(card);changed();}
+    if(button.classList.contains('reuse-params')){const h=state.history.find(h=>h.block_id===button.dataset.job);card.model=h.body.model;card.mode=h.body.mode;card.drafts[card.mode]={...h.body.params,model:h.body.model,refs:[...h.body.refs],ref_info:h.body.ref_info||{}};renderCard(card);changed();}
     if(button.classList.contains('generate')){
       button.disabled=true;const feedback=el.querySelector('.card-feedback');feedback.textContent='保存并提交…';
       const projectId=state.project.block_id;
@@ -423,9 +430,9 @@
   async function addReferences(card,files){
     if(importing)return;
     const project=state.project,d=draft(card),limit=referenceLimit(card);
-    if(d.refs.length+files.length>limit){tell(`当前模式最多 ${limit} 张输入图片`);return;}
+    if(d.refs.length+files.length>limit){tell(`当前模式最多 ${limit} 项参考素材`);return;}
     importing=true;
-    try{for(const file of files){const id=await upload(file);if(state.project!==project)throw Error('项目已切换，已停止添加参考图');d.refs.push(id);changed();}renderCard(card);}
+    try{for(const file of files){checkRefCount(card,d,file.type);const asset=await uploadMedia(file);if(state.project!==project)throw Error('项目已切换，已停止添加参考素材');rememberRef(d,asset);d.refs.push(asset.id);changed();}renderCard(card);}
     catch(error){tell(error.message);if(state.project===project)renderCard(card);}
     finally{importing=false;}
   }

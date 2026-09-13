@@ -104,7 +104,7 @@ PyInstaller 将 Python/Tornado 打包为独立后端；Electron Builder 将后�
 | Z Image 标准版 BF16 | 文生图、单图 VAE 重绘；反向提示词、CFG（默认 40 步 / CFG 4） | 独立参考图条件模型/工作流 |
 | MiniMax H3 fl2va | 文生视频；首帧、可选尾帧图生视频，带原生音频，使用已安装的 8-step Turbo LoRA | 多图参考请选择 Ref2VA 模型 |
 
-| H3-Base-Ref2VA FP8 | 多图参考视频，1–8 张图片，默认 20 步；提示词用 `<Picture 1>` 等引用，带原生音频 | 视频/音频作为参考输入暂未接入 |
+| H3-Base-Ref2VA FP8 | 图片、视频、音频混合参考共 1–8 项，视频/音频各最多 3 项，默认 20 步；生成带音轨 | 视频参考仅取画面，声音需独立音频输入；默认使用素材开头 |
 | LTX-2.5 22B 蒸馏版 INT8 | 文生视频、单首帧图生视频；固定 8＋3 步、2 倍潜空间放大，带音频 | 尾帧/多元素参考暂未接入 |
 
 先选择模型，再显示其支持的模式 tab；未接入的参考模式隐藏，原有草稿保留。Z Image 的图生图是原图重绘，不等同于人物身份保持或多图参考。H3 时长按 24fps 和模型帧数网格向上对齐，实际时长可能略长于输入值。
@@ -132,3 +132,12 @@ Logo 使用用户提供的透明原图，`scripts/prepare_brand.py` 可使用 Pi
 设置 `DIRECTOR_MATERIAL_SMOKE=1` 运行 `scripts/smoke-studio.cjs` 可追加素材交互检查，使用本机已生成的 `ComfyUI/output/director/smoke-video_00001_.mp4` 测试文件。
 
 视频模型接口实测可设置 `DIRECTOR_TEST_MODEL=ltx-2.5`、`DIRECTOR_TEST_MODE=image`，或 `DIRECTOR_TEST_MODEL=minimax-h3-ref2va`、`DIRECTOR_TEST_MODE=reference`，运行 `scripts/smoke-generation.py`；使用隔离测试数据库，实际占用 GPU。
+
+
+### H3 多元素参考
+
+选择 H3-Base-Ref2VA → 多元素参考，用按钮、拖入、粘贴添加素材，或从连线的引入素材库选择（包括上游已生成的视频）。图片、视频、音频分别编号，提示词例如：`保持 <Picture 1> 的人物外观，参考 <Video 1> 的镜头运动，参考 <Audio 1> 的环境声。`
+
+参考视频使用开头片段，按生成时长截取，转换为 24 fps 并按输出像素面积缩小，至少需要 5 帧。视频参考只输入画面；需要声音时请另加音频文件。音频使用开头片段、48kHz 双声道。转换只产生临时副本，原素材不变。参考信息随项目及生成历史保存；不同模型的输入类型由前后端共同校验，封面仍只接受图片。
+
+在上述 H3 GPU 测试环境设置 `DIRECTOR_TEST_MULTIMODAL=1` 可验证图片＋视频＋音频生成（需先有 LTX 测试输出）；`electron scripts/smoke-multimodal.cjs` 检查参考素材 UI、连线引用、自动保存及切换模型。均使用隔离测试数据；不要同时启动使用 `studio-smoke` 数据目录的测试。
