@@ -277,10 +277,11 @@ class AssetHandler(PrivateHandler):
 
 
 def workspace_routes():
-    from backend.generation import ModelsHandler, GenerateHandler, HistoryHandler, OutputHandler
+    from backend.generation import ModelsHandler, GenerateHandler, HistoryHandler, OutputHandler, CancelGenerationHandler
     return [
         (r'/api/projects', ProjectsHandler), (r'/api/projects/([0-9a-f]{32})', ProjectHandler),
         (r'/api/assets', UploadHandler), (r'/api/assets/([0-9a-f]{32})', AssetHandler),
+        (r'/api/generations/([0-9a-f]{32})/cancel', CancelGenerationHandler),
         (r'/api/models', ModelsHandler), (r'/api/projects/([0-9a-f]{32})/generate', GenerateHandler),
         (r'/api/projects/([0-9a-f]{32})/history', HistoryHandler),
         (r'/api/outputs/([0-9a-f]{32})/(\d+)', OutputHandler),

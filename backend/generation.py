@@ -1,5 +1,6 @@
 """Fixed, local ComfyUI workflows. No client-supplied graphs or output paths."""
 import asyncio
+import copy
 import json
 import secrets
 import time
@@ -242,13 +243,35 @@ class GenerateHandler(PrivateHandler):
         self.finish(row)
 
 
+class CancelGenerationHandler(PrivateHandler):
+    async def post(self, job_id):
+        row = await owned(self.jobs, job_id, self.owner, 'generation')
+        body = row['body']
+        if body['status'] in ('completed', 'failed', 'cancelled', 'stopping'):
+            self.finish(row)
+            return
+        if not body.get('prompt_id'):
+            raise tornado.web.HTTPError(409, reason='任务正在提交，请稍后停止')
+        try:
+            # Native job-scoped cancellation checks the running id atomically.
+            # Never fall back to a global /interrupt or clearing the queue.
+            result = await comfy('/api/jobs/' + body['prompt_id'] + '/cancel', {})
+        except (HTTPClientError, OSError, ValueError):
+            raise tornado.web.HTTPError(502, reason='停止请求未确认，请检查 ComfyUI 状态后重试')
+        if result.get('cancelled'):
+            patch = dict(status='stopping', cancel_requested=True, cancel_requested_at=time.time_ns()//1_000_000)
+            async with self.jobs.connection() as conn:
+                await conn.execute("UPDATE entities SET body=body || %s WHERE block_id=%s AND body->>'status' IN ('queued','running')", (Jsonb(patch), job_id))
+        self.finish(await owned(self.jobs, job_id, self.owner, 'generation'))
+
+
 class HistoryHandler(PrivateHandler):
     async def get(self, project_id):
         await owned(self.projects, project_id, self.owner, 'project')
         async with self.jobs.connection() as conn:
             rows = await (await conn.execute("SELECT * FROM entities WHERE body->>'kind'='generation' AND body->>'owner_id'=%s AND body->>'project_id'=%s ORDER BY createtime DESC", (self.owner, project_id))).fetchall()
         tracker = self.settings['progress_tracker']
-        active = any(r['body']['status'] in ('queued', 'running') for r in rows)
+        active = any(r['body']['status'] in ('queued', 'running', 'stopping') for r in rows)
         queue = None
         if active:
             await tracker.ensure(self.owner)
@@ -258,12 +281,24 @@ class HistoryHandler(PrivateHandler):
                 pass
         for row in rows:
             body = row['body']
-            if body['status'] not in ('queued', 'running') or not body.get('prompt_id'):
+            original = copy.deepcopy(body)
+            if body['status'] not in ('queued', 'running', 'stopping') or not body.get('prompt_id'):
                 continue
             try:
                 entry = (await comfy('/history/' + body['prompt_id'])).get(body['prompt_id'])
             except (HTTPClientError, OSError, ValueError):
                 body['progress'] = {'phase': 'unavailable'}
+                continue
+            if not entry and body.get('cancel_requested'):
+                present = queue is None or any(item[1] == body['prompt_id'] for item in queue.get('queue_running', []) + queue.get('queue_pending', []))
+                if present:
+                    body.update(status='stopping', progress={'phase': 'stopping'})
+                    continue
+                body.update(status='cancelled', elapsed_ms=time.time_ns()//1_000_000 - body.get('submitted_at', row['createtime']))
+                async with self.jobs.connection() as conn:
+                    updated = await (await conn.execute('UPDATE entities SET body=%s WHERE block_id=%s AND body=%s RETURNING *', (Jsonb(body), row['block_id'], Jsonb(original)))).fetchone()
+                if not updated:
+                    row.update(await owned(self.jobs, row['block_id'], self.owner, 'generation'))
                 continue
             if not entry:
                 progress = tracker.values.get((self.owner, body['prompt_id']))
@@ -282,7 +317,9 @@ class HistoryHandler(PrivateHandler):
                         if isinstance(media, dict) and media.get('filename') and media.get('type') == 'output':
                             outputs.append({k: media.get(k, '') for k in ('filename', 'subfolder', 'type')})
             status = entry.get('status', {})
-            if status.get('status_str') == 'error':
+            if any(event == 'execution_interrupted' for event, _ in status.get('messages', [])):
+                body.update(status='cancelled', outputs=[])
+            elif status.get('status_str') == 'error':
                 body.update(status='failed', error='生成失败，请查看 ComfyUI 错误信息')
                 for event, detail in status.get('messages', []):
                     if event == 'execution_error':
@@ -294,10 +331,12 @@ class HistoryHandler(PrivateHandler):
             else:
                 continue
             timestamps = {event: detail.get('timestamp') for event, detail in status.get('messages', [])}
-            start, end = timestamps.get('execution_start'), timestamps.get('execution_success')
+            start, end = timestamps.get('execution_start'), timestamps.get('execution_success') or timestamps.get('execution_interrupted') or timestamps.get('execution_error')
             body['elapsed_ms'] = end - start if start is not None and end is not None else None
             async with self.jobs.connection() as conn:
-                await conn.execute('UPDATE entities SET body=%s WHERE block_id=%s', (Jsonb(body), row['block_id']))
+                updated = await (await conn.execute('UPDATE entities SET body=%s WHERE block_id=%s AND body=%s RETURNING *', (Jsonb(body), row['block_id'], Jsonb(original)))).fetchone()
+            if not updated:
+                row.update(await owned(self.jobs, row['block_id'], self.owner, 'generation'))
         self.finish({'history': rows})
 
 

@@ -5,6 +5,7 @@
   const uid = () => crypto.randomUUID().replaceAll('-', '');
   const date = v => new Date(v).toLocaleString('zh-CN', {hour12:false});
   const state = {user:null, projects:[], project:null, models:[], history:[], version:0, saved:0, saving:null, timer:null, polling:null, conflict:false};
+  const stoppingJobs = new Set();
   let elapsedTicker = null, wireDrag = null, keyboardPort = null;
   let dialogCovers = [], editing = false, uploading = false, importing = false, drag = null;
   async function request(path, body) {
@@ -297,16 +298,21 @@
     const hiddenRows = allRows.filter(h=>hidden.has(h.block_id));
     const selected = rows.find(h => h.block_id === card.selected) || rows[0];
     const pins = (card.pins || []).map(id=>rows.find(h=>h.block_id===id)).filter(h=>h?.body.outputs.length);
-    const labels = {completed:'已完成',failed:'失败',submitting:'提交中',queued:'排队中',running:'生成中'};
-    const active = allRows.find(h=>['submitting','queued','running'].includes(h.body.status));
+    const labels = {completed:'已完成',failed:'失败',submitting:'提交中',queued:'排队中',running:'生成中',stopping:'正在停止',cancelled:'已停止'};
+    const activeRows = allRows.filter(h=>['submitting','queued','running','stopping'].includes(h.body.status));
+    const active = activeRows.find(h=>['running','stopping'].includes(h.body.status)) || activeRows.at(-1);
+    const stopButton = job => `<button class="quiet stop-generation" data-cancel-job="${job.block_id}" ${stoppingJobs.has(job.block_id)||['submitting','stopping'].includes(job.body.status)?'disabled':''}>${job.body.status==='stopping'||stoppingJobs.has(job.block_id)?'正在停止…':job.body.status==='submitting'?'提交中…':job.body.status==='queued'?'取消排队':'停止生成'}</button>`;
     const p = active?.body.progress;
     const samplerNodes=state.models.find(m=>m.id===active?.body.model)?.sampler_nodes || [active?.body.type==='image'?'8':'11'];
     const sampler = active && samplerNodes.includes(String(p?.node));
     const determinate = sampler && p?.phase==='sampling' && p.maximum>0 && p.value<p.maximum;
     const percent = determinate ? Math.floor(p.value/p.maximum*100) : null;
-    const phase = p?.phase==='unavailable' ? '进度暂不可用，正在等待结果' : determinate ? `${samplerNodes.length>1?'阶段 '+(samplerNodes.indexOf(String(p.node))+1)+'/'+samplerNodes.length+' · ':''}采样 ${p.value} / ${p.maximum} · ${percent}%` : sampler && p?.value>=p?.maximum && samplerNodes.indexOf(String(p.node))<samplerNodes.length-1 ? '第一阶段采样完成，正在放大…' : p?.phase==='finishing' || (sampler && p?.value>=p?.maximum) ? '采样完成，正在处理输出…' : active?.body.status==='submitting' ? '正在提交…' : active?.body.status==='queued' ? '排队等待生成…' : '正在生成 / 加载模型或处理媒体…';
-    const progress = active ? `<div class="generation-progress"><div class="generation-status"><span title="${esc(phase)}">${esc(phase)}</span><span class="generation-elapsed" data-started="${Number(active.body.submitted_at || active.createtime)}" title="从任务提交开始累计，包含排队、加载和生成时间">已等待 ${elapsedText(Number(active.body.submitted_at || active.createtime))}</span></div><progress max="100" ${determinate?`value="${percent}"`:''} aria-label="${esc(phase)}"></progress></div>` : '';
-    el.closest('[data-card]').querySelector('.card-progress').innerHTML=progress;
+    const phase = active?.body.status==='stopping' ? '已请求停止，等待模型释放当前任务…' : p?.phase==='unavailable' ? '进度暂不可用，正在等待结果' : determinate ? `${samplerNodes.length>1?'阶段 '+(samplerNodes.indexOf(String(p.node))+1)+'/'+samplerNodes.length+' · ':''}采样 ${p.value} / ${p.maximum} · ${percent}%` : sampler && p?.value>=p?.maximum && samplerNodes.indexOf(String(p.node))<samplerNodes.length-1 ? '第一阶段采样完成，正在放大…' : p?.phase==='finishing' || (sampler && p?.value>=p?.maximum) ? '采样完成，正在处理输出…' : active?.body.status==='submitting' ? '正在提交…' : active?.body.status==='queued' ? '排队等待生成…' : '正在生成 / 加载模型或处理媒体…';
+    const progress = active ? `<div class="generation-progress"><div class="generation-status"><span title="${esc(phase)}">${esc(phase)}</span><span class="generation-elapsed" data-started="${Number(active.body.submitted_at || active.createtime)}" title="从任务提交开始累计，包含排队、加载和生成时间">已等待 ${elapsedText(Number(active.body.submitted_at || active.createtime))}</span>${stopButton(active)}</div><progress max="100" ${determinate?`value="${percent}"`:''} aria-label="${esc(phase)}"></progress>${activeRows.length>1?`<details class="generation-queue"><summary>本卡片还有 ${activeRows.length-1} 个任务</summary><div>${activeRows.filter(h=>h!==active).map(h=>`<div><span>${esc(labels[h.body.status])} · ${h.block_id.slice(0,6)}</span>${stopButton(h)}</div>`).join('')}</div></details>`:''}</div>` : '';
+    const progressEl=el.closest('[data-card]').querySelector('.card-progress');
+    const queueOpen=progressEl.querySelector('.generation-queue')?.open;
+    progressEl.innerHTML=progress;
+    if(queueOpen&&progressEl.querySelector('.generation-queue'))progressEl.querySelector('.generation-queue').open=true;
     updateElapsedClocks();
     if(progressOnly)return;
     el.innerHTML = `<div class="result-stage">${selected?.body.outputs.length ? jobMedia(selected,0,false,false) : `<div class="result-placeholder"><span>${card.type==='image'?'◧':'▷'}</span><p>${selected ? esc(labels[selected.body.status] || selected.body.status) : '你的下一帧，从这里诞生'}</p></div>`}</div>${selected?.body.type==='video'&&selected.body.outputs.length?videoFrameTools(`/api/outputs/${selected.block_id}/0`):''}${selected?.body.outputs.length?`<label class="hide-result"><input type="checkbox" data-hide-job="${selected.block_id}"> 隐藏当前生成结果</label>`:''}<div class="pin-toolbar"><span>PIN / 对比位</span><input class="pin-limit" aria-label="对比位数量" type="number" min="0" max="8" value="${card.pinLimit ?? 2}"><button class="quiet pin-current" ${selected?.body.outputs.length?'':'disabled'}>＋ 固定当前</button></div>${pins.length?`<div class="pinned-results">${pins.map(h=>`<div>${jobMedia(h,0,false,false)}<button class="quiet" data-unpin="${h.block_id}" title="取消固定">✕</button></div>`).join('')}</div>`:''}<div class="history-heading"><span>生成历史 / ${rows.length}</span><small>最新在左</small></div><div class="history-strip">${rows.map(h=>`<button data-history="${h.block_id}" class="${h===selected?'selected':''}" title="${esc(labels[h.body.status])} · ${date(h.createtime)}">${h.body.outputs.length?jobMedia(h,0,true):`<span>${esc(labels[h.body.status])}</span>`}</button>`).join('') || '<small>还没有生成记录</small>'}</div><details class="hidden-history" ${card.hiddenOpen?'open':''}><summary>已隐藏 / ${hiddenRows.length}</summary><div class="hidden-items">${hiddenRows.map(h=>`<div class="hidden-item">${jobMedia(h,0,false,false)}<small>${esc(h.body.model)} · ${date(h.createtime)}</small><button data-restore-job="${h.block_id}">恢复到生成历史</button></div>`).join('')||'<p>没有隐藏的结果</p>'}</div></details><details class="history-details" ${card.detailsOpen?'open':''}><summary>生成信息${selected?' · '+esc(labels[selected.body.status]):''}</summary>${selected?`<dl><dt>模型</dt><dd>${esc(selected.body.model)}</dd><dt>创建时间</dt><dd>${date(selected.createtime)}</dd><dt>参数</dt><dd>${selected.body.params.width} × ${selected.body.params.height} · ${selected.body.params.steps} 步 · seed ${selected.body.params.seed}</dd>${selected.body.model==='z-image'?`<dt>CFG</dt><dd>${selected.body.params.cfg ?? 4}</dd><dt>反向提示词</dt><dd>${esc(selected.body.params.negative_prompt || '未填写')}</dd>`:''}<dt>耗时</dt><dd>${selected.body.elapsed_ms!=null?(selected.body.elapsed_ms/1000).toFixed(1)+' 秒':'待返回'}</dd><dt>Tokens</dt><dd>${selected.body.usage.tokens ?? '未提供（本地模型不按 token 计费）'}</dd><dt>提示词</dt><dd>${esc(selected.body.params.prompt)}</dd>${selected.body.error?`<dt>错误</dt><dd>${esc(selected.body.error)}</dd>`:''}</dl><button class="quiet reuse-params" data-job="${selected.block_id}">复用这次参数</button>`:'<p>选择一条历史查看模型、参数和用量。</p>'}</details>`;
@@ -325,7 +331,7 @@
         state.history=rows;for(const card of cards())renderResults(card,progressOnly);if(!progressOnly)renderLibraries();
       }
     } catch(error) {tell(error.message);}
-    if(state.project?.block_id===projectId)state.polling=setTimeout(pollHistory,state.history.some(h=>['submitting','queued','running'].includes(h.body.status))?1000:5000);
+    if(state.project?.block_id===projectId)state.polling=setTimeout(pollHistory,state.history.some(h=>['submitting','queued','running','stopping'].includes(h.body.status))?1000:5000);
   }
   function addCard(type) {
     if(cards().length>=200){tell('当前画布最多 200 张卡片');return;}
@@ -359,6 +365,14 @@
     if(button.dataset.extractFrame){await extractFrame(card,button);return;}
     if(button.dataset.restoreJob){card.hiddenJobs=(card.hiddenJobs||[]).filter(id=>id!==button.dataset.restoreJob);card.selected=button.dataset.restoreJob;renderResults(card);changed();return;}
     if(button.dataset.disconnect){disconnect(button.dataset.disconnect);return;}
+    if(button.dataset.cancelJob){
+      const id=button.dataset.cancelJob;if(stoppingJobs.has(id))return;
+      stoppingJobs.add(id);renderResults(card,true);
+      try{await request('/api/generations/'+id+'/cancel',{});await pollHistory();}
+      catch(error){tell(error.message);}
+      finally{stoppingJobs.delete(id);if(state.project&&cardById(card.id))renderResults(card,true);}
+      return;
+    }
     if(button.dataset.useMaterial){await useMaterial(card,button.dataset.useMaterial);return;}
     if(button.classList.contains('choose-ref'))el.querySelector('.ref-upload').click();
     if(button.dataset.mode){if(!state.models.find(m=>m.id===card.model)?.modes.includes(button.dataset.mode))return;card.mode=button.dataset.mode;draft(card);renderCard(card);changed();}
