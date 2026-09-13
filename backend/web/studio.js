@@ -284,9 +284,9 @@
     if(milliseconds==null||!Number.isFinite(milliseconds))return '待返回';
     const seconds=Math.max(0,Math.floor(milliseconds/1000));
     const days=Math.floor(seconds/86400),hours=Math.floor(seconds/3600)%24,minutes=Math.floor(seconds/60)%60;
-    if(days)return `${days}天 ${hours}小时 ${minutes}分钟 ${seconds%60}秒`;
-    if(seconds>=3600)return `${hours}小时 ${minutes}分钟 ${seconds%60}秒`;
-    if(seconds>=60)return `${minutes}分钟 ${seconds%60}秒`;
+    if(days)return `${days}天 ${hours}小时 ${minutes}分钟 ${seconds%60}秒（${seconds}秒）`;
+    if(seconds>=3600)return `${hours}小时 ${minutes}分钟 ${seconds%60}秒（${seconds}秒）`;
+    if(seconds>=60)return `${minutes}分钟 ${seconds%60}秒（${seconds}秒）`;
     return `${seconds}秒`;
   }
   function elapsedText(start){return formatDuration(Date.now()-start);}
