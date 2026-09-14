@@ -76,7 +76,7 @@ class ComfySettingsHandler(PrivateHandler):
         async with self.settings['comfy_lock']:
             if connection != self.settings['comfy_connection']:
                 async with self.jobs.connection() as conn:
-                    active = await (await conn.execute("SELECT 1 FROM entities WHERE body->>'kind'='generation' AND body->>'status' IN ('submitting','queued','running','stopping') LIMIT 1")).fetchone()
+                    active = await (await conn.execute("SELECT 1 FROM entities WHERE body->>'kind'='generation' AND body->>'provider' IS DISTINCT FROM 'service-inference' AND body->>'status' IN ('submitting','queued','running','stopping') LIMIT 1")).fetchone()
                 if active:
                     raise tornado.web.HTTPError(409, reason='还有未结束的生成任务，请等待完成或停止任务后再切换')
             try:

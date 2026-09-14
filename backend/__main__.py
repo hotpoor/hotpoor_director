@@ -56,6 +56,7 @@ async def run(args):
             entity_pools.append(entity_pool)
             await entity_pool.open(wait=True)
         app = application(config, pool, *entity_pools)
+        await app.settings['inference_manager'].start()
         server = tornado.httpserver.HTTPServer(app, max_body_size=210 * 1024 * 1024)
         sockets = tornado.netutil.bind_sockets(args.port, '127.0.0.1')
         server.add_sockets(sockets)
@@ -66,6 +67,7 @@ async def run(args):
             server.stop()
             await server.close_all_connections()
         if app:
+            await app.settings['inference_manager'].close()
             await app.settings['progress_tracker'].close()
         if pool:
             await pool.close()

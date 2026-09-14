@@ -9,7 +9,7 @@ app.on('browser-window-created', (_, window) => {
       for (let n = 0; n < 50; n++) {
         const heading = await window.webContents.executeJavaScript("document.querySelector('#login-panel h2').textContent");
         if (heading === '创建第一个账号') {
-          const brandReady = await window.webContents.executeJavaScript("Array.from(document.images).every(img => img.complete && img.naturalWidth > 0)");
+          const brandReady = await window.webContents.executeJavaScript("Array.from(document.images).filter(img => img.getAttribute('src')).every(img => img.complete && img.naturalWidth > 0)");
           if (!brandReady) {await new Promise(resolve => setTimeout(resolve, 100)); continue;}
           const faviconOk = await window.webContents.executeJavaScript("fetch('/favicon.ico').then(r => r.ok)");
           if (!faviconOk) throw new Error('Favicon did not load');

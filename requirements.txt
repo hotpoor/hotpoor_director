@@ -3,3 +3,7 @@ psycopg[binary,pool]==3.3.5
 psycopg-pool==3.3.1
 argon2-cffi==25.1.0
 av==18.1.0
+qiniu==7.18.0
+oss2==2.19.1
+cos-python-sdk-v5==1.9.44
+PySocks==1.7.1

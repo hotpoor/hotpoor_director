@@ -13,6 +13,7 @@ from psycopg.types.json import Jsonb
 import tornado.web
 
 from backend.server import BaseHandler
+from backend.inference_models import BY_ID as CLOUD_BY_ID
 
 ID = re.compile(r'^[0-9a-f]{32}$')
 
@@ -54,19 +55,19 @@ def validate_project(data):
         if not isinstance(card, dict) or not isinstance(card.get('id'), str) or not ID.fullmatch(card['id']) or card['id'] in seen:
             raise ValueError('卡片 UUID 不正确或重复')
         seen.add(card['id'])
-        if card.get('type') not in ('image', 'video', 'asset') or card.get('mode') not in (('media',) if card.get('type') == 'asset' else ('text', 'image', 'reference')):
+        if card.get('type') not in ('image', 'video', 'asset') or card.get('mode') not in (('media',) if card.get('type') == 'asset' else ('text', 'image', 'reference','edit','series')):
             raise ValueError('卡片模式不正确')
         if not all(finite(card.get(k), lo, hi) for k, lo, hi in [('x', -1e7, 1e7), ('y', -1e7, 1e7), ('w', 380, 3000), ('h', 200 if card.get('type') == 'asset' else 520, 4000)]):
             raise ValueError('卡片尺寸不正确')
         if card['type'] == 'asset' and (not isinstance(card.get('asset_id'), str) or not ID.fullmatch(card['asset_id'])):
             raise ValueError('素材 UUID 不正确')
         drafts = card.get('drafts', {})
-        if not isinstance(drafts, dict) or set(drafts) - {'text', 'image', 'reference'}:
+        if not isinstance(drafts, dict) or set(drafts) - {'text', 'image', 'reference','edit','series'}:
             raise ValueError('卡片参数格式不正确')
         for draft in drafts.values():
             if not isinstance(draft, dict) or not isinstance(draft.get('prompt', ''), str) or len(draft.get('prompt', '')) > 12000:
                 raise ValueError('提示词格式不正确')
-            if 'model' in draft and draft['model'] not in ('z-image-turbo', 'z-image', 'minimax-h3', 'minimax-h3-ref2va', 'ltx-2.5'):
+            if 'model' in draft and draft['model'] not in ('z-image-turbo', 'z-image', 'minimax-h3', 'minimax-h3-ref2va', 'ltx-2.5') and draft['model'] not in CLOUD_BY_ID:
                 raise ValueError('未知模型')
             if not isinstance(draft.get('negative_prompt', ''), str) or len(draft.get('negative_prompt', '')) > 12000:
                 raise ValueError('反向提示词格式不正确')
@@ -166,8 +167,13 @@ async def save_project(handler, project_id=None):
             if any(k not in allowed for k in kinds) or any(kinds.count(k) > 3 for k in ('video', 'audio')):
                 raise tornado.web.HTTPError(400, reason='该模型不支持此参考类型或视频/音频超过各 3 项')
         if card['type'] == 'asset':
-            asset = await owned(handler.projects, card['asset_id'], handler.owner, 'asset')
+            cloud=card.get('storage')=='cloud'
+            asset = await owned(handler.projects, card['asset_id'], handler.owner, 'cloud_upload' if cloud else 'asset')
+            if cloud and asset['body'].get('status')!='completed':raise tornado.web.HTTPError(400,reason='云存储素材尚未完成上传确认')
             card.update(name=asset['body']['name'], mime=asset['body']['mime'], size=asset['body'].get('size', 0))
+            if cloud:card.update(storage='cloud',url=asset['body']['url'],provider=asset['body']['provider'])
+            else:
+                for key in ('storage','url','provider'):card.pop(key,None)
     body.update(kind='project', owner_id=handler.owner)
     async with handler.projects.connection() as conn:
         if project_id:
@@ -280,8 +286,17 @@ class AssetHandler(PrivateHandler):
 
 def workspace_routes():
     from backend.comfy_settings import ComfySettingsHandler, ComfyTestHandler
+    from backend.inference import InferenceSettingsHandler, InferenceTestHandler
+    from backend.cloud_storage import StorageSettingsHandler, StorageTestHandler, UploadGrantHandler, UploadConfirmHandler, CloudImageHandler
     from backend.generation import ModelsHandler, GenerateHandler, HistoryHandler, OutputHandler, CancelGenerationHandler, QueueOrderHandler
     return [
+        (r'/api/settings/storage', StorageSettingsHandler),
+        (r'/api/settings/storage/test', StorageTestHandler),
+        (r'/api/storage/uploads', UploadGrantHandler),
+        (r'/api/storage/uploads/([0-9a-f]{32})/image', CloudImageHandler),
+        (r'/api/storage/uploads/([0-9a-f]{32})/confirm', UploadConfirmHandler),
+        (r'/api/settings/service-inference', InferenceSettingsHandler),
+        (r'/api/settings/service-inference/test', InferenceTestHandler),
         (r'/api/settings/comfyui', ComfySettingsHandler), (r'/api/settings/comfyui/test', ComfyTestHandler),
         (r'/api/projects', ProjectsHandler), (r'/api/projects/([0-9a-f]{32})', ProjectHandler),
         (r'/api/assets', UploadHandler), (r'/api/assets/([0-9a-f]{32})', AssetHandler),

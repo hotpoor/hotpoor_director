@@ -122,10 +122,11 @@
     const selectedModel = card.model || card.drafts[card.mode]?.model;
     const spec=state.models.find(m=>m.id===selectedModel);
     const standard = selectedModel === 'z-image';
-    const defaults = {negative_prompt:'', cfg:standard?4:1, model:card.type === 'image' ? 'z-image-turbo':'minimax-h3', prompt:'', width:spec?.default_width || (card.type === 'image' ? 1024:832), height:spec?.default_height || (card.type === 'image' ? 1024:480), steps:spec?.default_steps || (standard?40:8), seed:-1, denoise:.65, duration:spec?.default_duration || 2, refs:[]};
+    const defaults = {max_images:4,output_format:'jpeg',optimize_mode:'standard',watermark:true,size:spec?.sizes?.[0] || '1K',resolution:spec?.resolutions?.[0] || '480p',ratio:'16:9',generate_audio:true,image_urls:'',video_urls:'',audio_urls:'',first_frame:'',last_frame:'',negative_prompt:'', cfg:standard?4:1, model:card.type === 'image' ? 'z-image-turbo':'minimax-h3', prompt:'', width:spec?.default_width || (card.type === 'image' ? 1024:832), height:spec?.default_height || (card.type === 'image' ? 1024:480), steps:spec?.default_steps || (standard?40:8), seed:-1, denoise:.65, duration:spec?.default_duration || 2, refs:[]};
     if(card.model && card.drafts[card.mode]?.model && card.drafts[card.mode].model!==card.model){
       card.drafts[card.mode].steps=defaults.steps;card.drafts[card.mode].cfg=defaults.cfg;
-      for(const k of ['width','height','duration'])card.drafts[card.mode][k]=defaults[k];
+      for(const k of ['width','height','duration','size','resolution','output_format','optimize_mode'])card.drafts[card.mode][k]=defaults[k];
+      if(spec?.provider==='service-inference')card.drafts[card.mode].refs=[];
       card.drafts[card.mode].refs=card.drafts[card.mode].refs.filter(r=>(spec?.ref_types||['image']).includes(refKind(card.drafts[card.mode],r))).slice(0,spec?.ref_limit || (card.type==='video'?2:1));
     }
     return card.drafts[card.mode] = {...defaults, ...card.drafts[card.mode], ...(card.model ? {model:card.model} : {})};
@@ -146,7 +147,7 @@
   const connections=()=>state.project.body.canvas.connections ||= [];
   function referenceLimit(card){return state.models.find(m=>m.id===card.model)?.ref_limit || (card.mode==='reference'?8:card.type==='video'?2:1);}
   function referenceLabel(card,i){if(card.mode==='reference'){const d=draft(card),kind=refKind(d,d.refs[i]);return `${{image:'Picture',video:'Video',audio:'Audio'}[kind]} ${d.refs.slice(0,i+1).filter(r=>refKind(d,r)===kind).length}`;}return card.type==='video'?(i?'尾帧':'首帧'):String(i+1);}
-  function acceptsReference(card,mime){return (state.models.find(m=>m.id===card.model)?.ref_types || ['image']).includes(mime?.split('/')[0]);}
+  function acceptsReference(card,mime){const spec=state.models.find(m=>m.id===card.model);if(spec?.provider==='service-inference')return mime?.startsWith('image/')||(spec.type==='video'&&spec.modes.includes('reference')&&['video','audio'].includes(mime?.split('/')[0]));return (state.models.find(m=>m.id===card.model)?.ref_types || ['image']).includes(mime?.split('/')[0]);}
   function refKind(d,id){return d.ref_info?.[id]?.mime?.split('/')[0] || 'image';}
   function rememberRef(d,asset){(d.ref_info ||= {})[asset.id]={mime:asset.mime,name:asset.name};}
   function checkRefCount(card,d,mime){const kind=mime.split('/')[0];if(!acceptsReference(card,mime))throw Error('当前模型不支持此参考类型');if(d.refs.length>=referenceLimit(card))throw Error(`最多 ${referenceLimit(card)} 项参考素材`);if(kind!=='image'&&d.refs.filter(r=>refKind(d,r)===kind).length>=3)throw Error('视频和音频各最多 3 项');}
@@ -187,7 +188,7 @@
       const source=cardById(edge.source);if(!source)continue;
       if(source.type==='asset'){
         const key='asset:'+source.asset_id;if(seen.has(key))continue;seen.add(key);
-        materials.push({key,asset:source.asset_id,url:'/api/assets/'+source.asset_id,name:source.name,mime:source.mime});
+        materials.push({key,asset:source.storage==='cloud'?null:source.asset_id,storage:source.storage,copySource:source.storage==='cloud'?'/api/storage/uploads/'+source.asset_id+'/image':'',url:source.storage==='cloud'?source.url:'/api/assets/'+source.asset_id,name:source.name,mime:source.mime});
       }else{
         for(const job of state.history.filter(h=>h.body.card_id===source.id&&h.body.status==='completed'))for(const [index,output] of job.body.outputs.entries()){
           const key=job.block_id+':'+index;if(seen.has(key))continue;seen.add(key);
@@ -200,7 +201,7 @@
   function renderLibrary(card){
     const library=document.querySelector(`[data-card="${card.id}"] .imported-library`);if(!library)return;
     const incoming=connections().filter(e=>e.target===card.id),materials=upstreamMaterials(card);
-    const html=`<summary>引入素材库 · ${materials.length}</summary><div class="upstream-links">${incoming.map(e=>`<span>${esc(cardById(e.source)?.name||e.source.slice(0,6))}<button class="quiet" data-disconnect="${e.id}" title="断开此来源">×</button></span>`).join('')}</div>${materials.length?`<div class="imported-items">${materials.map(m=>`<div class="imported-item">${m.mime?.startsWith('image/')?`<img src="${m.url}" data-preview="${m.url}" data-preview-title="${esc(m.name)}" alt="${esc(m.name)}" tabindex="0" role="button" loading="lazy">`:m.mime?.startsWith('video/')?`<video src="${m.url}" controls preload="metadata"></video>`:`<audio src="${m.url}" controls preload="metadata"></audio>`}<small>${esc(m.name)}</small>${card.type!=='asset'?`<button class="quiet" data-use-material="${m.key}" ${acceptsReference(card,m.mime)?'':'disabled'}>${acceptsReference(card,m.mime)?'用作参考素材':'当前模型不支持此类输入'}</button>`:''}</div>`).join('')}</div>`:`<p>${incoming.length?'等待上游卡片生成素材。':'从其他卡片右侧拖线到本卡片左侧，引入素材。'}</p>`}`;
+    const html=`<summary>引入素材库 · ${materials.length}</summary><div class="upstream-links">${incoming.map(e=>`<span>${esc(cardById(e.source)?.name||e.source.slice(0,6))}<button class="quiet" data-disconnect="${e.id}" title="断开此来源">×</button></span>`).join('')}</div>${materials.length?`<div class="imported-items">${materials.map(m=>`<div class="imported-item">${m.mime?.startsWith('image/')?`<img src="${m.url}" data-preview-copy="${esc(m.copySource||'')}" data-preview="${m.url}" data-preview-title="${esc(m.name)}" alt="${esc(m.name)}" tabindex="0" role="button" loading="lazy">`:m.mime?.startsWith('video/')?`<video src="${m.url}" controls preload="metadata"></video>`:`<audio src="${m.url}" controls preload="metadata"></audio>`}<small>${esc(m.name)}</small>${card.type!=='asset'?`<button class="quiet" data-use-material="${m.key}" ${(acceptsReference(card,m.mime)&&(m.storage!=='cloud'||state.models.find(model=>model.id===card.model)?.provider==='service-inference'))?'':'disabled'}>${(acceptsReference(card,m.mime)&&(m.storage!=='cloud'||state.models.find(model=>model.id===card.model)?.provider==='service-inference'))?'用作参考素材':(state.models.find(model=>model.id===card.model)?.provider==='service-inference'?'云端参考请填写公网 URL':'当前模型不支持此类输入')}</button>`:''}</div>`).join('')}</div>`:`<p>${incoming.length?'等待上游卡片生成素材。':'从其他卡片右侧拖线到本卡片左侧，引入素材。'}</p>`}`;
     if(library._markup!==html){library.innerHTML=html;library._markup=html;}
   }
   function renderLibraries(){if(state.project)for(const card of cards())renderLibrary(card);}
@@ -208,9 +209,22 @@
     if(importing)return;
     const material=upstreamMaterials(card).find(m=>m.key===key);if(!material||!acceptsReference(card,material.mime))return;
     const model=state.models.find(m=>m.id===card.model);
+    if(model?.provider==='service-inference'){
+      if(material.storage==='cloud'){
+        card.mode=model.type==='image'?'image':model.modes.includes('reference')?'reference':'image';const d=draft(card);
+        const key=material.mime.startsWith('video/')?'video_urls':material.mime.startsWith('audio/')?'audio_urls':model.api_version==='v2'&&card.mode==='image'?'first_frame':'image_urls';
+        const single=key==='first_frame',urls=(d[key]||'').split(/\s+/).filter(Boolean),limit=single?1:key==='image_urls'?model.ref_limit:3;
+        if(!single&&urls.length>=limit){tell(`最多 ${limit} 项参考素材`);return;}
+        d[key]=single?material.url:[...new Set([...urls,material.url])].join('\n');renderCard(card);changed();tell('已使用云存储 URL 作为参考素材');return;
+      }
+      card.mode=model.type==='image'?'image':model.modes.includes('reference')?'reference':'image';draft(card);renderCard(card);changed();
+      try{const response=await fetch(material.url);if(!response.ok)throw Error('无法读取上游素材');const blob=await response.blob();
+        await addCloudReferences(card,material.mime.startsWith('video/')?'video_urls':material.mime.startsWith('audio/')?'audio_urls':model.api_version==='v2'&&card.mode==='image'?'first_frame':'image_urls',[new File([blob],'upstream'+(material.mime.startsWith('video/')?'.mp4':material.mime.startsWith('audio/')?'.wav':'.png'),{type:material.mime})]);
+      }catch(e){tell(e.message);}return;
+    }
     if(!model?.modes.some(m=>m==='image'||m==='reference')){tell('当前模型不支持图片输入');return;}
     const project=state.project;
-    card.mode=model.modes.includes('reference')?'reference':'image';const d=draft(card),limit=referenceLimit(card);
+    card.mode=model.type==='image'?'image':model.modes.includes('reference')?'reference':'image';const d=draft(card),limit=referenceLimit(card);
     if(material.asset&&d.refs.includes(material.asset)){tell('这个素材已经在输入列表中');renderCard(card);changed();return;}
     if(d.refs.length>=limit){tell(`当前模式最多 ${limit} 项参考素材，请先移除已有输入`);renderCard(card);changed();return;}
     importing=true;
@@ -228,14 +242,14 @@
     const el = document.querySelector(`[data-card="${card.id}"]`); if (!el) return;
     position(card,el);
     if(card.type==='asset'){
-      const url='/api/assets/'+card.asset_id;
-      const media=card.mime?.startsWith('image/')?`<img src="${url}" data-preview="${url}" data-preview-title="${esc(card.name)}" role="button" tabindex="0" alt="${esc(card.name)}">`:card.mime?.startsWith('video/')?videoMedia(url):`<div class="audio-art">♫</div><audio src="${url}" controls preload="metadata"></audio>`;
+      const url=esc(card.storage==='cloud'?card.url:'/api/assets/'+card.asset_id);
+      const media=card.mime?.startsWith('image/')?`<img src="${url}" data-preview-copy="${card.storage==='cloud'?'/api/storage/uploads/'+card.asset_id+'/image':''}" data-preview="${url}" data-preview-title="${esc(card.name)}" role="button" tabindex="0" alt="${esc(card.name)}">`:card.mime?.startsWith('video/')?videoMedia(url):`<div class="audio-art">♫</div><audio src="${url}" controls preload="metadata"></audio>`;
       el.classList.add('asset-card');
-      el.innerHTML=`<header class="card-heading"><span class="card-grip">⠿</span><strong title="${esc(card.name)}">${esc(card.name)}</strong><button class="quiet remove-card" title="移除素材卡片">✕</button></header><div class="asset-content">${media}<small>${esc(card.mime)} · ${((card.size||0)/1024/1024).toFixed(2)} MB</small><p class="media-error" hidden>浏览器无法播放此文件，请检查编码格式。</p></div>${['n','s','e','w','ne','nw','se','sw'].map(dir=>`<div class="resize-handle resize-${dir}" data-resize="${dir}"></div>`).join('')}`;
+      el.innerHTML=`<header class="card-heading"><span class="card-grip">⠿</span><strong title="${esc(card.name)}">${esc(card.name)}</strong><button class="quiet remove-card" title="移除素材卡片">✕</button></header><div class="asset-content">${media}<small>${card.storage==='cloud'?'云存储 · ':''}${esc(card.mime)} · ${((card.size||0)/1024/1024).toFixed(2)} MB</small>${card.storage==='cloud'?'<button class="quiet copy-cloud-url">复制公网 URL</button>':''}<p class="media-error" hidden>浏览器无法播放此文件，请检查编码格式。</p></div>${['n','s','e','w','ne','nw','se','sw'].map(dir=>`<div class="resize-handle resize-${dir}" data-resize="${dir}"></div>`).join('')}`;
       el.insertAdjacentHTML('beforeend',cardPorts());el.querySelector('.asset-content').insertAdjacentHTML('beforeend','<details class="imported-library" open></details>');renderLibrary(card);
       return;
     }
-    const available = state.models.filter(m => m.type === card.type);
+    const available = state.models.filter(m => m.type === card.type&&(m.available!==false||m.id===card.model));
     const model = available.find(m => m.id === (card.model || draft(card).model)) || available[0];
     if(model) {
       card.model = model.id;
@@ -244,11 +258,39 @@
         changed();
       }
     }
-    const d = draft(card), unsupported = !model?.modes.includes(card.mode);
+    const d = draft(card), unsupported = model?.available===false||!model?.modes.includes(card.mode);
     const tabLabels = card.type === 'image' ? ['文生图','图生图','参考图'] : ['文生视频','图生视频','多元素参考'];
-    el.innerHTML = `<header class="card-heading"><span class="card-grip">⠿</span><strong>${card.type === 'image'?'◧ 图片生成':'▷ 视频生成'}</strong><small>${card.id.slice(0,6).toUpperCase()}</small><button class="quiet remove-card" title="移除卡片">✕</button></header><div class="card-progress"></div><div class="card-content"><section class="card-results"></section><details class="imported-library" open></details><label class="model-picker">模型<select data-field="model" ${available.length?'':'disabled'}>${available.map(m=>`<option value="${m.id}" ${m.id===d.model?'selected':''}>${esc(m.name)}</option>`).join('') || '<option>暂无可用模型</option>'}</select></label><div class="generation-tabs" role="tablist">${['text','image','reference'].map((m,i)=>model?.modes.includes(m)?`<button role="tab" aria-selected="${m===card.mode}" data-mode="${m}">${tabLabels[i]}</button>`:'').join('')}</div><div class="generation-settings">${model?.note?`<p class="mode-note">${esc(model.note)}</p>`:''}<label>提示词<textarea data-field="prompt" rows="3" placeholder="描述画面、镜头、光线与情绪…">${esc(d.prompt)}</textarea></label>${d.model==='z-image'?`<label>反向提示词<textarea data-field="negative_prompt" rows="2" placeholder="希望避免的内容…">${esc(d.negative_prompt)}</textarea></label>`:''}${card.mode!=='text' ? `<div class="ref-zone" tabindex="0"><span>${card.mode==='reference'?'参考素材（按类型编号）':card.type==='video'?(referenceLimit(card)>1?'首帧 / 尾帧（可选）':'首帧图片'):'输入图片'}</span><button class="quiet choose-ref">＋ 添加${model?.ref_types?'素材':'图片'} · 拖入 / 粘贴</button><input hidden class="ref-upload" type="file" accept="${model?.ref_types?'image/png,image/jpeg,image/webp,video/mp4,video/webm,audio/*':'image/png,image/jpeg,image/webp'}" ${card.type==='video'||card.mode==='reference'?'multiple':''}></div><div class="ref-list">${d.refs.map((r,i)=>`<div>${refPreview(d,r)}<button class="quiet" data-remove-ref="${i}" title="移除参考素材">✕</button><small>${referenceLabel(card,i)}</small></div>`).join('')}</div>`:''}${sizeHelp(card,model)}<div class="parameter-grid"><label>宽度<input data-field="width" type="number" min="256" max="1536" step="${model?.dimension_step || (card.type==='image'?16:32)}" value="${d.width}"></label><label>高度<input data-field="height" type="number" min="256" max="1536" step="${model?.dimension_step || (card.type==='image'?16:32)}" value="${d.height}"></label><label>步数<input data-field="steps" type="number" min="1" max="${d.model==='z-image'?60:40}" value="${d.steps}" ${model?.fixed_steps?'readonly':''}></label>${d.model==='z-image'?`<label>CFG / 提示词引导<input data-field="cfg" type="number" min="1" max="20" step="0.5" value="${d.cfg}"></label>`:''}${card.type==='video'?`<label>时长 / 秒<input data-field="duration" type="number" min="1" max="15" step="1" value="${d.duration}"></label>`:`<label>重绘强度<input data-field="denoise" type="number" min="0.01" max="1" step="0.05" value="${d.denoise}" ${card.mode==='text'?'disabled':''}></label>`}</div><label>种子 <small>−1 为随机</small><input data-field="seed" type="number" min="-1" max="9007199254740991" value="${d.seed}"></label><button class="generate" ${unsupported?'disabled':''}>${unsupported?'当前模式暂不可生成':'生成'+(card.type==='image'?'图片':'视频')+' ↗'}</button><p class="card-feedback" role="status"></p></div></div>${['n','s','e','w','ne','nw','se','sw'].map(dir=>`<div class="resize-handle resize-${dir}" data-resize="${dir}"></div>`).join('')}`;
+    el.innerHTML = `<header class="card-heading"><span class="card-grip">⠿</span><strong>${card.type === 'image'?'◧ 图片生成':'▷ 视频生成'}</strong><small>${card.id.slice(0,6).toUpperCase()}</small><button class="quiet remove-card" title="移除卡片">✕</button></header><div class="card-progress"></div><div class="card-content"><section class="card-results"></section><details class="imported-library" open></details><label class="model-picker">模型<select data-field="model" ${available.length?'':'disabled'}>${available.map(m=>`<option value="${m.id}" ${m.available===false?'disabled':''} ${m.id===d.model?'selected':''}>${esc(m.name)}${m.available===false?'（当前 Key 不可用）':''}</option>`).join('') || '<option>暂无可用模型</option>'}</select></label><div class="generation-tabs" role="tablist">${['text','image','reference','edit','series'].map((m,i)=>model?.modes.includes(m)?`<button role="tab" aria-selected="${m===card.mode}" data-mode="${m}">${model?.type==='image'&&model?.provider==='service-inference'?({text:'文生图',image:'图片编辑',reference:'多图融合',edit:'交互编辑',series:'组图生成'}[m]):tabLabels[i]}</button>`:'').join('')}</div><div class="generation-settings">${model?.note?`<p class="mode-note">${esc(model.note)}</p>`:''}<label>提示词<textarea data-field="prompt" rows="3" placeholder="描述画面、镜头、光线与情绪…">${esc(d.prompt)}</textarea></label>${d.model==='z-image'?`<label>反向提示词<textarea data-field="negative_prompt" rows="2" placeholder="希望避免的内容…">${esc(d.negative_prompt)}</textarea></label>`:''}${card.mode!=='text' ? `<div class="ref-zone" tabindex="0"><span>${card.mode==='reference'?'参考素材（按类型编号）':card.type==='video'?(referenceLimit(card)>1?'首帧 / 尾帧（可选）':'首帧图片'):'输入图片'}</span><button class="quiet choose-ref">＋ 添加${model?.ref_types?'素材':'图片'} · 拖入 / 粘贴</button><input hidden class="ref-upload" type="file" accept="${model?.ref_types?'image/png,image/jpeg,image/webp,video/mp4,video/webm,audio/*':'image/png,image/jpeg,image/webp'}" ${card.type==='video'||card.mode==='reference'?'multiple':''}></div><div class="ref-list">${d.refs.map((r,i)=>`<div>${refPreview(d,r)}<button class="quiet" data-remove-ref="${i}" title="移除参考素材">✕</button><small>${referenceLabel(card,i)}</small></div>`).join('')}</div>`:''}${sizeHelp(card,model)}<div class="parameter-grid"><label>宽度<input data-field="width" type="number" min="256" max="1536" step="${model?.dimension_step || (card.type==='image'?16:32)}" value="${d.width}"></label><label>高度<input data-field="height" type="number" min="256" max="1536" step="${model?.dimension_step || (card.type==='image'?16:32)}" value="${d.height}"></label><label>步数<input data-field="steps" type="number" min="1" max="${d.model==='z-image'?60:40}" value="${d.steps}" ${model?.fixed_steps?'readonly':''}></label>${d.model==='z-image'?`<label>CFG / 提示词引导<input data-field="cfg" type="number" min="1" max="20" step="0.5" value="${d.cfg}"></label>`:''}${card.type==='video'?`<label>时长 / 秒<input data-field="duration" type="number" min="1" max="15" step="1" value="${d.duration}"></label>`:`<label>重绘强度<input data-field="denoise" type="number" min="0.01" max="1" step="0.05" value="${d.denoise}" ${card.mode==='text'?'disabled':''}></label>`}</div><label>种子 <small>−1 为随机</small><input data-field="seed" type="number" min="-1" max="9007199254740991" value="${d.seed}"></label><button class="generate" ${unsupported?'disabled':''}>${unsupported?'当前模式暂不可生成':'生成'+(card.type==='image'?'图片':'视频')+' ↗'}</button><p class="card-feedback" role="status"></p></div></div>${['n','s','e','w','ne','nw','se','sw'].map(dir=>`<div class="resize-handle resize-${dir}" data-resize="${dir}"></div>`).join('')}`;
     el.insertAdjacentHTML('beforeend',cardPorts());
+    if(model?.provider==='service-inference')el.querySelector('.generation-settings').innerHTML=cloudFields(card,model,d);
     renderResults(card);renderLibrary(card);updateSizeFeedback(card);
+  }
+  function parameterSummary(body){const p=body.params;if(body.provider==='service-inference')return body.type==='image'?`分辨率 ${p.size}`:`${p.resolution} · ${p.ratio} · ${p.duration} 秒`;return `${p.width} × ${p.height} · ${p.steps} 步 · seed ${p.seed}`;}
+  function cloudFields(card,model,d){
+    const select=(key,label,values)=>`<label>${label}<select data-field="${key}">${values.map(v=>`<option value="${v}" ${d[key]===v?'selected':''}>${v}</option>`).join('')}</select></label>`;
+    const refs=(key,label,rows=2)=>`<div class="cloud-ref-zone" data-cloud-field="${key}"><label>${label}<textarea data-field="${key}" rows="${rows}" placeholder="https://…">${esc(d[key]||'')}</textarea></label><button class="quiet" data-cloud-upload="${key}">＋ 选择文件直传 · 拖入 / 粘贴</button>${cloudRetries.get(card.id+':'+key)?.model===card.model&&cloudRetries.get(card.id+':'+key)?.mode===card.mode?`<button class="quiet" data-cloud-retry="${key}">重试上次直传 / 确认</button>`:''}<input hidden class="cloud-upload" data-cloud-field="${key}" type="file" accept="${key==='video_urls'?'video/mp4,video/webm':key==='audio_urls'?'audio/*':'image/png,image/jpeg,image/webp'}" ${rows>1?'multiple':''}></div>`;
+    let html=`${model.available===false?'<p class="mode-note">当前 Key 的模型列表不包含此模型，请在设置中切换 Key 或重新选择模型。</p>':''}<p class="mode-note">${esc(model.note)}</p><label>提示词<textarea data-field="prompt" rows="3" placeholder="描述画面、镜头、光线与情绪…">${esc(d.prompt)}</textarea></label>`;
+    if(card.mode!=='text'){
+      html+='<p class="mode-note">填写公网直链（每行一项），或选择文件直传到已配置的云存储。</p>';
+      if(model.type==='video'&&model.api_version==='v2'&&card.mode==='image')html+=refs('first_frame','首帧图片 URL',1)+refs('last_frame','尾帧图片 URL（可选）',1);
+      else html+=refs('image_urls',`参考图片 URL · 最多 ${model.ref_limit} 张（依填写顺序编号）`);
+      if(model.type==='video'&&card.mode==='reference')html+=refs('video_urls','参考视频 URL · 最多 3 段')+refs('audio_urls','参考音频 URL · 最多 3 段');
+    }
+    if(model.type==='image'&&card.mode==='edit')html+='<p class="mode-note">上传已圈选、涂鸦标记的图片，在提示词中说明编辑位置；也可填写 &lt;point&gt; 或 &lt;bbox&gt; 坐标标签。此处使用已有标记图，尚无内置画笔。</p>';
+    if(model.type==='image'&&card.mode==='reference')html+='<p class="mode-note">至少两张参考图，提示词按上传顺序使用「图1」「图2」描述融合关系。</p>';
+    if(model.type==='image'&&card.mode==='series')html+='<p class="mode-note">可不填参考图。模型根据提示词生成关联组图，实际张数可能少于上限；参考图 + 最多生成张数不能超过 15。</p>';
+    html+='<div class="parameter-grid">';
+    if(model.type==='image'){
+      html+=select('size','图片分辨率',model.sizes)+select('output_format','输出格式',model.output_formats);
+      if(model.optimize_modes.includes('fast'))html+=select('optimize_mode','提示词优化',model.optimize_modes);
+      if(card.mode==='series')html+=`<label>最多生成张数<input data-field="max_images" type="number" min="1" max="15" step="1" value="${d.max_images}"></label>`;
+      html+=`<label class="cloud-checkbox"><input data-field="watermark" type="checkbox" ${d.watermark?'checked':''}>AI 生成水印</label>`;
+    }
+    else{
+      html+=select('resolution','视频分辨率',model.resolutions)+select('ratio','画面比例',['16:9','4:3','1:1','3:4','9:16','21:9',...(model.api_version==='v1'&&card.mode==='image'?['adaptive']:[])])+`<label>时长 / 秒<input data-field="duration" type="number" min="${model.min_duration||4}" max="${model.max_duration||15}" step="1" value="${d.duration}"></label>`;
+      if(model.api_version==='v2')html+=`<label class="cloud-checkbox"><input data-field="generate_audio" type="checkbox" ${d.generate_audio?'checked':''}>生成音频</label>`;
+    }
+    return html+'</div><p class="mode-note">图片请求完成前请保持应用开启。提交后由云端计费并处理。结果自动保存到本机；视频可在重启后继续查询。云端接口暂不支持取消任务。</p><button class="generate" '+(model.available===false?'disabled':'')+'>生成'+(card.type==='image'?'图片':'视频')+' ↗</button><p class="card-feedback" role="status"></p>';
   }
   function videoFrameTools(url){
     return `<div class="video-frame-tools" data-frame-url="${esc(url)}" role="group" aria-label="视频提帧"><span class="frame-tools-caption">提帧</span><button class="quiet" data-extract-frame="last" title="提取视频最后一帧">最后一帧</button><span class="frame-tools-divider" aria-hidden="true"></span><div class="frame-time-group"><label class="frame-time-input"><input class="frame-seconds" type="number" min="0" step="0.1" value="0" aria-label="提取帧的秒数"><span>秒</span></label><button class="quiet" data-extract-frame="time" title="提取指定秒数的画面">按秒提取</button></div></div>`;
@@ -338,13 +380,13 @@
     const labels = {completed:'已完成',failed:'失败',submitting:'提交中',queued:'排队中',running:'生成中',stopping:'正在停止',cancelled:'已停止'};
     const activeRows = allRows.filter(h=>['submitting','queued','running','stopping'].includes(h.body.status));
     const active = activeRows.find(h=>['running','stopping'].includes(h.body.status)) || activeRows.at(-1);
-    const stopButton = job => `<button class="quiet stop-generation" data-cancel-job="${job.block_id}" ${stoppingJobs.has(job.block_id)||['submitting','stopping'].includes(job.body.status)?'disabled':''}>${job.body.status==='stopping'||stoppingJobs.has(job.block_id)?'正在停止…':job.body.status==='submitting'?'提交中…':job.body.status==='queued'?'取消排队':'停止生成'}</button>`;
+    const stopButton = job => job.body.provider==='service-inference'?'<small>云端任务不支持取消</small>':`<button class="quiet stop-generation" data-cancel-job="${job.block_id}" ${stoppingJobs.has(job.block_id)||['submitting','stopping'].includes(job.body.status)?'disabled':''}>${job.body.status==='stopping'||stoppingJobs.has(job.block_id)?'正在停止…':job.body.status==='submitting'?'提交中…':job.body.status==='queued'?'取消排队':'停止生成'}</button>`;
     const p = active?.body.progress;
     const samplerNodes=state.models.find(m=>m.id===active?.body.model)?.sampler_nodes || [active?.body.type==='image'?'8':'11'];
     const sampler = active && samplerNodes.includes(String(p?.node));
     const determinate = sampler && p?.phase==='sampling' && p.maximum>0 && p.value<p.maximum;
     const percent = determinate ? Math.floor(p.value/p.maximum*100) : null;
-    const phase = active?.body.status==='stopping' ? '已请求停止，等待模型释放当前任务…' : p?.phase==='unavailable' ? '进度暂不可用，正在等待结果' : determinate ? `${samplerNodes.length>1?'阶段 '+(samplerNodes.indexOf(String(p.node))+1)+'/'+samplerNodes.length+' · ':''}采样 ${p.value} / ${p.maximum} · ${percent}%` : sampler && p?.value>=p?.maximum && samplerNodes.indexOf(String(p.node))<samplerNodes.length-1 ? '第一阶段采样完成，正在放大…' : p?.phase==='finishing' || (sampler && p?.value>=p?.maximum) ? '采样完成，正在处理输出…' : active?.body.status==='submitting' ? '正在提交…' : active?.body.status==='queued' ? '排队等待生成…' : '正在生成 / 加载模型或处理媒体…';
+    const phase = active?.body.provider==='service-inference' ? (active.body.error || ({preparing:'云端正在准备参考素材…',pending:'云端排队中…',processing:'云端生成中…',downloading:'正在保存生成结果到本机…'}[active.body.remote_status] || (active.body.status==='submitting'?'正在提交到云端…':'等待云端返回结果…'))) : active?.body.status==='stopping' ? '已请求停止，等待模型释放当前任务…' : p?.phase==='unavailable' ? '进度暂不可用，正在等待结果' : determinate ? `${samplerNodes.length>1?'阶段 '+(samplerNodes.indexOf(String(p.node))+1)+'/'+samplerNodes.length+' · ':''}采样 ${p.value} / ${p.maximum} · ${percent}%` : sampler && p?.value>=p?.maximum && samplerNodes.indexOf(String(p.node))<samplerNodes.length-1 ? '第一阶段采样完成，正在放大…' : p?.phase==='finishing' || (sampler && p?.value>=p?.maximum) ? '采样完成，正在处理输出…' : active?.body.status==='submitting' ? '正在提交…' : active?.body.status==='queued' ? '排队等待生成…' : '正在生成 / 加载模型或处理媒体…';
     const progress = active ? `<div class="generation-progress"><div class="generation-status"><span title="${esc(phase)}">${esc(phase)}</span><span class="generation-elapsed" data-started="${Number(active.body.submitted_at || active.createtime)}" title="从任务提交开始累计，包含排队、加载和生成时间">已等待 ${elapsedText(Number(active.body.submitted_at || active.createtime))}</span>${stopButton(active)}</div><progress max="100" ${determinate?`value="${percent}"`:''} aria-label="${esc(phase)}"></progress>${activeRows.length>1?`<details class="generation-queue"><summary>本卡片还有 ${activeRows.length-1} 个任务</summary><div>${activeRows.filter(h=>h!==active).map(h=>`<div><span>${esc(labels[h.body.status])} · ${h.block_id.slice(0,6)}</span>${stopButton(h)}</div>`).join('')}</div></details>`:''}</div>` : '';
     const progressEl=el.closest('[data-card]').querySelector('.card-progress');
     const queueOpen=progressEl.querySelector('.generation-queue')?.open;
@@ -353,7 +395,7 @@
     updateElapsedClocks();
     if(progressOnly)return;
     const savedPins=new Map([...el.querySelectorAll('[data-pinned-job]')].map(node=>[node.dataset.pinnedJob,{node,playing:!node.querySelector('video')?.paused}]));
-    el.innerHTML = `<div class="result-stage">${selected?.body.outputs.length ? jobMedia(selected,0,false,false) : `<div class="result-placeholder"><span>${card.type==='image'?'◧':'▷'}</span><p>${selected ? esc(labels[selected.body.status] || selected.body.status) : '你的下一帧，从这里诞生'}</p></div>`}</div>${selected?.body.type==='video'&&selected.body.outputs.length?videoFrameTools(`/api/outputs/${selected.block_id}/0`):''}${selected?.body.outputs.length?`<label class="hide-result"><input type="checkbox" data-hide-job="${selected.block_id}"> 隐藏当前生成结果</label>`:''}<div class="pin-toolbar"><span>PIN / 对比位</span>${card.type==='video'?`<label class="sync-pins-label" title="至少固定两个视频；联动播放、暂停、进度和倍速"><input type="checkbox" class="sync-pins" ${card.syncPinPlayback?'checked':''} ${pins.length<2?'disabled':''}> 同时播放</label>`:''}<input class="pin-limit" aria-label="对比位数量" type="number" min="0" max="8" value="${card.pinLimit ?? 2}"><button class="quiet pin-current" ${selected?.body.outputs.length?'':'disabled'}>＋ 固定当前</button></div>${pins.length?`<div class="pinned-results">${pins.map(h=>`<div data-pinned-job="${h.block_id}">${jobMedia(h,0,false,false)}<button class="quiet" data-unpin="${h.block_id}" title="取消固定">✕</button></div>`).join('')}</div>`:''}<div class="history-heading"><span>生成历史 / ${rows.length}</span><small>最新在左</small></div><div class="history-strip">${rows.map(h=>`<button data-history="${h.block_id}" class="${h===selected?'selected':''}" title="${esc(labels[h.body.status])} · ${date(h.createtime)}">${h.body.outputs.length?jobMedia(h,0,true):`<span>${esc(labels[h.body.status])}</span>`}</button>`).join('') || '<small>还没有生成记录</small>'}</div><details class="hidden-history" ${card.hiddenOpen?'open':''}><summary>已隐藏 / ${hiddenRows.length}</summary><div class="hidden-items">${hiddenRows.map(h=>`<div class="hidden-item">${jobMedia(h,0,false,false)}<small>${esc(h.body.model)} · ${date(h.createtime)}</small><button data-restore-job="${h.block_id}">恢复到生成历史</button></div>`).join('')||'<p>没有隐藏的结果</p>'}</div></details><details class="history-details" ${card.detailsOpen?'open':''}><summary>生成信息${selected?' · '+esc(labels[selected.body.status]):''}</summary>${selected?`<dl><dt>模型</dt><dd>${esc(selected.body.model)}</dd><dt>创建时间</dt><dd>${date(selected.createtime)}</dd><dt>参数</dt><dd>${selected.body.params.width} × ${selected.body.params.height} · ${selected.body.params.steps} 步 · seed ${selected.body.params.seed}</dd>${selected.body.model==='z-image'?`<dt>CFG</dt><dd>${selected.body.params.cfg ?? 4}</dd><dt>反向提示词</dt><dd>${esc(selected.body.params.negative_prompt || '未填写')}</dd>`:''}<dt>耗时</dt><dd title="${selected.body.elapsed_ms!=null?esc(selected.body.elapsed_ms+' 毫秒'):''}">${formatDuration(selected.body.elapsed_ms)}</dd><dt>Tokens</dt><dd>${selected.body.usage.tokens ?? '未提供（本地模型不按 token 计费）'}</dd><dt>提示词</dt><dd>${esc(selected.body.params.prompt)}</dd>${selected.body.error?`<dt>错误</dt><dd>${esc(selected.body.error)}</dd>`:''}</dl><div class="history-materials-heading">本次使用素材 · ${(selected.body.refs || []).length}</div>${historyMaterials(selected.body)}<button class="quiet reuse-params" data-job="${selected.block_id}">复用这次参数</button>`:'<p>选择一条历史查看模型、参数和用量。</p>'}</details>`;
+    el.innerHTML = `<div class="result-stage">${selected?.body.outputs.length ? jobMedia(selected,0,false,false) : `<div class="result-placeholder"><span>${card.type==='image'?'◧':'▷'}</span><p>${selected ? esc(labels[selected.body.status] || selected.body.status) : '你的下一帧，从这里诞生'}</p></div>`}</div>${selected?.body.type==='image'&&selected.body.outputs.length>1?`<div class="group-output-heading">组图 · ${selected.body.outputs.length} 张，点击查看</div><div class="group-outputs">${selected.body.outputs.map((_,i)=>`<div>${jobMedia(selected,i,false,false)}<small>第 ${i+1} 张</small></div>`).join('')}</div>`:''}${selected?.body.type==='video'&&selected.body.outputs.length?videoFrameTools(`/api/outputs/${selected.block_id}/0`):''}${selected?.body.outputs.length?`<label class="hide-result"><input type="checkbox" data-hide-job="${selected.block_id}"> 隐藏当前生成结果</label>`:''}<div class="pin-toolbar"><span>PIN / 对比位</span>${card.type==='video'?`<label class="sync-pins-label" title="至少固定两个视频；联动播放、暂停、进度和倍速"><input type="checkbox" class="sync-pins" ${card.syncPinPlayback?'checked':''} ${pins.length<2?'disabled':''}> 同时播放</label>`:''}<input class="pin-limit" aria-label="对比位数量" type="number" min="0" max="8" value="${card.pinLimit ?? 2}"><button class="quiet pin-current" ${selected?.body.outputs.length?'':'disabled'}>＋ 固定当前</button></div>${pins.length?`<div class="pinned-results">${pins.map(h=>`<div data-pinned-job="${h.block_id}">${jobMedia(h,0,false,false)}<button class="quiet" data-unpin="${h.block_id}" title="取消固定">✕</button></div>`).join('')}</div>`:''}<div class="history-heading"><span>生成历史 / ${rows.length}</span><small>最新在左</small></div><div class="history-strip">${rows.map(h=>`<button data-history="${h.block_id}" class="${h===selected?'selected':''}" title="${esc(labels[h.body.status])} · ${date(h.createtime)}">${h.body.outputs.length?jobMedia(h,0,true):`<span>${esc(labels[h.body.status])}</span>`}</button>`).join('') || '<small>还没有生成记录</small>'}</div><details class="hidden-history" ${card.hiddenOpen?'open':''}><summary>已隐藏 / ${hiddenRows.length}</summary><div class="hidden-items">${hiddenRows.map(h=>`<div class="hidden-item">${jobMedia(h,0,false,false)}<small>${esc(h.body.model)} · ${date(h.createtime)}</small><button data-restore-job="${h.block_id}">恢复到生成历史</button></div>`).join('')||'<p>没有隐藏的结果</p>'}</div></details><details class="history-details" ${card.detailsOpen?'open':''}><summary>生成信息${selected?' · '+esc(labels[selected.body.status]):''}</summary>${selected?`<dl><dt>模型</dt><dd>${esc(selected.body.model)}</dd><dt>创建时间</dt><dd>${date(selected.createtime)}</dd><dt>参数</dt><dd>${esc(parameterSummary(selected.body))}</dd>${selected.body.model==='z-image'?`<dt>CFG</dt><dd>${selected.body.params.cfg ?? 4}</dd><dt>反向提示词</dt><dd>${esc(selected.body.params.negative_prompt || '未填写')}</dd>`:''}<dt>耗时</dt><dd title="${selected.body.elapsed_ms!=null?esc(selected.body.elapsed_ms+' 毫秒'):''}">${formatDuration(selected.body.elapsed_ms)}</dd><dt>Tokens / 用量</dt><dd>${selected.body.usage.tokens ?? '未提供'}</dd><dt>提示词</dt><dd>${esc(selected.body.params.prompt)}</dd>${selected.body.provider==='service-inference'?`<dt>使用 Key</dt><dd>${esc(selected.body.credential_name||'原有 Key')}</dd><dt>云端任务 ID</dt><dd>${esc(selected.body.remote_task_id||'同步图片请求')}</dd><dt>服务用量</dt><dd>${esc(JSON.stringify(selected.body.usage))}</dd><dt>参考 URL</dt><dd>${esc(['first_frame','last_frame','image_urls','video_urls','audio_urls'].map(k=>selected.body.params[k]||'').filter(Boolean).join('\n')||'无')}</dd>`:''}${selected.body.error?`<dt>错误</dt><dd>${esc(selected.body.error)}</dd>`:''}</dl><div class="history-materials-heading">本次使用素材 · ${(selected.body.refs || []).length}</div>${historyMaterials(selected.body)}<button class="quiet reuse-params" data-job="${selected.block_id}">复用这次参数</button>`:'<p>选择一条历史查看模型、参数和用量。</p>'}</details>`;
     for(const node of el.querySelectorAll('[data-pinned-job]')){const previous=savedPins.get(node.dataset.pinnedJob);if(previous){node.replaceWith(previous.node);const video=previous.node.querySelector('video');if(previous.playing&&video?.paused)pinAction(video,'play',()=>video.play());}}
     scroller.scrollTop = scrollTop;
     el.querySelector('.history-details').scrollTop = detailScroll;
@@ -382,11 +424,11 @@
   function pendingQueue(){return queueRows().filter(h=>h.body.status==='queued'&&h.body.queue_position).map(h=>h.block_id);}
   function renderQueue(){
     const rows=queueRows();$('#queue-count').textContent=rows.length;
-    $('#queue-notice').textContent=reorderAvailable?'拖动待执行任务调整顺序，也可用 ↑ ↓。其他项目或用户任务保留原队列位置。':'排序扩展尚未加载；仍可查看、定位和停止任务。';
+    $('#queue-notice').textContent=(rows.some(h=>h.body.provider==='service-inference')?'云端任务仅支持查看和定位，不支持取消或排序。':'')+(reorderAvailable?'拖动待执行任务调整顺序，也可用 ↑ ↓。其他项目或用户任务保留原队列位置。':'本地 ComfyUI 排序扩展尚未加载。');
     if(queueDrag)return;
     const pending=pendingQueue(),labels={running:'生成中',queued:'排队中',submitting:'提交中',stopping:'正在停止'};
     const html=rows.map(h=>{const b=h.body,index=pending.indexOf(h.block_id),movable=index>=0&&reorderAvailable&&!queueMoving;
-      return `<article class="queue-item" data-queue-job="${h.block_id}" draggable="${movable}"><div class="queue-item-heading"><span>${movable?'⠿ ':''}${labels[b.status]}${b.queue_position?' · 第 '+b.queue_position+' 位':''}</span><code>${h.block_id.slice(0,6)}</code></div><strong>${esc(state.models.find(m=>m.id===b.model)?.name||b.model)}</strong><p>${esc(b.params.prompt)}</p><small>${b.params.width} × ${b.params.height} · ${b.params.steps} 步</small><div class="queue-actions"><button class="quiet" data-locate-card="${b.card_id}" ${cardById(b.card_id)?'':'disabled'}>定位卡片</button><button class="quiet" data-queue-stop="${h.block_id}" ${stoppingJobs.has(h.block_id)||['submitting','stopping'].includes(b.status)?'disabled':''}>${b.status==='queued'?'取消排队':b.status==='stopping'?'正在停止':'停止生成'}</button><button class="quiet" data-queue-up="${h.block_id}" aria-label="上移任务" ${movable&&index>0?'':'disabled'}>↑</button><button class="quiet" data-queue-down="${h.block_id}" aria-label="下移任务" ${movable&&index<pending.length-1?'':'disabled'}>↓</button></div></article>`;
+      return `<article class="queue-item" data-queue-job="${h.block_id}" draggable="${movable}"><div class="queue-item-heading"><span>${movable?'⠿ ':''}${labels[b.status]}${b.queue_position?' · 第 '+b.queue_position+' 位':''}</span><code>${h.block_id.slice(0,6)}</code></div><strong>${esc(state.models.find(m=>m.id===b.model)?.name||b.model)}</strong><p>${esc(b.params.prompt)}</p><small>${esc(parameterSummary(b))}</small><div class="queue-actions"><button class="quiet" data-locate-card="${b.card_id}" ${cardById(b.card_id)?'':'disabled'}>定位卡片</button><button class="quiet" data-queue-stop="${h.block_id}" ${b.provider==='service-inference'||stoppingJobs.has(h.block_id)||['submitting','stopping'].includes(b.status)?'disabled':''}>${b.provider==='service-inference'?'云端不支持取消':b.status==='queued'?'取消排队':b.status==='stopping'?'正在停止':'停止生成'}</button><button class="quiet" data-queue-up="${h.block_id}" aria-label="上移任务" ${movable&&index>0?'':'disabled'}>↑</button><button class="quiet" data-queue-down="${h.block_id}" aria-label="下移任务" ${movable&&index<pending.length-1?'':'disabled'}>↓</button></div></article>`;
     }).join('')||'<div class="queue-empty">暂无排队任务<br><small>从画布卡片提交生成后会显示在这里。</small></div>';
     if($('#queue-items')._markup!==html){$('#queue-items').innerHTML=html;$('#queue-items')._markup=html;}
   }
@@ -425,7 +467,7 @@
   }
   $('#canvas-world').addEventListener('input',event=>{
     const el=event.target.closest('[data-card]');if(!el)return;const card=cardById(el.dataset.card);
-    if(event.target.dataset.field && event.target.dataset.field!=='model'){const key=event.target.dataset.field;draft(card)[key]=['model','prompt','negative_prompt'].includes(key)?event.target.value:Number(event.target.value);changed();if(['width','height'].includes(key))updateSizeFeedback(card);}
+    if(event.target.dataset.field && event.target.dataset.field!=='model'){const key=event.target.dataset.field;draft(card)[key]=event.target.type==='checkbox'?event.target.checked:['model','prompt','negative_prompt','size','resolution','ratio','image_urls','video_urls','audio_urls','first_frame','last_frame','output_format','optimize_mode'].includes(key)?event.target.value:Number(event.target.value);changed();if(['width','height'].includes(key))updateSizeFeedback(card);}
   });
   $('#canvas-world').addEventListener('change',async event=>{
     const el=event.target.closest('[data-card]');if(!el)return;const card=cardById(el.dataset.card);
@@ -440,12 +482,14 @@
     if(event.target.dataset.hideJob){const id=event.target.dataset.hideJob;card.hiddenJobs=[...new Set([...(card.hiddenJobs||[]),id])];card.pins=(card.pins||[]).filter(p=>p!==id);if(card.selected===id)delete card.selected;renderResults(card);changed();}
     if(event.target.classList.contains('sync-pins')){card.syncPinPlayback=event.target.checked;changed();if(card.syncPinPlayback)startPins(card);}
     if(event.target.classList.contains('pin-limit')){card.pinLimit=Math.max(0,Math.min(8,Number(event.target.value)||0));card.pins=(card.pins||[]).slice(0,card.pinLimit);changed();renderResults(card);}
+    if(event.target.classList.contains('cloud-upload')){await addCloudReferences(card,event.target.dataset.cloudField,[...event.target.files]);return;}
     if(event.target.classList.contains('ref-upload')){await addReferences(card,[...event.target.files]);}
   });
   $('#canvas-world').addEventListener('toggle',event=>{if(event.target.isConnected&&event.target.classList.contains('hidden-history')){cardById(event.target.closest('[data-card]').dataset.card).hiddenOpen=event.target.open;}if(event.target.isConnected&&event.target.classList.contains('history-details')){const card=cardById(event.target.closest('[data-card]').dataset.card);card.detailsOpen=event.target.open;}},true);
   $('#canvas-world').addEventListener('click',async event=>{
     const button=event.target.closest('button'),el=event.target.closest('[data-card]');if(!button||!el)return;
     const card=cardById(el.dataset.card);
+    if(button.classList.contains('copy-cloud-url')){try{await navigator.clipboard.writeText(card.url);tell('公网 URL 已复制');}catch(e){tell('复制失败：'+e.message);}return;}
     if(button.dataset.sizePreset){const [w,h]=button.dataset.sizePreset.split(',').map(Number);Object.assign(draft(card),{width:w,height:h});el.querySelector('[data-field=width]').value=w;el.querySelector('[data-field=height]').value=h;updateSizeFeedback(card);changed();return;}
     if(button.dataset.extractFrame){await extractFrame(card,button);return;}
     if(button.dataset.restoreJob){card.hiddenJobs=(card.hiddenJobs||[]).filter(id=>id!==button.dataset.restoreJob);card.selected=button.dataset.restoreJob;renderResults(card);changed();return;}
@@ -458,6 +502,8 @@
       finally{stoppingJobs.delete(id);if(state.project&&cardById(card.id))renderResults(card,true);}
       return;
     }
+    if(button.dataset.cloudRetry){const retry=cloudRetries.get(card.id+':'+button.dataset.cloudRetry);if(retry)await addCloudReferences(card,button.dataset.cloudRetry,[retry.file]);return;}
+    if(button.dataset.cloudUpload){button.closest('.cloud-ref-zone').querySelector('input').click();return;}
     if(button.dataset.useMaterial){await useMaterial(card,button.dataset.useMaterial);return;}
     if(button.classList.contains('choose-ref'))el.querySelector('.ref-upload').click();
     if(button.dataset.mode){if(!state.models.find(m=>m.id===card.model)?.modes.includes(button.dataset.mode))return;card.mode=button.dataset.mode;draft(card);renderCard(card);changed();}
@@ -471,7 +517,7 @@
       const dimensionError=updateSizeFeedback(card);if(dimensionError){el.querySelector('.size-help').scrollIntoView({block:'center'});tell(dimensionError);return;}
       button.disabled=true;const feedback=el.querySelector('.card-feedback');feedback.textContent='保存并提交…';
       const projectId=state.project.block_id;
-      try{await save();const row=await request(`/api/projects/${projectId}/generate`,{...structuredClone(draft(card)),card_id:card.id,mode:card.mode,request_id:uid()});if(state.project?.block_id!==projectId)return;state.history.unshift(row);card.selected=row.block_id;changed();renderResults(card);feedback.textContent=row.body.error||'已提交到本地 ComfyUI，结果会自动出现。';}
+      try{await save();const row=await request(`/api/projects/${projectId}/generate`,{...structuredClone(draft(card)),card_id:card.id,mode:card.mode,request_id:uid()});if(state.project?.block_id!==projectId)return;state.history.unshift(row);card.selected=row.block_id;changed();renderResults(card);feedback.textContent=row.body.error||(row.body.provider==='service-inference'?'已提交到云端；结果会自动保存到本机。':'已提交到本地 ComfyUI，结果会自动出现。');}
       catch(error){feedback.textContent=error.message;}finally{button.disabled=false;}
     }
   });
@@ -539,6 +585,7 @@
   async function importAssets(files,point){
     if(!state.project||importing)return;
     if(cards().length+files.length>200){tell('当前画布最多 200 张卡片');return;}
+    const cloud=$('#asset-import-mode').value==='cloud';
     const project=state.project,v=project.body.canvas.viewport,r=$('#canvas').getBoundingClientRect();
     const x=point?(point.x-r.left-v.x)/v.zoom:cards().length?Math.max(...cards().map(c=>c.x+c.w))+80:(40-v.x)/v.zoom;
     const y=point?(point.y-r.top-v.y)/v.zoom:(40-v.y)/v.zoom;
@@ -546,9 +593,9 @@
     try{
       for(let i=0;i<files.length;i++){
         tell(`正在导入 ${i+1}/${files.length}：${files[i].name}`);
-        const asset=await uploadMedia(files[i]);
+        const asset=cloud?await window.directorStorage.uploadFile(files[i],tell,project.block_id,{index:i+1,total:files.length}):await uploadMedia(files[i]);
         if(state.project!==project)throw Error('项目已切换，已停止导入');
-        const card={id:uid(),type:'asset',mode:'media',asset_id:asset.id,name:asset.name,mime:asset.mime,size:asset.size,x:x+(i%3)*500,y:y+Math.floor(i/3)*400,w:420,h:asset.mime.startsWith('audio/')?240:360};
+        const card={id:uid(),type:'asset',mode:'media',asset_id:asset.id,...(cloud?{storage:'cloud',url:asset.url,provider:asset.provider}:{}),name:asset.name,mime:asset.mime,size:asset.size,x:x+(i%3)*500,y:y+Math.floor(i/3)*400,w:420,h:asset.mime.startsWith('audio/')?240:360};
         cards().push(card);const el=document.createElement('article');el.className='generation-card';el.dataset.card=card.id;$('#canvas-world').append(el);renderCard(card);changed();$('#canvas-empty').hidden=true;
       }
       if(!point){v.x=40-x*v.zoom;v.y=40-y*v.zoom;transform();changed();}
@@ -556,13 +603,33 @@
     }catch(error){tell(error.message);}
     finally{importing=false;$('#add-assets').disabled=false;$('#asset-upload').value='';}
   }
+  const cloudRetries=new Map();
+  async function addCloudReferences(card,key,files){
+    if(importing||!files.length)return;
+    const d=draft(card),project=state.project,mode=card.mode,model=card.model,spec=state.models.find(m=>m.id===model);
+    const single=['first_frame','last_frame'].includes(key),limit=single?1:key==='image_urls'?spec.ref_limit:3;
+    const old=(d[key]||'').split(/\s+/).filter(Boolean),kind=key==='video_urls'?'video/':key==='audio_urls'?'audio/':'image/';
+    if(files.some(f=>!f.type.startsWith(kind))){tell('请选择对应类型的素材');return;}
+    if(files.length+(single?0:old.length)>limit){tell(`此字段最多 ${limit} 项素材`);return;}
+    importing=true;
+    try{for(const file of files){
+      cloudRetries.set(card.id+':'+key,{file,model,mode:card.mode});
+      const result=await window.directorStorage.uploadFile(file,tell,project.block_id,{index:files.indexOf(file)+1,total:files.length});
+      cloudRetries.delete(card.id+':'+key);
+      if(state.project!==project||!cardById(card.id)||card.model!==model||card.mode!==mode)throw Error('素材已上传；卡片已切换，请在原模式重新选择文件');
+      const current=draft(card);current[key]=single?result.url:[current[key],result.url].filter(Boolean).join('\n');changed();
+    }tell('直传完成，公网 URL 已填入参考素材');}
+    catch(e){tell(e.message);}finally{importing=false;if(state.project===project&&cardById(card.id))renderCard(card);}
+  }
   function receiveFiles(files,target,point){
     if($('#project-dialog').open){addCovers(files);return;}
     if(!state.project)return;
+    const cloud=target.closest('.cloud-ref-zone');if(cloud){addCloudReferences(cardById(cloud.closest('[data-card]').dataset.card),cloud.dataset.cloudField,files);return;}
     const ref=target.closest('.ref-zone');
     if(ref){addReferences(cardById(ref.closest('[data-card]').dataset.card),files);return;}
     importAssets(files,point);
   }
+  $('#asset-import-mode').onchange=()=>{$('#add-assets').textContent=$('#asset-import-mode').value==='cloud'?'＋ 选择素材直传':'＋ 导入素材';};
   $('#add-assets').onclick=()=>$('#asset-upload').click();
   $('#asset-upload').onchange=event=>importAssets([...event.target.files]);
   document.addEventListener('dragover',event=>{
@@ -588,7 +655,8 @@
   $('#studio-logout').onclick=async()=>{try{if(importing)throw Error('请等待素材导入完成');await save();await request('/api/logout',{});location.reload();}catch(e){tell(e.message);}};
   window.addEventListener('beforeunload',event=>{if(importing||uploading||state.version!==state.saved){event.preventDefault();event.returnValue='';}});
   window.directorStudio={
-    async enter(user){state.user=user;document.body.classList.add('studio-active');$('#studio').hidden=false;$('#studio-account').textContent=user.login;try{const data=await request('/api/models');state.models=data.models;if(!data.online)tell('ComfyUI 未启动，仍可编辑项目；生成前请启动 ComfyUI。');await dashboard();}catch(error){tell(error.message);}},
+    async refreshModels(){const data=await request('/api/models');state.models=data.models;if(data.model_error)tell(data.model_error);if(state.project)renderCanvas();},
+    async enter(user){state.user=user;document.body.classList.add('studio-active');$('#studio').hidden=false;$('#studio-account').textContent=user.login;try{const data=await request('/api/models');state.models=data.models;if(!data.online)tell('ComfyUI 未连接，仅影响本地模型；云端模型可通过 service-inference 设置使用。');await dashboard();}catch(error){tell(error.message);}},
     leave(){clearTimeout(state.polling);clearTimeout(state.timer);state.user=null;state.project=null;updateElapsedClocks();state.version=state.saved=0;$('#studio').hidden=true;document.body.classList.remove('studio-active');}
   };
 })();

@@ -5,6 +5,8 @@ from backend.generation import MODELS, size_error
 
 def test_all_recommended_sizes_are_accepted_by_their_model():
     for model in MODELS:
+        if model.get('provider') == 'service-inference':
+            continue  # Cloud models expose resolution tiers instead of local pixel limits.
         for width, height in model['size_limits']['presets']:
             assert not size_error(model['id'], width, height)
 

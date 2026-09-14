@@ -276,3 +276,41 @@ def test_connections_stay_in_their_project(service):
         assert client.get('/api/projects/'+saved['block_id']).json()['body']['canvas']['cards'][0]['hiddenJobs']==['a'*32]
         invalid=json.loads(json.dumps(body));invalid['canvas']['cards'][0]['hiddenJobs']=[{}]
         assert client.post('/api/projects',json=invalid).status_code==400
+
+
+def test_cloud_settings_project_and_private_local_outputs(service):
+    config,url=service
+    from psycopg.types.json import Jsonb
+    with httpx.Client(base_url=url,trust_env=False) as anonymous:
+        assert anonymous.get('/api/settings/service-inference').status_code==401
+    with signed_in(url) as client:
+        assert client.get('/api/settings/service-inference').json()['configured'] is False
+        # Invalid params must fail without contacting the paid cloud API.
+        model='si:dola-seedream-5-0-pro-260628'
+        card={'id':'c'*32,'type':'image','mode':'text','model':model,'x':0,'y':0,'w':480,'h':600,
+              'drafts':{'text':{'model':model,'prompt':'a scene','size':'1K','refs':[]}}}
+        response=client.post('/api/projects',json={'title':'Cloud persistence','canvas':{'viewport':{'x':0,'y':0,'zoom':1},'cards':[card]}})
+        assert response.status_code==200,response.text
+        project=response.json();project_id=project['block_id']
+        payload={'card_id':card['id'],'request_id':'d'*32,'model':model,'mode':'text','prompt':'a scene','size':'1K'}
+        assert client.post(f'/api/projects/{project_id}/generate',json=payload).status_code==400
+        from backend.inference import save_key
+        save_key(config,'fake-integration-key')
+        assert 'api_key' not in client.get('/api/settings/service-inference').json()
+        assert client.post(f'/api/projects/{project_id}/generate',json={**payload,'size':'BAD'}).status_code==400
+        saved=client.get('/api/projects/'+project_id).json()
+        assert saved['body']['canvas']['cards'][0]['drafts']['text']['size']=='1K'
+        job_id='e'*32;filename=job_id+'-0.mp4'
+        directory=config['data_dir']/'generated';directory.mkdir(exist_ok=True);(directory/filename).write_bytes(b'0123456789')
+        owner=client.get('/api/me').json()['user_id']
+        body={'kind':'generation','provider':'service-inference','owner_id':owner,'project_id':project_id,'card_id':card['id'],
+              'model':model,'type':'video','status':'completed','outputs':[{'filename':filename,'mime':'video/mp4'}]}
+        with psycopg.connect(**connection_kwargs(config,DATABASES[2])) as conn:
+            conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s)',(job_id,Jsonb(body)))
+        output=client.get('/api/outputs/'+job_id+'/0',headers={'Range':'bytes=2-4'})
+        assert output.status_code==206 and output.content==b'234'
+        assert client.get('/api/outputs/'+job_id+'/0',headers={'Range':'bytes=999-'}).status_code==416
+        assert client.get(f'/api/projects/{project_id}/history').json()['history'][0]['body']['provider']=='service-inference'
+        with httpx.Client(base_url=url,trust_env=False) as anonymous:
+            assert anonymous.get('/api/outputs/'+job_id+'/0').status_code==401
+        assert client.post('/api/settings/service-inference',json={'clear':True}).status_code==200

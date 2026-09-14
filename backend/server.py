@@ -17,7 +17,7 @@ class BaseHandler(tornado.web.RequestHandler):
     def set_default_headers(self):
         self.set_header('Cache-Control', 'no-store')
         self.set_header('X-Content-Type-Options', 'nosniff')
-        self.set_header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob:; media-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+        self.set_header('Content-Security-Policy', "default-src 'self'; connect-src 'self' https://*.qiniup.com https://*.aliyuncs.com https://*.myqcloud.com; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: https: http:; media-src 'self' blob: https: http:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
 
     def prepare(self):
         if self.request.host_name not in ('127.0.0.1', 'localhost'):
@@ -120,6 +120,7 @@ def application(config, pool, projects_pool=None, jobs_pool=None):
     from backend.workspace import workspace_routes
     from backend.progress import ProgressTracker
     from backend.comfy_settings import load_connection, connection_url
+    from backend.inference import InferenceManager
     connection = load_connection(config)
     return tornado.web.Application([
         (r'/', IndexHandler), (r'/api/login', LoginHandler), (r'/api/setup', SetupHandler),
@@ -127,7 +128,7 @@ def application(config, pool, projects_pool=None, jobs_pool=None):
         (r'/api/me', MeHandler), (r'/api/logout', LogoutHandler),
         *workspace_routes(),
         (r'/static/(.*)', tornado.web.StaticFileHandler, {'path': str(WEB)}),
-    ], comfy_connection=connection, comfy_lock=asyncio.Lock(), progress_tracker=ProgressTracker(connection_url(connection)), pool=pool, projects_pool=projects_pool, jobs_pool=jobs_pool, config=config,
+    ], storage_lock=asyncio.Lock(), inference_manager=InferenceManager(config, jobs_pool), comfy_connection=connection, comfy_lock=asyncio.Lock(), progress_tracker=ProgressTracker(connection_url(connection)), pool=pool, projects_pool=projects_pool, jobs_pool=jobs_pool, config=config,
        cookie_secret=config['cookie_secret'], xsrf_cookies=True,
        xsrf_cookie_kwargs={'samesite': 'Strict'}, login_attempts=OrderedDict(),
        auth_slots=asyncio.Semaphore(4), bootstrap_token=os.environ.get('DIRECTOR_BOOTSTRAP_TOKEN', ''),

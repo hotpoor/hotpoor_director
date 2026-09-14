@@ -3,7 +3,7 @@
   const dialog = document.createElement('dialog');
   dialog.id = 'image-preview';
   dialog.setAttribute('aria-label', '图片放大预览');
-  dialog.innerHTML = `<header class="preview-toolbar"><div><strong>图片预览</strong><span id="preview-caption"></span></div><button data-action="out" aria-label="缩小">−</button><button data-action="in" aria-label="放大">＋</button><button data-action="actual">100%</button><button data-action="fit">适应窗口</button><button data-action="fullscreen">全屏</button><button data-action="close" aria-label="关闭预览">✕</button></header><div class="preview-stage"><img alt="放大预览图片" draggable="false"><p class="preview-error" hidden>图片加载失败，请确认 ComfyUI 正在运行。</p></div><footer class="preview-footer"><button data-action="previous" aria-label="上一张">← 上一张</button><span class="preview-counter"></span><span class="preview-help">滚轮缩放 · 拖动查看 · 双击切换原尺寸 · Esc 关闭</span><span class="preview-scale"></span><button data-action="next" aria-label="下一张">下一张 →</button></footer>`;
+  dialog.innerHTML = `<header class="preview-toolbar"><div><strong>图片预览</strong><span id="preview-caption"></span></div><button data-action="out" aria-label="缩小">−</button><button data-action="in" aria-label="放大">＋</button><button data-action="actual">100%</button><button data-action="fit">适应窗口</button><button data-action="fullscreen">全屏</button><button data-action="close" aria-label="关闭预览">✕</button></header><div class="preview-stage"><img alt="放大预览图片" draggable="false"><p class="preview-error" hidden>图片加载失败，请检查素材来源与网络。</p></div><footer class="preview-footer"><button data-action="previous" aria-label="上一张">← 上一张</button><span class="preview-counter"></span><span class="preview-help">滚轮缩放 · 拖动查看 · 双击切换原尺寸 · Esc 关闭</span><span class="preview-scale"></span><button data-action="next" aria-label="下一张">下一张 →</button></footer>`;
   dialog.querySelector('[data-action=fullscreen]').insertAdjacentHTML('beforebegin', '<button data-action="copy" disabled title="复制完整图片（Ctrl+C）">复制图片</button>');
   dialog.querySelector('.preview-toolbar>div').insertAdjacentHTML('beforeend', '<span class="preview-copy-status" role="status" aria-live="polite"></span>');
   document.body.append(dialog);
@@ -48,13 +48,24 @@
     copying = true; copyButton.disabled = true; copyStatus.textContent = '正在复制…';
     try {
       if (!navigator.clipboard?.write || !window.ClipboardItem) throw Error('当前环境不支持复制图片，请使用桌面工作台或允许剪贴板权限。');
-      // Capture native pixels before any gallery navigation; zoom/cropping is only CSS.
+      // Snapshot the selected source before gallery navigation. Cloud images displayed
+      // without CORS cannot be exported; read the owned original via the local API.
+      const source=gallery[current],remote=new URL(source.src,location.href).origin!==location.origin;
       const canvas = document.createElement('canvas');
       canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
       const context = canvas.getContext('2d');
       if (!context) throw Error('图片太大，无法准备剪贴板内容。');
-      context.drawImage(img, 0, 0);
-      const png = new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(Error('无法编码图片，请重试。')), 'image/png'));
+      if(!remote)context.drawImage(img,0,0);
+      const png=(async()=>{
+        if(remote){
+          if(!source.copySrc||new URL(source.copySrc,location.href).origin!==location.origin)throw Error('此图片尚未关联云存储素材，请从素材卡片打开后复制。');
+          const response=await fetch(source.copySrc);
+          if(!response.ok){const data=await response.json().catch(()=>({}));throw Error(data.error||'无法读取云存储原图');}
+          const bitmap=await createImageBitmap(await response.blob());
+          try{canvas.width=bitmap.width;canvas.height=bitmap.height;context.drawImage(bitmap,0,0);}finally{bitmap.close();}
+        }
+        return await new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(Error('无法编码图片，请重试。')),'image/png'));
+      })();
       await navigator.clipboard.write([new ClipboardItem({'image/png': png})]);
       if (dialog.open && version === imageVersion) copyStatus.textContent = '图片已复制，可直接粘贴';
     } catch (failure) {
@@ -69,8 +80,8 @@
     const card = target.closest('[data-card]');
     const materials = target.closest('.history-materials');
     const images = materials ? [...materials.querySelectorAll('img[data-preview]')] : card ? [...card.querySelectorAll('.history-strip img[data-preview]')] : [target];
-    const unique = new Map(images.map(el => [el.dataset.preview, {src:el.dataset.preview,title:el.dataset.previewTitle || '图片预览'}]));
-    if (!unique.has(target.dataset.preview)) unique.set(target.dataset.preview,{src:target.dataset.preview,title:target.dataset.previewTitle || '图片预览'});
+    const unique = new Map(images.map(el => [el.dataset.preview, {src:el.dataset.preview,copySrc:el.dataset.previewCopy,title:el.dataset.previewTitle || '图片预览'}]));
+    if (!unique.has(target.dataset.preview)) unique.set(target.dataset.preview,{src:target.dataset.preview,copySrc:target.dataset.previewCopy,title:target.dataset.previewTitle || '图片预览'});
     gallery = [...unique.values()];
     dialog.showModal();
     show(gallery.findIndex(item => item.src === target.dataset.preview));

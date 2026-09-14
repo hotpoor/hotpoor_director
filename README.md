@@ -35,6 +35,23 @@ Electron 桌面端，内置 Python/Tornado 后端和 PostgreSQL，提供私有�
 - 初始化可重复执行，不清空数据。运行应用使用普通数据库角色，建库使用独立的管理角色。
 - 三个库不是主从副本，当前没有实现主从复制或读写路由。后续读写分离需另行部署副本与路由，跨库也不是同一事务。
 
+## macOS 源码启动
+
+准备 Homebrew、Python 3.12 和 Node.js 22.12+ 后，在仓库根目录执行：
+
+```sh
+brew install postgresql@18
+python3.12 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+npm ci
+mkdir -p runtime/pgsql
+ln -s "$(brew --prefix postgresql@18)/bin" runtime/pgsql/bin
+npm run db:init
+./Start_Dev.command
+```
+
+若 `runtime/pgsql/bin` 已存在，先确认它指向可用的 PostgreSQL，无需重复建立链接。数据库由工作台管理，数据保存在项目 `.local/`；无需运行 `brew services start`。后续可双击 `Start_Dev.command` 启动，首次进入后自行创建账号。ComfyUI 在另一台机器上时，通过界面“ComfyUI 配置”填写其局域网 IP 和端口。
+
 ## Windows 开发启动
 
 需要 Python 3.12、Node.js 22.12+ 和新版 Microsoft Visual C++ x64 运行库。PostgreSQL 二进制来自 [EDB 官方下载页](https://www.enterprisedb.com/download-postgresql-binaries)，本版使用 18.6。
@@ -45,6 +62,7 @@ cd hotpoor_director
 powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
 npm start
 ```
+
 
 如 Python 不在 PATH：`scripts/setup.ps1 -Python '完整路径/python.exe'`。如使用合法的应用本地 VC Runtime 目录，可以加 `-VCRuntimeDir '完整目录'` 将运行库放入 PostgreSQL 的 bin 目录，避免依赖系统旧版 DLL。
 
@@ -172,3 +190,71 @@ Logo 使用用户提供的透明原图，`scripts/prepare_brand.py` 可使用 Pi
 ### 放大预览复制图片
 
 在图片放大/全屏预览区域右键，点击小菜单“复制图片”，即可把完整图片以 PNG 图像写入系统剪贴板；也可使用顶部“复制图片”或 Ctrl+C（选中文字时仍按普通文字复制）。复制保留原始像素尺寸及透明度，不受预览缩放、平移影响。图片未加载成功时不能复制；复制结果或权限错误会显示在预览顶部。
+
+## service-inference 云端图片与视频生成
+
+项目列表右上角的 **service-inference 设置** 提供 API Key 保存、替换、清除和只读连接测试。接口使用一个 `Authorization: Bearer` API Key，不需要额外的 Secret。密钥保存在有效数据目录下的隐藏文件 `.service-inference.json`（源码默认 `.local/.service-inference.json`），文件权限为当前用户读写；接口只返回是否已配置，不回显 Key。此目录已被 Git 忽略。所有生成请求由后端发送，不在画布或历史中保存密钥。有活跃云端任务时不能更换或清除 Key。
+
+在图片或视频卡片中选择带“云端”的模型即可使用；本地 ComfyUI 模型继续保留。
+
+| 类型 | 模型 | 已接入的模式 |
+| --- | --- | --- |
+| 图片 | Seedream 5 Pro、5 Pro EP、5 Lite、4.5 | 文生图、单张或多张公网参考图编辑；按模型选择分辨率档位 |
+| 视频 | 豆包 / Dreamina Seedance 2.0 Max、Fast Max、Mini Max、2.5 Max | 文生视频、首尾帧、多元素参考；480p / 720p、画幅、4–15 秒和音频开关 |
+| 视频 | MiniMax H3 | 文生视频、公网参考图生视频；768P / 2K、4–15 秒与画幅 |
+
+参考素材填写公开可访问的 HTTP(S) 文件直链，每行一项；也可点击「选择文件直传」或把文件拖入对应字段，使用已配置的云存储自动获得公网 URL。上游素材库的「用作参考素材」同样使用客户端直传。云端不能直接访问 ComfyUI 内网 URL。Seedance 多元素参考按图片、视频、音频分别编号，提示词使用 `@Image1` / `@Video1`；首尾帧有独立字段。MiniMax 仅接入文档明确给出结构的图片参考。本版 Seedance 参考最多 12 项、视频/音频各 3 项，MiniMax 图片最多 5 项，为工作台输入上限，仍以服务端的模型校验为准。
+
+Seedream 使用同步图片接口（请求在后台执行），请在图片请求完成前保持应用开启。视频提交后保存远端任务 ID，Seedance 每 10 秒、MiniMax 每 15 秒查询一次；应用重启会继续查询已有 ID，不会重新发起生成。生成完成后自动保存图片/视频到数据目录 `generated/`，历史播放、图片预览、PIN 和视频提帧使用带登录验证的本地结果接口，视频支持 Range 拖动播放。每个结果限制 210 MB；返回的用量按服务商原值记录，未返回 token 时不虚构。
+
+云端接口文档没有取消或排序操作，因此这类任务只能查看和定位，不显示可用的取消/排序按钮；ComfyUI 的任务操作保持原有行为。提交超时或应用在提交期间关闭时，不自动重试付费请求：请到服务控制台核对受理状态。视频查询或结果下载的暂时性错误会自动重试；鉴权失效、无权限或任务不存在时会停止查询并显示错误。图片结果保存失败需在服务控制台核对；本版未接入组图、流式响应或精确像素尺寸输入。
+
+接口依据：用户提供的 [Seedream](https://console.service-inference.ai/docs/seedream)、[豆包 Seedance Max](https://console.service-inference.ai/docs/doubao-seedance-max)、[Dreamina Seedance Max](https://console.service-inference.ai/docs/seedance-max)、[MiniMax H3](https://console.service-inference.ai/docs/minimax) 文档。生成按服务商规则计费；设置里的连接测试仅查询任务列表，不触发生成。
+
+验证：`npm test`；`node_modules/.bin/electron scripts/smoke-inference.cjs` 使用独立临时数据库、测试 Key 和模拟云端响应，检查设置、四类模型生成路径、结果保存、视频 Range、自动保存与重开、窄窗口。测试不读取真实 Key，不调用付费生成接口。
+
+
+### 云存储直传
+
+项目列表 → **云存储直传设置**，按厂商切换表单。配置分别保存，点击「保存并启用」选择后续上传厂商。
+
+| 厂商 | 凭据 | Bucket / 域名 |
+| --- | --- | --- |
+| 七牛 Kodo | AccessKey / SecretKey | 空间名称；必须填写绑定的公网访问域名 |
+| 阿里云 OSS | AccessKeyId / AccessKeySecret | Bucket 名称；域名可选 |
+| 腾讯云 COS | SecretId / SecretKey | Bucket 完整名称（包含 APPID 后缀）；域名可选 |
+
+Region 可选择或填写，Endpoint 按地域自动生成，也可填写官方 HTTPS Endpoint。默认服务地址不包含 Bucket；自定义 CDN 域名填在「访问域名」。七牛地域地址依据[官方区域表](https://developer.qiniu.com/kodo/1671/region-endpoint-fq)。
+
+文件字节从 Electron 渲染器直接发往云存储：七牛使用限定单对象的短时上传 Token + 表单 POST；OSS 使用 V4 签名 PUT，COS 使用签名 PUT。后端只接收文件名、类型、大小，签发 10 分钟凭证，并查询对象元信息及公网 HEAD；不代理云上传文件。确认通过才将公网 URL 填入模型参考字段。图片上限 20 MB，视频与音频 200 MB。单次直传，无分片续传；失败可在该参考字段重试，已成功上传但确认失败时仅重新确认。
+
+在空间控制台配置 CORS：允许来源 `*`，方法 `PUT`、`POST`、`HEAD`，请求头 `Content-Type`（或 `*`）。客户端不发送登录 Cookie。需有对象上传和读取权限；「验证空间」额外需要查询空间信息权限。该验证不上传文件，不代表 CORS 或域名已可用。访问域名应允许公网读取、正确绑定 DNS，且防盗链允许云端获取素材。私有空间可使用已配置的公开 CDN；本版不签发下载链接，也不修改空间 ACL。
+
+长期密钥保存在有效数据目录下 `.cloud-storage.json`（源码为 `.local/.cloud-storage.json`，文件权限 0600），不通过设置接口回显、不进入项目参数。清除厂商配置不会删除云端文件。需要实际厂商凭据、权限与 CORS 配好后，才能完成真实上传验证。
+
+路径前缀可按厂商分别填写，例如 `projects/demo/images`，访问 URL 为 `<访问域名>/projects/demo/images/<唯一文件名>`。留空上传至 Bucket 根目录，首尾及重复斜杠自动整理。仅影响新上传对象，不移动已有文件或修改历史 URL。
+
+画布工具栏的「添加到本机 / 直传云存储」选择素材添加方式。直传模式对文件选择、拖入空白画布和粘贴均生效；上传成功生成云素材卡片，支持预览、复制公网 URL、连接云端生成卡片作为参考，重开项目仍保留。云素材无需再上传到本地；ComfyUI 参考仍使用本地素材模式。
+
+新直传对象使用文件内容 MD5 作为文件名（带类型扩展名），例如 `<域名>/<前缀>/<项目 block_id>/<MD5>.png`。同一项目、存储配置下的相同内容再次添加，会复用已完成的上传记录，只添加素材卡片，不重复传输文件。MD5 在客户端分块计算，原始文件名不参与去重；不迁移旧对象。
+
+项目 block_id 同时用于对象目录与项目内去重，前缀留空时为 `<域名>/<项目 block_id>/<MD5>.<后缀>`。公网确认支持最多 4 次重定向并校验每一跳的公网地址，保存最终 URL。网络环境使用 SOCKS 代理时由 PySocks 提供 SDK 支持。
+
+云存储直传时右下角显示文件名、批次序号与阶段进度：MD5 校验百分比 → 重复检查 → 实际传输百分比与字节数 → 公网确认 → 完成或复用。未知耗时阶段显示等待状态，错误原因保留在进度面板，完成或失败后可关闭。
+
+### Seedream 创作模式
+
+- 所有 Seedream：文生图、图片编辑、多图融合（至少两张图，按「图1」「图2」描述）。
+- Pro / Pro EP：另有交互编辑，可上传已圈选/标记的参考图或在提示词中输入 `<point>` / `<bbox>` 坐标；目前无内置画笔。可选 standard / fast 提示词优化。
+- Lite / 4.5：另有组图生成，设置最多张数 1–15，参考图数量与输出上限之和不能超过 15。实际张数由模型决定，返回的全部图片在组图缩略图中查看并保存本机。
+- 输出格式按模型提供（4.5 仅 JPEG），水印可配置。本版组图使用同步响应，未接 SSE 流式输出。能力依据用户提供的 Seedream API 文档。
+
+云素材预览仍直接加载公网图片；复制图片时通过本机鉴权接口读取当前账号已确认的原图，并校验大小与 MD5，避免跨域 Canvas 污染。此读取仅用于复制，不改变客户端直传上传路径。
+
+Seedance 2.5（豆包 / Dreamina）的工作台时长范围为 4–30 秒；2.0 系列及 MiniMax 保留原来的 4–15 秒。2.5 上限依据[官方模型说明](https://seed.bytedance.com/zh/seedance2_5)，实际 service-inference 长视频受理情况以服务端为准。
+
+### 多 service-inference Key
+
+设置中可添加、命名、编辑及删除多个 Key，单选一个用于新任务。保存、切换与「刷新模型」均调用该 Key 的 `/v1/models`，分别显示图片与视频模型；API 可见但尚未接入工作台的模型会注明，不能在生成卡片中选择。图片与视频卡片只提供当前 Key 已列出且工作台已接入的模型；旧卡片的不可用模型保留显示并禁用生成，避免修改已保存的创作参数。
+
+旧单 Key 隐藏配置自动兼容为「原有 Key」，仍使用 `.local/.service-inference.json`、0600 权限，不回显凭据。任务保存 Key 的内部 ID 与名称，后续查询固定使用该 Key。切换 Key 不影响正在执行的任务；被活动任务使用的密钥暂不能替换或删除。模型列表是账号可见性结果，不代表实时余额、服务容量或最终生成成功。

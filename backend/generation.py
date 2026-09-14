@@ -16,6 +16,7 @@ import tornado.web
 from backend.reference_media import prepare_reference
 from backend.comfy_settings import endpoint
 from backend.workspace import PrivateHandler, owned, ID
+from backend.inference_models import MODELS as CLOUD_MODELS, BY_ID as CLOUD_BY_ID, PROVIDER
 
 COMFY = 'http://127.0.0.1:8188'
 MODELS = [
@@ -41,6 +42,7 @@ for model in MODELS:
         max_pixels=1536**2 if is_image else 1344*768,
         presets=[[1024,1024],[1280,720],[720,1280]] if is_image else [[512,320],[768,512],[512,768]])
 
+MODELS.extend(CLOUD_MODELS)
 
 def size_error(model_id, width, height):
     limits = next(m['size_limits'] for m in MODELS if m['id']==model_id)
@@ -165,15 +167,23 @@ def ltx_workflow(mode, p, refs, job_id):
 class ModelsHandler(PrivateHandler):
     async def get(self):
         try:
-            await comfy_at(endpoint(self.settings), '/system_stats')
+            await asyncio.wait_for(comfy_at(endpoint(self.settings), '/system_stats'), 3)
             online = True
-        except (HTTPClientError, OSError):
+        except (HTTPClientError, OSError, asyncio.TimeoutError):
             online = False
-        self.finish({'models': MODELS, 'online': online})
+        from backend.inference import load_key,model_access
+        allowed,error=await model_access(self.settings['config'],self.settings['inference_manager'])
+        models=[{**m,'available':m.get('provider')!='service-inference' or m['remote_model'] in allowed} for m in MODELS]
+        self.finish({'models':models,'online':online,'inference_configured':bool(load_key(self.settings['config'])),'model_error':error})
 
 
 class GenerateHandler(PrivateHandler):
     async def post(self, project_id):
+        data = self.data()
+        if data.get('model') in CLOUD_BY_ID:
+            from backend.inference import submit
+            await submit(self, project_id, data)
+            return
         async with self.settings['comfy_lock']:
             await self.submit(project_id)
 
@@ -281,6 +291,8 @@ class CancelGenerationHandler(PrivateHandler):
         if body['status'] in ('completed', 'failed', 'cancelled', 'stopping'):
             self.finish(row)
             return
+        if body.get('provider') == PROVIDER:
+            raise tornado.web.HTTPError(409, reason='service-inference 文档未提供取消接口，云端任务会继续执行')
         if not body.get('prompt_id'):
             raise tornado.web.HTTPError(409, reason='任务正在提交，请稍后停止')
         try:
@@ -304,7 +316,7 @@ class QueueOrderHandler(PrivateHandler):
             raise tornado.web.HTTPError(400, reason='排序列表不正确')
         async with self.jobs.connection() as conn:
             rows = await (await conn.execute("SELECT * FROM entities WHERE body->>'kind'='generation' AND body->>'owner_id'=%s AND body->>'project_id'=%s", (self.owner, project_id))).fetchall()
-        jobs = {r['block_id']: r['body'].get('prompt_id') for r in rows if r['body'].get('comfy_url', COMFY) == endpoint(self.settings)}
+        jobs = {r['block_id']: r['body'].get('prompt_id') for r in rows if r['body'].get('provider') != PROVIDER and r['body'].get('comfy_url', COMFY) == endpoint(self.settings)}
         if any(job not in jobs for job in order):
             raise tornado.web.HTTPError(404, reason='任务不存在或无权操作')
         try:
@@ -331,7 +343,7 @@ class HistoryHandler(PrivateHandler):
         async with self.jobs.connection() as conn:
             rows = await (await conn.execute("SELECT * FROM entities WHERE body->>'kind'='generation' AND body->>'owner_id'=%s AND body->>'project_id'=%s ORDER BY createtime DESC", (self.owner, project_id))).fetchall()
         tracker = self.settings['progress_tracker']
-        active = any(r['body']['status'] in ('queued', 'running', 'stopping') for r in rows)
+        active = any(r['body'].get('provider') != PROVIDER and r['body']['status'] in ('queued', 'running', 'stopping') for r in rows)
         queue = None
         if active:
             await tracker.ensure(self.owner)
@@ -341,6 +353,8 @@ class HistoryHandler(PrivateHandler):
                 pass
         for row in rows:
             body = row['body']
+            if body.get('provider') == PROVIDER:
+                continue
             original = copy.deepcopy(body)
             if body['status'] not in ('queued', 'running', 'stopping') or not body.get('prompt_id'):
                 continue
@@ -402,8 +416,8 @@ class HistoryHandler(PrivateHandler):
         for row in rows:
             row['body']['queue_position'] = positions.get(row['body'].get('prompt_id')) if row['body'].get('comfy_url', COMFY) == endpoint(self.settings) else None
         try:
-            reorder_available = bool((await comfy_at(endpoint(self.settings), '/director/queue-capabilities')).get('reorder'))
-        except (HTTPClientError, OSError, ValueError):
+            reorder_available = bool((await asyncio.wait_for(comfy_at(endpoint(self.settings), '/director/queue-capabilities'), 3)).get('reorder')) if any(r['body'].get('provider') != PROVIDER for r in rows) else False
+        except (HTTPClientError, OSError, ValueError, asyncio.TimeoutError):
             reorder_available = False
         self.finish({'history': rows, 'reorder_available': reorder_available})
 
@@ -414,6 +428,10 @@ class OutputHandler(PrivateHandler):
         outputs = row['body'].get('outputs', [])
         if int(index) >= len(outputs):
             raise tornado.web.HTTPError(404)
+        if row['body'].get('provider') == PROVIDER:
+            from backend.inference import serve_output
+            await serve_output(self, outputs[int(index)])
+            return
         headers = {}
         if self.request.headers.get('Range'):
             headers['Range'] = self.request.headers['Range']
