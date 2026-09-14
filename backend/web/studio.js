@@ -50,7 +50,7 @@
     if (state.saved !== state.version) return save();
   }
   async function dashboard() {
-    if(importing)throw Error('请等待素材导入完成');
+    if(importing||window.directorComments?.busy())throw Error('请等待素材上传或评论发送完成');
     await save();
     clearTimeout(state.polling);
     state.project = null;
@@ -66,7 +66,7 @@
     $('#project-list').innerHTML = list.length ? list.map(p => `<button class="project-tile" data-project="${p.block_id}"><div class="project-cover">${p.body.covers.length ? `<img src="/api/assets/${p.body.covers[0]}" alt="${esc(p.body.title)} 的封面" loading="lazy">` : '<span>◧<small>UNTITLED FRAME / 等待你的第一帧</small></span>'}<b>${p.body.covers.length ? p.body.covers.length + ' 张封面' : 'DIRECTOR PROJECT'}</b></div><div class="project-copy"><h3>${esc(p.body.title)}</h3><p>${esc(p.body.subtitle || '为下一个故事留白')}</p><div class="project-description">${esc(p.body.description)}</div><small>创建 ${date(p.createtime)}<br>更新 ${date(p.updatetime)}</small><code>${p.block_id}</code></div></button>`).join('') : '<div class="empty-projects"><span>01 / 第一部作品</span><h2>你的创作现场，尚未开场。</h2><p>创建项目，收集灵感，让画面和故事一起生长。</p><button id="empty-create">＋ 创建第一个项目</button></div>';
   }
   async function openProject(id) {
-    if(importing)throw Error('请等待素材导入完成');
+    if(importing||window.directorComments?.busy())throw Error('请等待素材上传或评论发送完成');
     await save();
     const project = await request('/api/projects/' + id);
     state.project = project; state.version = 0; state.saved = 0; state.conflict = false; state.history = [];
@@ -139,8 +139,9 @@
     $('#canvas').style.backgroundPosition = `${x}px ${y}px`;
   }
   function renderCanvas() {
+    const liveChats=new Map([...document.querySelectorAll('.chat-card')].map(el=>[el.dataset.card,el]));
     $('#canvas-world').innerHTML = '<svg class="connection-layer" aria-label="卡片连接线"><defs><marker id="connection-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8" fill="#aaa"/></marker></defs><g class="connection-paths"></g></svg>';wireDrag=null;keyboardPort=null;
-    for (const card of cards()) { const el = document.createElement('article'); el.className = 'generation-card'; el.dataset.card = card.id; $('#canvas-world').append(el); renderCard(card); }
+    for (const card of cards()) { const candidate=liveChats.get(card.id);const live=card.type==='chat'&&candidate?._commentCard===card?candidate:null;const el=live||document.createElement('article');if(!live){el.className='generation-card';el.dataset.card=card.id;}$('#canvas-world').append(el);if(live)position(card,el);else renderCard(card); }
     $('#canvas-empty').hidden = !!cards().length; transform();renderConnections();
   }
   function position(card, el) { Object.assign(el.style,{left:card.x+'px',top:card.y+'px',width:card.w+'px',height:card.h+'px'}); }
@@ -186,28 +187,33 @@
     const materials=[],seen=new Set();
     for(const edge of connections().filter(e=>e.target===card.id)){
       const source=cardById(edge.source);if(!source)continue;
-      if(source.type==='asset'){
+      if(source.type==='chat'){
+        for(const a of window.directorComments.outputs(source.chat_id)){const key='comment:'+a.key;if(seen.has(key))continue;seen.add(key);materials.push({key,asset:a.source==='asset'?a.id:null,storage:a.source==='cloud'||a.source==='url'?'cloud':undefined,url:a.url,name:(source.name||'评论区')+' · '+a.commentLabel+' · '+a.name,mime:a.mime,review:a.review,reviewAttachment:a,commentText:a.commentText,attachment:a});}
+      }else if(source.type==='asset'){
         const key='asset:'+source.asset_id;if(seen.has(key))continue;seen.add(key);
-        materials.push({key,asset:source.storage==='cloud'?null:source.asset_id,storage:source.storage,copySource:source.storage==='cloud'?'/api/storage/uploads/'+source.asset_id+'/image':'',url:source.storage==='cloud'?source.url:'/api/assets/'+source.asset_id,name:source.name,mime:source.mime});
+        materials.push({attachment:{source:source.storage==='cloud'?'cloud':'asset',id:source.asset_id,url:source.storage==='cloud'?source.url:'/api/assets/'+source.asset_id,mime:source.mime,name:source.name},key,asset:source.storage==='cloud'?null:source.asset_id,storage:source.storage,copySource:source.storage==='cloud'?'/api/storage/uploads/'+source.asset_id+'/image':'',url:source.storage==='cloud'?source.url:'/api/assets/'+source.asset_id,name:source.name,mime:source.mime});
       }else{
         for(const job of state.history.filter(h=>h.body.card_id===source.id&&h.body.status==='completed'))for(const [index,output] of job.body.outputs.entries()){
           const key=job.block_id+':'+index;if(seen.has(key))continue;seen.add(key);
-          materials.push({key,url:`/api/outputs/${job.block_id}/${index}`,name:job.body.model+' · '+date(job.createtime),mime:job.body.type==='image'?'image/png':'video/mp4'});
+          materials.push({attachment:{source:'output',id:job.block_id,index,url:`/api/outputs/${job.block_id}/${index}`,mime:job.body.type==='image'?'image/png':'video/mp4',name:job.body.model},key,url:`/api/outputs/${job.block_id}/${index}`,name:job.body.model+' · '+date(job.createtime),mime:job.body.type==='image'?'image/png':'video/mp4'});
         }
       }
     }
-    return materials;
+    return card.type==='chat'?materials.filter(m=>/^(image|video)\//.test(m.mime)):materials;
   }
   function renderLibrary(card){
+    if(card.type==='chat')window.directorComments.refreshReferences(card.chat_id);
     const library=document.querySelector(`[data-card="${card.id}"] .imported-library`);if(!library)return;
     const incoming=connections().filter(e=>e.target===card.id),materials=upstreamMaterials(card);
-    const html=`<summary>引入素材库 · ${materials.length}</summary><div class="upstream-links">${incoming.map(e=>`<span>${esc(cardById(e.source)?.name||e.source.slice(0,6))}<button class="quiet" data-disconnect="${e.id}" title="断开此来源">×</button></span>`).join('')}</div>${materials.length?`<div class="imported-items">${materials.map(m=>`<div class="imported-item">${m.mime?.startsWith('image/')?`<img src="${m.url}" data-preview-copy="${esc(m.copySource||'')}" data-preview="${m.url}" data-preview-title="${esc(m.name)}" alt="${esc(m.name)}" tabindex="0" role="button" loading="lazy">`:m.mime?.startsWith('video/')?`<video src="${m.url}" controls preload="metadata"></video>`:`<audio src="${m.url}" controls preload="metadata"></audio>`}<small>${esc(m.name)}</small>${card.type!=='asset'?`<button class="quiet" data-use-material="${m.key}" ${(acceptsReference(card,m.mime)&&(m.storage!=='cloud'||state.models.find(model=>model.id===card.model)?.provider==='service-inference'))?'':'disabled'}>${(acceptsReference(card,m.mime)&&(m.storage!=='cloud'||state.models.find(model=>model.id===card.model)?.provider==='service-inference'))?'用作参考素材':(state.models.find(model=>model.id===card.model)?.provider==='service-inference'?'云端参考请填写公网 URL':'当前模型不支持此类输入')}</button>`:''}</div>`).join('')}</div>`:`<p>${incoming.length?'等待上游卡片生成素材。':'从其他卡片右侧拖线到本卡片左侧，引入素材。'}</p>`}`;
+    const html=`<summary>引入素材库 · ${materials.length}</summary><div class="upstream-links">${incoming.map(e=>`<span>${esc(cardById(e.source)?.name||e.source.slice(0,6))}<button class="quiet" data-disconnect="${e.id}" title="断开此来源">×</button></span>`).join('')}</div>${materials.length?`<div class="imported-items">${materials.map(m=>`<div class="imported-item">${m.reviewAttachment?window.directorReview.media(m.reviewAttachment):m.mime?.startsWith('image/')?`<img src="${m.url}" data-preview-copy="${esc(m.copySource||'')}" data-preview="${m.url}" data-preview-title="${esc(m.name)}" alt="${esc(m.name)}" tabindex="0" role="button" loading="lazy">`:m.mime?.startsWith('video/')?`<video src="${m.url}" controls preload="metadata"></video>`:`<audio src="${m.url}" controls preload="metadata"></audio>`}<small>${esc(m.name)}</small>${m.commentText?`<p class="imported-comment-text">${esc(m.commentText)}</p>`:''}${card.type==='chat'?`<button class="quiet" data-use-material="${m.key}">引用并评论</button>`:card.type!=='asset'?`<button class="quiet" data-use-material="${m.key}" ${(acceptsReference(card,m.mime)&&(m.storage!=='cloud'||state.models.find(model=>model.id===card.model)?.provider==='service-inference'))?'':'disabled'}>${(acceptsReference(card,m.mime)&&(m.storage!=='cloud'||state.models.find(model=>model.id===card.model)?.provider==='service-inference'))?'用作参考素材':(state.models.find(model=>model.id===card.model)?.provider==='service-inference'?'云端参考请填写公网 URL':'当前模型不支持此类输入')}</button>`:''}</div>`).join('')}</div>`:`<p>${incoming.length?'等待上游卡片生成素材。':'从其他卡片右侧拖线到本卡片左侧，引入素材。'}</p>`}`;
     if(library._markup!==html){library.innerHTML=html;library._markup=html;}
   }
   function renderLibraries(){if(state.project)for(const card of cards())renderLibrary(card);}
   async function useMaterial(card,key){
     if(importing)return;
-    const material=upstreamMaterials(card).find(m=>m.key===key);if(!material||!acceptsReference(card,material.mime))return;
+    const material=upstreamMaterials(card).find(m=>m.key===key);if(!material)return;
+    if(card.type==='chat'){window.directorComments.addAttachment(card.chat_id,material.attachment);return;}
+    if(!acceptsReference(card,material.mime))return;
     const model=state.models.find(m=>m.id===card.model);
     if(model?.provider==='service-inference'){
       if(material.storage==='cloud'){
@@ -241,6 +247,11 @@
   function renderCard(card) {
     const el = document.querySelector(`[data-card="${card.id}"]`); if (!el) return;
     position(card,el);
+    if(card.type==='chat'){
+      window.directorComments.mount(el,card,{request,changed,save,projectId:state.project.block_id,ownerId:state.user.user_id,materials:()=>commentMaterials(card),materialsChanged:()=>{if(state.project?.block_id===el._commentProject)renderLibraries();}});
+      el._commentProject=state.project.block_id;el.insertAdjacentHTML('beforeend',cardPorts());renderLibrary(card);
+      return;
+    }
     if(card.type==='asset'){
       const url=esc(card.storage==='cloud'?card.url:'/api/assets/'+card.asset_id);
       const media=card.mime?.startsWith('image/')?`<img src="${url}" data-preview-copy="${card.storage==='cloud'?'/api/storage/uploads/'+card.asset_id+'/image':''}" data-preview="${url}" data-preview-title="${esc(card.name)}" role="button" tabindex="0" alt="${esc(card.name)}">`:card.mime?.startsWith('video/')?videoMedia(url):`<div class="audio-art">♫</div><audio src="${url}" controls preload="metadata"></audio>`;
@@ -458,6 +469,25 @@
   $('#queue-items').ondragover=event=>{if(queueDrag){event.preventDefault();event.dataTransfer.dropEffect='move';}};
   $('#queue-items').ondrop=event=>{if(!queueDrag)return;event.preventDefault();const id=queueDrag,target=event.target.closest('[data-queue-job]')?.dataset.queueJob;queueDrag=null;moveQueue(id,target);};
   $('#queue-items').ondragend=()=>{queueDrag=null;renderQueue();};
+  function commentMaterials(target) {
+    const result=[];
+    for(const card of cards())if(card.type==='asset'&&/^(image|video)\//.test(card.mime))result.push({source:card.storage==='cloud'?'cloud':'asset',id:card.asset_id,url:card.storage==='cloud'?card.url:'/api/assets/'+card.asset_id,mime:card.mime,name:card.name});
+    for(const job of state.history.filter(h=>h.body.status==='completed'&&cards().some(c=>c.id===h.body.card_id)))for(const [index] of job.body.outputs.entries())result.push({source:'output',id:job.block_id,index,url:'/api/outputs/'+job.block_id+'/'+index,mime:job.body.type==='image'?'image/png':'video/mp4',name:job.body.model+' · '+date(job.createtime)+' · '+(index+1)});
+    for(const card of cards())if(card.type==='chat'&&card.id!==target?.id)for(const a of window.directorComments.outputs(card.chat_id))result.push({...a,name:(card.name||'评论区')+' · '+a.commentLabel+' · '+a.name});
+    if(target){const linked=upstreamMaterials(target).filter(m=>m.attachment).map(m=>({...m.attachment,name:'已关联 · '+m.name}));return [...linked,...result];}
+    return result;
+  }
+  async function addChat() {
+    if(cards().length>=200)throw Error('当前画布最多 200 张卡片');
+    const project=state.project;await save();const id=uid();
+    await request('/api/projects/'+project.block_id+'/chats',{chat_id:id,batch_size:50});
+    if(state.project!==project)return;
+    const v=project.body.canvas.viewport;
+    const card={id:uid(),chat_id:id,name:'评论区',type:'chat',mode:'chat',x:(50-v.x)/v.zoom,y:(40-v.y)/v.zoom,w:560,h:Math.max(520,Math.min(820,($('#canvas').clientHeight-60)/v.zoom))};
+    if(cards().length)card.x=Math.max(...cards().map(c=>c.x+c.w))+80;
+    cards().push(card);renderCanvas();changed();await save();
+    v.x=40-card.x*v.zoom;v.y=30-card.y*v.zoom;transform();changed();
+  }
   function addCard(type) {
     if(cards().length>=200){tell('当前画布最多 200 张卡片');return;}
     const v=state.project.body.canvas.viewport;
@@ -507,7 +537,7 @@
     if(button.dataset.useMaterial){await useMaterial(card,button.dataset.useMaterial);return;}
     if(button.classList.contains('choose-ref'))el.querySelector('.ref-upload').click();
     if(button.dataset.mode){if(!state.models.find(m=>m.id===card.model)?.modes.includes(button.dataset.mode))return;card.mode=button.dataset.mode;draft(card);renderCard(card);changed();}
-    if(button.classList.contains('remove-card')){if(!confirm(card.type==='asset'?'移除此素材卡片？':'移除此卡片？项目中的生成历史仍会保留。'))return;state.project.body.canvas.connections=connections().filter(e=>e.source!==card.id&&e.target!==card.id);state.project.body.canvas.cards=cards().filter(c=>c.id!==card.id);renderCanvas();changed();}
+    if(button.classList.contains('remove-card')){if(window.directorComments?.busy()){tell('请等待评论发送或上传完成');return;}if(!confirm(card.type==='chat'?'移除此评论区卡片？评论记录仍会保留。':card.type==='asset'?'移除此素材卡片？':'移除此卡片？项目中的生成历史仍会保留。'))return;state.project.body.canvas.connections=connections().filter(e=>e.source!==card.id&&e.target!==card.id);state.project.body.canvas.cards=cards().filter(c=>c.id!==card.id);renderCanvas();changed();}
     if(button.dataset.history){card.selected=button.dataset.history;card.detailsOpen=true;renderResults(card);changed();}
     if(button.dataset.unpin){card.pins=card.pins.filter(id=>id!==button.dataset.unpin);renderResults(card);changed();}
     if(button.classList.contains('pin-current')){const selected=card.selected||state.history.find(h=>h.body.card_id===card.id&&!(card.hiddenJobs||[]).includes(h.block_id))?.block_id;card.pins||=[];if(card.pins.includes(selected))return;if(card.pins.length>=(card.pinLimit??2)){tell('对比位已满，可增加数量或取消已有固定。');return;}card.pins.push(selected);renderResults(card);changed();}
@@ -650,10 +680,11 @@
     event.preventDefault();receiveFiles(files,event.target);
   });
   $('#canvas-world').addEventListener('error',event=>{const el=event.target.closest('.asset-card');if(el)el.querySelector('.media-error').hidden=false;},true);
+  $('#add-chat').onclick=async()=>{const b=$('#add-chat');b.disabled=true;try{await addChat();}catch(e){tell(e.message);}finally{b.disabled=false;}};
   $('#add-image').onclick=()=>addCard('image');$('#add-video').onclick=()=>addCard('video');
   $('.studio-brand').onclick=event=>{event.preventDefault();dashboard().catch(e=>tell(e.message));};
-  $('#studio-logout').onclick=async()=>{try{if(importing)throw Error('请等待素材导入完成');await save();await request('/api/logout',{});location.reload();}catch(e){tell(e.message);}};
-  window.addEventListener('beforeunload',event=>{if(importing||uploading||state.version!==state.saved){event.preventDefault();event.returnValue='';}});
+  $('#studio-logout').onclick=async()=>{try{if(importing||window.directorComments?.busy())throw Error('请等待素材上传或评论发送完成');await save();await request('/api/logout',{});location.reload();}catch(e){tell(e.message);}};
+  window.addEventListener('beforeunload',event=>{if(importing||uploading||window.directorComments?.busy()||state.version!==state.saved){event.preventDefault();event.returnValue='';}});
   window.directorStudio={
     async refreshModels(){const data=await request('/api/models');state.models=data.models;if(data.model_error)tell(data.model_error);if(state.project)renderCanvas();},
     async enter(user){state.user=user;document.body.classList.add('studio-active');$('#studio').hidden=false;$('#studio-account').textContent=user.login;try{const data=await request('/api/models');state.models=data.models;if(!data.online)tell('ComfyUI 未连接，仅影响本地模型；云端模型可通过 service-inference 设置使用。');await dashboard();}catch(error){tell(error.message);}},

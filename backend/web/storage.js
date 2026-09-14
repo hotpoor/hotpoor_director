@@ -1,7 +1,8 @@
 (() => {
   'use strict';
   const dialog=document.querySelector('#storage-dialog'),form=document.querySelector('#storage-form'),status=document.querySelector('#storage-status');
-  let config;
+  let config,editing="",busy=false;
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   async function request(path,body){
     const response=await fetch(path,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json','X-XSRFToken':decodeURIComponent(document.cookie.split('; ').find(x=>x.startsWith('_xsrf='))?.slice(6)||'')},body:body===undefined?undefined:JSON.stringify(body)});
     const result=await response.json();if(!response.ok)throw Error(result.error||'请求失败');return result;
@@ -11,7 +12,10 @@
   form.addEventListener('input',preview);
   function autoEndpoint(){const p=field('provider').value,r=field('region').value;field('endpoint').value=p==='qiniu'?`https://up-${r}.qiniup.com`:p==='aliyun'?`https://oss-${r}.aliyuncs.com`:`https://cos.${r}.myqcloud.com`;preview();}
   function render(){
-    const p=field('provider').value,meta=config.providers[p],saved=config.profiles[p]||{};
+    const p=field('provider').value,meta=config.providers[p],saved=config.profiles[editing]||{};
+    field('name').value=saved.name||config.providers[p].name;
+    document.querySelector('#storage-editor-title').textContent=editing?'编辑：'+saved.name:'添加新配置';
+    document.querySelector('#storage-clear').disabled=!editing;
     document.querySelector('#storage-key-label').textContent=meta.key_label;document.querySelector('#storage-secret-label').textContent=meta.secret_label;
     for(const name of ['access_key_id','access_key_secret']){field(name).value='';field(name).placeholder=saved.credentials_configured?'已保存，留空保留':'请输入'+meta[name==='access_key_id'?'key_label':'secret_label'];}
     for(const name of ['bucket_name','region','endpoint','domain','path_prefix'])field(name).value=saved[name]||'';
@@ -21,23 +25,43 @@
     document.querySelector('#storage-regions').replaceChildren(...meta.regions.map(([value,label])=>{const o=document.createElement('option');o.value=value;o.label=label;return o;}));
     if(!field('region').value)field('region').value=meta.regions[0][0];if(!field('endpoint').value)autoEndpoint();
     document.querySelector('#storage-help').textContent=meta.help;preview();
-    status.textContent=(saved.credentials_configured?'本厂商配置已保存':'本厂商尚未配置')+' · 当前启用：'+(config.providers[config.active_provider]?.name||'未启用');
+    status.textContent=(saved.credentials_configured?'此配置已保存':'正在填写新配置')+' · 当前启用：'+(config.profiles[config.active_profile_id]?.name||'未启用');
   }
-  async function open(){dialog.showModal();status.textContent='读取配置…';try{config=await request('/api/settings/storage');field('provider').value=config.active_provider||'qiniu';render();}catch(e){status.textContent=e.message;}}
+  function list(){
+    document.querySelector('#storage-profile-list').innerHTML=Object.entries(config.profiles).map(([id,p])=>`<div class="storage-profile-row ${id===editing?'editing':''}"><label><input type="radio" name="active_storage" value="${esc(id)}" ${id===config.active_profile_id?'checked':''} aria-label="启用 ${esc(p.name)}"><span><strong>${esc(p.name)}</strong><small>${esc(config.providers[p.provider].name)} · ${esc(p.bucket_name)}</small><small>${esc(p.access_domain)}${p.path_prefix?'/'+esc(p.path_prefix):''}</small></span></label><button type="button" class="quiet" data-storage-edit="${esc(id)}">编辑</button></div>`).join('')||'<p class="comfy-help">尚未保存配置</p>';
+    document.querySelector('#storage-active').textContent='当前启用：'+(config.profiles[config.active_profile_id]?.name||'未启用');
+  }
+  function edit(id){editing=id;const p=config.profiles[id];if(p)field('provider').value=p.provider;render();list();}
+  async function open(){dialog.showModal();status.textContent='读取配置…';try{config=await request('/api/settings/storage');field('provider').value='qiniu';edit(config.active_profile_id||Object.keys(config.profiles)[0]||'');}catch(e){status.textContent=e.message;}}
   document.querySelector('#open-storage-settings').onclick=open;
-  document.querySelector('#close-storage').onclick=()=>dialog.close();
+  document.querySelector('#close-storage').onclick=()=>{if(!busy)dialog.close();};
   dialog.addEventListener('close',()=>{field('access_key_id').value='';field('access_key_secret').value='';});
-  field('provider').onchange=render;field('region').onchange=autoEndpoint;
+  document.querySelector('#storage-add').onclick=()=>{if(!busy)edit('');};
+  document.querySelector('#storage-profile-list').onclick=e=>{const b=e.target.closest('[data-storage-edit]');if(b&&!busy)edit(b.dataset.storageEdit);};
+  document.querySelector('#storage-profile-list').onchange=e=>{if(e.target.name==='active_storage')submit('select',e.target.value);};
+  field('provider').onchange=()=>{editing='';render();list();};field('region').onchange=autoEndpoint;
   document.querySelector('#storage-auto-endpoint').onclick=autoEndpoint;
-  async function submit(action){
+  async function submit(action,id=editing){
+    if(busy)return;
     const inputs=[...form.querySelectorAll('input,select,button')],data=Object.fromEntries(new FormData(form));
-    if(!['clear','disable'].includes(action)&&!form.reportValidity())return;
-    inputs.forEach(x=>x.disabled=true);status.textContent=action==='test'?'验证空间访问…':'保存配置…';
-    try{const result=await request('/api/settings/storage'+(action==='test'?'/test':''),action==='clear'?{provider:data.provider,clear:true}:action==='disable'?{disable:true}:data);
-      if(action==='test')status.textContent=result.note;else{config=result;render();status.textContent+=' · 保存完成';}
-    }catch(e){status.textContent=e.message;}finally{inputs.forEach(x=>x.disabled=false);}
+    if(['save','save-only','test'].includes(action)&&!form.reportValidity())return;
+    busy=true;inputs.forEach(x=>x.disabled=true);status.textContent=action==='test'?'验证空间访问…':action==='select'?'切换启用配置…':'保存配置…';
+    try{
+      const body=['clear','disable','select'].includes(action)?{id,action}:{...data,id,activate:action!=='save-only'};
+      const result=await request('/api/settings/storage'+(action==='test'?'/test':''),body);
+      if(action==='test')status.textContent=result.note;
+      else{
+        const previousIds=new Set(Object.keys(config.profiles));config=result;
+        if(action==='save'||action==='save-only')editing=id||Object.keys(config.profiles).find(k=>!previousIds.has(k))||'';
+        else if(action==='select')editing=id;
+        else if(action==='clear')editing=config.active_profile_id||'';
+        edit(editing);status.textContent+=' · 保存完成';
+      }
+    }catch(e){list();status.textContent=e.message;}
+    finally{busy=false;inputs.forEach(x=>x.disabled=false);document.querySelector('#storage-clear').disabled=!editing;}
   }
   form.onsubmit=e=>{e.preventDefault();submit('save');};
+  document.querySelector('#storage-save-only').onclick=()=>submit('save-only');
   for(const action of ['test','clear','disable'])document.querySelector('#storage-'+action).onclick=()=>submit(action);
   const panel=document.querySelector('#upload-progress'),bar=document.querySelector('#upload-progress-bar');
   const closeProgress=document.querySelector('#close-upload-progress');

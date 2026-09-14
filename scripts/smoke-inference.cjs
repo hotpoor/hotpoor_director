@@ -36,7 +36,7 @@ app.whenReady().then(async()=>{
     await js(`window.uploadCalls=[];window.rawFetch=window.fetch;window.fetch=async(url,options)=>{if(String(url).startsWith('https://')&&/qiniup.com|aliyuncs.com|myqcloud.com/.test(String(url))){if(options.credentials!=='omit')throw Error('Direct upload carries cookies');uploadCalls.push({url:String(url),method:options.method,size:options.body instanceof FormData?options.body.get('file').size:options.body.size});return new Response('{}',{status:200});}return rawFetch(url,options);};void 0;`);
     await js(`window.progressStates=[];window.XMLHttpRequest=class{constructor(){this.upload={};this.headers={};}open(method,url){this.method=method;this.url=url;}setRequestHeader(k,v){this.headers[k]=v;}send(body){if(this.withCredentials!==false)throw Error('Upload carries cookies');const size=body instanceof FormData?body.get('file').size:body.size;uploadCalls.push({url:this.url,method:this.method,size});setTimeout(()=>{this.upload.onprogress({lengthComputable:true,loaded:size/2,total:size});progressStates.push(document.querySelector('#upload-progress-stage').textContent);setTimeout(()=>{this.upload.onload();this.status=200;this.onload();},30);},30);}};void 0;`);
     await js("document.querySelector('#open-storage-settings').click()");
-    await wait("document.querySelector('#storage-status').textContent.includes('尚未配置')");
+    await wait("document.querySelector('#storage-status').textContent.includes('正在填写新配置')");
     for(const [provider,region,label] of [['qiniu','z0','AccessKey（AK）'],['aliyun','cn-hangzhou','AccessKeyId'],['tencent','ap-guangzhou','SecretId']]){
       await js(`(()=>{const f=document.querySelector('#storage-form');f.elements.provider.value='${provider}';f.elements.provider.dispatchEvent(new Event('change'));if(document.querySelector('#storage-key-label').textContent!=='${label}')throw Error('Wrong vendor fields');f.elements.access_key_id.value='fake-access-id';f.elements.access_key_secret.value='fake-secret-value';f.elements.bucket_name.value='fixture-1250000000';f.elements.region.value='${region}';f.elements.domain.value='https://cdn.example.com';f.elements.path_prefix.value='/smoke/${provider}/';document.querySelector('#storage-auto-endpoint').click();f.requestSubmit();})()`);
       await wait("document.querySelector('#storage-status').textContent.includes('保存完成')");
@@ -51,7 +51,25 @@ app.whenReady().then(async()=>{
     if(Object.keys(storage.profiles).length!==3||JSON.stringify(storage).includes('fake-secret')||JSON.stringify(storage).includes('fake-access'))throw Error('Profile isolation/disclosure failed');
     const uploads=await js('uploadCalls');
     if(uploads.map(x=>x.method).join(',')!=='POST,PUT,PUT'||uploads.some(x=>x.size!==4))throw Error('Wrong direct upload payload');
+    const initialStorage=await js("smokeApi('/api/settings/storage')");
+    const firstQiniu=Object.entries(initialStorage.profiles).find(([,p])=>p.provider==='qiniu')[0];
+    await js("document.querySelector('#storage-add').click();(()=>{const f=document.querySelector('#storage-form');f.elements.provider.value='qiniu';f.elements.provider.dispatchEvent(new Event('change'));f.elements.name.value='七牛 · 视频归档';f.elements.access_key_id.value='second-fake-access-id';f.elements.access_key_secret.value='second-fake-secret-value';f.elements.bucket_name.value='video-archive';f.elements.domain.value='https://cdn.example.com';f.elements.path_prefix.value='archive/videos';document.querySelector('#storage-save-only').click();})()");
+    await wait("document.querySelectorAll('#storage-profile-list input').length===4 && document.querySelector('#storage-status').textContent.includes('保存完成')");
+    const addedStorage=await js("smokeApi('/api/settings/storage')");
+    if(addedStorage.active_profile_id!==initialStorage.active_profile_id)throw Error('Save-only switched active profile');
+    const secondQiniu=Object.entries(addedStorage.profiles).find(([,p])=>p.name==='七牛 · 视频归档')[0];
+    await js(`(()=>{const r=document.querySelector('#storage-profile-list input[value="${secondQiniu}"]');r.checked=true;r.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    await wait("document.querySelector('#storage-status').textContent.includes('保存完成') && document.querySelector('#storage-active').textContent.includes('视频归档')");
+    const secondUpload=await js("directorStorage.uploadFile(new File(['other'],'other.png',{type:'image/png'}))");
+    if(!secondUpload.url.startsWith('https://cdn.example.com/archive/videos/'))throw Error('Wrong active profile prefix');
+    await js(`document.querySelector('[data-storage-edit="${firstQiniu}"]').click()`);
+    if(await js("document.querySelector('#storage-form').elements.path_prefix.value")!=='smoke/qiniu')throw Error('Same provider overwrote old profile');
+    await js(`(()=>{const r=document.querySelector('#storage-profile-list input[value="${firstQiniu}"]');r.checked=true;r.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    await wait("document.querySelector('#storage-status').textContent.includes('保存完成') && document.querySelector('#storage-form').elements.path_prefix.value==='smoke/qiniu'");
+    if((await js("smokeApi('/api/settings/storage')")).active_profile_id!==firstQiniu)throw Error('Failed switching original profile');
     fs.writeFileSync(path.join(directory,'storage.png'),(await win.webContents.capturePage()).toPNG());
+    await js(`(()=>{const r=document.querySelector('#storage-profile-list input[value="${initialStorage.active_profile_id}"]');r.checked=true;r.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    await wait("document.querySelector('#storage-status').textContent.includes('保存完成') && document.querySelector('#storage-form').elements.provider.value==='tencent'");
     await js("document.querySelector('#close-storage').click()");
     await js("document.querySelector('#open-inference-settings').click()");
     await wait("document.querySelector('#inference-status').textContent.includes('尚未配置')");

@@ -314,3 +314,91 @@ def test_cloud_settings_project_and_private_local_outputs(service):
         with httpx.Client(base_url=url,trust_env=False) as anonymous:
             assert anonymous.get('/api/outputs/'+job_id+'/0').status_code==401
         assert client.post('/api/settings/service-inference',json={'clear':True}).status_code==200
+
+
+def test_comment_packs_retry_concurrency_and_private_media(service):
+    from psycopg.types.json import Jsonb
+    from concurrent.futures import ThreadPoolExecutor
+    import uuid
+    config, url = service
+    with httpx.Client(base_url=url, trust_env=False) as client:
+        client.get('/')
+        headers={'X-XSRFToken':client.cookies['_xsrf']}
+        assert client.post('/api/login',json={'login':'director','password':'a-local-test-password-123'},headers=headers).status_code==200
+        project=client.post('/api/projects',json={'title':'Comment chain'},headers=headers).json()
+        pid=project['block_id']; cid=uuid.uuid4().hex
+        path='/api/chats/'+cid
+        for invalid in (24,101,25.5,True):
+            assert client.post('/api/projects/'+pid+'/chats',json={'chat_id':cid,'batch_size':invalid},headers=headers).status_code==400
+        chat=client.post('/api/projects/'+pid+'/chats',json={'chat_id':cid,'batch_size':25},headers=headers).json()
+        assert chat['body']['message_count']==0
+        assert client.post('/api/projects/'+pid+'/chats',json={'chat_id':cid,'batch_size':25},headers=headers).json()['block_id']==cid
+        b=project['body'];b['canvas']['cards'].append(dict(id=uuid.uuid4().hex,type='chat',mode='chat',chat_id=cid,name='Review',x=0,y=0,w=560,h=820))
+        assert client.post('/api/projects/'+pid,json=b,headers=headers).status_code==200
+        messages=[]
+        for i in range(26):
+            message=dict(id=uuid.uuid4().hex,format='markdown',content=f'**Comment {i}**',attachments=[]);messages.append(message)
+            response=client.post(path+'/messages',json=message,headers=headers)
+            assert response.status_code==200,response.text
+        page=client.get(path+'/messages').json();tail=page['pack'];prev=tail['body']['prev_id']
+        assert page['chat']['body']['message_count']==26 and len(tail['body']['messages'])==1
+        first=client.get(path+'/messages?pack_id='+prev).json()['pack']
+        assert len(first['body']['messages'])==25 and first['body']['next_id']==tail['block_id'] and first['body']['prev_id'] is None
+        assert client.post(path+'/messages',json=messages[0],headers=headers).json()['duplicate'] is True
+        assert client.post(path+'/messages',json={**messages[0],'content':'changed'},headers=headers).status_code==409
+        assert client.post(path,json={'batch_size':100},headers=headers).status_code==200
+        def send(i):
+            with httpx.Client(base_url=url,trust_env=False,cookies=client.cookies) as other:
+                r=other.post(path+'/messages',json=dict(id=uuid.uuid4().hex,format='text',content=f'Concurrent {i}'),headers=headers)
+                assert r.status_code==200,r.text
+                return r.json()['message']['seq']
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            sequences=list(pool.map(send,range(25)))
+        assert sorted(sequences)==list(range(27,52))
+        page=client.get(path+'/messages').json()
+        assert page['chat']['body']['message_count']==51 and page['chat']['body']['pack_count']==3
+        assert page['pack']['body']['capacity']==100 and len(page['pack']['body']['messages'])==1
+        for value in ('javascript:alert(1)','file:///tmp/a','https://user:pass@example.com/v.mp4'):
+            r=client.post(path+'/messages',json=dict(id=uuid.uuid4().hex,attachments=[dict(source='url',media='video',url=value)]),headers=headers)
+            assert r.status_code==400
+        asset=client.post('/api/assets',files={'file':('comment.png',(ROOT/'assets/icon.png').read_bytes(),'image/png')},headers=headers).json()
+        assert 'id' in asset
+        r=client.post(path+'/messages',json=dict(id=uuid.uuid4().hex,format='html',content='<p>Review</p>',attachments=[dict(source='asset',id=asset['id']),dict(source='url',media='video',url='https://example.com/video.mp4')]),headers=headers)
+        assert r.status_code==200,r.text
+        assert r.json()['message']['attachments'][0]['url']=='/api/assets/'+asset['id']
+        marked=dict(id=uuid.uuid4().hex,content='位置问题',attachments=[dict(source='asset',id=asset['id'],review={'kind':'image','shapes':[{'type':'rect','x':.1,'y':.2,'w':.3,'h':.4}]})])
+        response=client.post(path+'/messages',json=marked,headers=headers)
+        assert response.status_code==200,response.text
+        saved=response.json()['message']['attachments'][0]
+        assert saved['id']==asset['id'] and saved['review']['shapes'][0]['x']==.1
+        material_page=client.get(path+'/materials').json()
+        assert any(m['message_id']==marked['id'] and m['attachment']==saved for m in material_page['materials'])
+        assert all('content' not in m for m in material_page['materials'])
+        assert client.get(path+'/materials?pack_id='+prev).json()['sealed'] is True
+        owner=client.get('/api/me').json()['user_id']
+        output_id=uuid.uuid4().hex;cloud_id=uuid.uuid4().hex
+        with psycopg.connect(**connection_kwargs(config,DATABASES[2])) as conn:
+            conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s)',(output_id,Jsonb(dict(kind='generation',owner_id=owner,project_id=pid,status='completed',type='video',model='fixture',outputs=[{'filename':'fixture.mp4'}]))))
+        with psycopg.connect(**connection_kwargs(config,DATABASES[1])) as conn:
+            conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s)',(cloud_id,Jsonb(dict(kind='cloud_upload',owner_id=owner,project_id=pid,status='completed',mime='image/png',name='cloud.png',url='https://example.com/cloud.png'))))
+        r=client.post(path+'/messages',json=dict(id=uuid.uuid4().hex,attachments=[dict(source='output',id=output_id,index=0),dict(source='cloud',id=cloud_id)]),headers=headers)
+        assert r.status_code==200,r.text
+        assert r.json()['message']['attachments'][0]['url']==f'/api/outputs/{output_id}/0'
+        assert client.post(path+'/messages',json=dict(id=uuid.uuid4().hex,attachments=[dict(source='output',id=output_id,index=1)]),headers=headers).status_code==400
+        foreign=uuid.uuid4().hex
+        with psycopg.connect(**connection_kwargs(config,DATABASES[1])) as conn:
+            conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s)',(foreign,Jsonb(dict(kind='chat',owner_id='0'*32,project_id=pid))))
+        assert client.get('/api/chats/'+foreign).status_code==404
+        assert client.get('/api/chats/'+foreign+'/messages').status_code==404
+        assert client.get('/api/chats/'+foreign+'/materials').status_code==404
+        assert client.post('/api/chats/'+foreign+'/messages',json=dict(id=uuid.uuid4().hex,content='no'),headers=headers).status_code==404
+        assert client.post('/api/chats/'+foreign,json={'batch_size':25},headers=headers).status_code==404
+        other_id=uuid.uuid4().hex
+        client.post('/api/projects/'+pid+'/chats',json={'chat_id':other_id},headers=headers)
+        assert client.get('/api/chats/'+other_id+'/messages?pack_id='+prev).status_code==404
+        assert client.get('/api/chats/'+other_id+'/materials?pack_id='+prev).status_code==404
+        other_project=client.post('/api/projects',json={'title':'Other project'},headers=headers).json()
+        other_body=other_project['body'];other_body['canvas']['cards']=b['canvas']['cards']
+        assert client.post('/api/projects/'+other_project['block_id'],json=other_body,headers=headers).status_code==400
+    with httpx.Client(base_url=url,trust_env=False) as anonymous:
+        assert anonymous.get(path+'/messages').status_code==401

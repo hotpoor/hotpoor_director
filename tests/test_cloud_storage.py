@@ -156,3 +156,45 @@ def test_cloud_image_download_validates_hash_size_and_redirects():
         with pytest.raises(s.StorageError):asyncio.run(run())
         body.pop('md5');body['size']=5
         with pytest.raises(s.StorageError):asyncio.run(run())
+
+
+def test_multiple_same_provider_profiles_migrate_edit_and_select(tmp_path):
+    config={'data_dir':tmp_path};old=profile()
+    s.save(config,{'active_provider':'qiniu','profiles':{'qiniu':old}})
+    view=s.public_view(s.load(config))
+    assert view['active_profile_id']=='qiniu' and view['profiles']['qiniu']['name']=='七牛 Kodo'
+    h=SimpleNamespace(settings={'config':config,'storage_lock':asyncio.Lock()},finish=Mock())
+    def post(data):
+        h.data=lambda:data
+        asyncio.run(s.StorageSettingsHandler.post(h))
+        return h.finish.call_args.args[0]
+    result=post({**old,'id':'','name':'七牛视频','bucket_name':'video-bucket','path_prefix':'movies','activate':False})
+    other=next(k for k in result['profiles'] if k!='qiniu')
+    assert result['active_profile_id']=='qiniu' and len(result['profiles'])==2
+    assert s.load(config)['profiles']['qiniu']==old
+    result=post({'action':'select','id':other})
+    assert result['active_profile_id']==other
+    renamed=post({**old,'id':'qiniu','name':'原图片库','access_key_id':'','access_key_secret':'','activate':False})
+    assert renamed['active_profile_id']==other
+    assert s.fingerprint(s.load(config)['profiles']['qiniu'])==s.fingerprint(old)
+    assert s.load(config)['profiles']['qiniu']['access_key_secret']==old['access_key_secret']
+    assert all(secret not in json.dumps(renamed) for secret in (old['access_key_id'],old['access_key_secret']))
+    before=s.load(config)
+    with pytest.raises(HTTPError):post({'action':'select','id':'missing'})
+    assert s.load(config)==before
+    with pytest.raises(HTTPError):post({**old,'id':'','access_key_id':'','access_key_secret':''})
+    assert s.load(config)==before
+    result=post({'action':'clear','id':'qiniu'})
+    assert result['active_profile_id']==other and len(result['profiles'])==1
+    result=post({'action':'disable'})
+    assert result['active_profile_id'] is None and len(result['profiles'])==1
+
+
+def test_confirmation_uses_original_profile_after_same_provider_switch(tmp_path):
+    config={'data_dir':tmp_path};first=profile();second={**profile(),'bucket_name':'another-bucket'}
+    s.save(config,{'active_profile_id':'second','active_provider':'qiniu','profiles':{'first':first,'second':second}})
+    body=dict(provider='qiniu',profile_id='first',profile_fingerprint=s.fingerprint(first),key='file.png',url='https://cdn.example.com/file.png',name='file.png',size=16,mime='image/png',status='pending')
+    h=SimpleNamespace(settings={'config':config},owner='owner',projects=Mock(),finish=Mock())
+    with patch.object(s,'owned',AsyncMock(return_value={'body':body})),patch.object(s,'verify_object') as verify,patch.object(s,'verify_public',AsyncMock(side_effect=s.StorageError('fixture stop'))):
+        with pytest.raises(HTTPError):asyncio.run(s.UploadConfirmHandler.post(h,'upload'))
+        verify.assert_called_once_with(first,'file.png',16,'image/png')

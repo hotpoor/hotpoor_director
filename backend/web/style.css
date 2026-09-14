@@ -106,3 +106,81 @@ img[data-preview]{cursor:zoom-in}#image-preview{position:fixed;inset:0;width:100
 .group-output-heading{font-size:12px;margin:12px 0 8px;color:#aaa}.group-outputs{display:flex;gap:10px;overflow-x:auto;padding-bottom:8px}.group-outputs>div{flex:0 0 110px}.group-outputs img{width:110px;height:90px;object-fit:contain;cursor:pointer;background:#151515}.group-outputs small{display:block;text-align:center}
 
 #inference-dialog{width:min(760px,calc(100vw - 32px))}.inference-key-row{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid #333}#studio .inference-key-row label{display:flex;align-items:center;gap:8px;flex:1;margin:0}#studio .inference-key-row input{width:auto;margin:0}.inference-key-row button{font-size:11px;padding:6px}#inference-model-list{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:20px}#inference-model-list h3{font-size:14px}#inference-model-list ul{list-style:none;padding:0}#inference-model-list li{display:grid;gap:4px;border-bottom:1px solid #333;padding:10px 0;font-size:12px}#inference-model-list span,#inference-model-list p{font-size:11px;color:#999}@media(max-width:700px){#inference-model-list{grid-template-columns:1fr}.inference-key-row{flex-wrap:wrap}}
+
+/* Comment cards keep messages independent of the canvas revision. */
+.chat-card {display:flex;flex-direction:column;overflow:hidden}
+.chat-card .card-heading {flex-shrink:0}
+.chat-count {white-space:nowrap;font-size:11px;color:#aaa;margin-left:auto}
+.chat-settings {padding:10px 16px;display:flex;align-items:flex-start;gap:12px;border-bottom:1px solid #333;flex-shrink:0}
+.chat-settings details {flex:1;min-width:0}.chat-settings summary {cursor:pointer;font-size:12px;color:#bbb}
+.chat-settings label {margin:8px 0;font-size:12px}.chat-settings input {padding:8px}.chat-settings button,.chat-refresh {padding:8px 10px;font-size:12px}
+.chat-settings code,.chat-settings small {display:block;overflow-wrap:anywhere;font-size:11px;color:#999;margin-top:8px}
+.chat-messages {overflow:auto;overscroll-behavior:contain;min-height:120px;flex:1;padding:10px 16px;scrollbar-gutter:stable}
+.chat-message {border-bottom:1px solid #353535;padding:12px 0}.chat-message:last-child {border-bottom:0}
+.chat-message-meta {display:flex;gap:9px;align-items:center;font-size:11px;color:#888;margin-bottom:8px;flex-wrap:wrap}.chat-message-meta strong {color:#ddd}.chat-message-meta span {margin-left:auto}
+.chat-empty {color:#888;text-align:center;padding:30px 10px;font-size:13px}
+.comment-body {font-size:14px;line-height:1.7;overflow-wrap:anywhere;min-width:0;color:#ddd}.comment-plain {white-space:pre-wrap}
+.comment-body p {margin:0 0 8px}.comment-body h1,.comment-body h2,.comment-body h3 {font-size:19px;line-height:1.4;margin:12px 0 8px}.comment-body pre {white-space:pre-wrap;background:#101010;padding:10px;border-radius:5px}.comment-body code {font-family:monospace}.comment-body blockquote {margin:8px 0;border-left:3px solid #777;padding-left:12px;color:#aaa}.comment-body table {border-collapse:collapse;max-width:100%}.comment-body td,.comment-body th {border:1px solid #555;padding:5px}.comment-body a {color:#bed9ff}
+.comment-body img,.comment-body video,.chat-message-media img,.chat-message-media video {max-width:100%;max-height:260px;object-fit:contain;border-radius:6px;background:#101010}
+.chat-message-media {display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}.chat-card figure {margin:5px 0;min-width:0}.chat-card figcaption {font-size:11px;color:#999;overflow-wrap:anywhere}
+.chat-composer {border-top:1px solid #444;padding:12px 16px;flex-shrink:0;max-height:55%;overflow:auto;overscroll-behavior:contain;background:#202020}
+.chat-compose-heading,.chat-format-tools,.chat-send-row,.chat-file-tools,.chat-url-tools,.chat-reference-tools {display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+.chat-card select,.chat-card textarea,.chat-card input {font-size:13px;margin:0}.chat-compose-heading select {width:auto;flex:1}.chat-card button {font-size:12px;padding:8px 12px}.chat-composer textarea {resize:vertical;min-height:70px;max-height:220px;margin-bottom:8px}.chat-rich {min-height:80px;max-height:220px;overflow:auto;border:1px solid #555;border-radius:5px;padding:9px;margin-bottom:8px;outline:none}.chat-rich:focus {border-color:#ddd}.chat-preview {background:#181818;border:1px dashed #777;border-radius:5px;padding:10px;margin:8px 0}
+.chat-additions {margin-bottom:10px}.chat-additions summary {font-size:12px;cursor:pointer;margin-bottom:10px;color:#bbb}.chat-file-tools select,.chat-url-tools select {width:auto}.chat-url-tools input {flex:1;min-width:130px}.chat-reference-tools select {flex:1;min-width:160px}.chat-send-row small {flex:1;font-size:10px;color:#aaa}.chat-send {white-space:nowrap}.chat-status {font-size:12px;margin:6px 0 0;color:#bbb;min-height:16px}
+.chat-attachments {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.chat-attachment {position:relative;min-width:0}.chat-attachment img,.chat-attachment video {width:100%;height:70px;object-fit:contain}.chat-attachment button {position:absolute;top:0;right:0;background:#222}.chat-older {margin:5px auto;flex-shrink:0}
+
+#storage-dialog {width:min(1080px,calc(100vw - 40px));max-width:none}
+.storage-layout {display:grid;grid-template-columns:minmax(260px,1fr) minmax(320px,1.6fr);gap:28px;align-items:start}
+.storage-sidebar {position:sticky;top:0;max-height:70vh;overflow:auto;padding-right:16px;border-right:1px solid #444}
+.storage-editor {min-width:0}.storage-editor h3 {margin:0 0 16px;font-size:16px}
+.storage-profile-row {border:1px solid #444;border-radius:8px;padding:12px;margin:0 0 10px}.storage-profile-row.editing {border-color:#aaa;background:#292929}
+#storage-form .storage-profile-row label {display:flex;flex-direction:row;align-items:flex-start;gap:10px;margin:0;cursor:pointer}
+#storage-form .storage-profile-row input {width:16px;height:16px;flex-shrink:0;accent-color:#ddd;margin:3px 0}
+.storage-profile-row span {min-width:0}.storage-profile-row strong {font-size:13px;display:block;overflow-wrap:anywhere}
+.storage-profile-row small {display:block;font-size:11px;color:#aaa;line-height:1.5;overflow-wrap:anywhere;margin-top:5px}
+#storage-form .storage-profile-row button {padding:5px 12px;font-size:11px;margin:9px 0 0 26px}
+@media(max-width:760px){.storage-layout{grid-template-columns:1fr}.storage-sidebar{position:static;border-right:0;border-bottom:1px solid #444;padding:0 0 16px;max-height:240px}}
+
+.chat-card{overflow:visible}.chat-card .chat-composer{border-radius:0 0 10px 10px}
+.chat-imported-library{margin:4px 12px;max-height:180px;overflow:auto;overscroll-behavior:contain;padding:8px}
+.chat-imported-library:not([open]){max-height:40px}.chat-attachment .chat-annotate{position:static;width:100%;font-size:10px;padding:6px}.chat-attachment [data-chat-remove]{position:absolute;right:0;top:0}.imported-comment-text{white-space:pre-wrap;max-height:120px;overflow:auto}
+.review-image-inline{position:relative;display:inline-block;max-width:100%;line-height:0;cursor:zoom-in}.review-image-inline>img{display:block;width:auto;max-width:100%;height:auto!important;max-height:160px!important;object-fit:contain!important}.review-image-inline>svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.review-media{min-width:0;max-width:100%}.review-media video{max-width:100%}.review-media figcaption{line-height:1.5}.chat-attachment .review-image-inline{max-height:none}.chat-attachment .review-media [data-review-view]{position:static;font-size:10px;padding:4px}.review-media>button{font-size:11px!important;padding:6px!important}
+#media-review-dialog{width:min(950px,calc(100vw - 32px));max-width:none;background:#1d1d1d;color:#eee;border:1px solid #666;border-radius:12px;padding:24px;max-height:92vh;overflow:auto}
+#media-review-dialog::backdrop{background:#000a}.review-tools,.review-range,.review-footer{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:12px 0}.review-tools label{display:flex;align-items:center;gap:8px;font-size:12px}.review-tools input[type=color]{width:40px;height:32px;padding:2px;margin:0}.review-tools .selected{border-color:#fff;background:#444}.review-stage{display:flex;justify-content:center;align-items:center;min-height:120px;background:#111;border-radius:6px;overflow:hidden}.review-image-frame{position:relative;max-width:100%;line-height:0}.review-image-frame>img{width:100%;height:100%;display:block;object-fit:fill}.review-draw{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}.review-video{max-width:100%;max-height:50vh}.review-range label{font-size:12px;width:130px}.review-range input{width:100%;margin:4px 0}.review-range button,.review-tools button,.review-footer button{padding:9px 14px;font-size:12px}.review-footer{justify-content:flex-end}.review-status{font-size:12px;color:#bbb;min-height:20px}.review-media .review-image-inline svg{overflow:visible}
+#media-review-dialog button{width:auto;flex:none;margin:0;border-radius:6px;letter-spacing:0;font-weight:500}
+#media-review-dialog .quiet{background:transparent;color:#ddd;border:1px solid #555}
+#media-review-dialog .dialog-heading{gap:16px;margin-bottom:12px}#media-review-dialog .dialog-heading h2{font-size:22px;line-height:1.4;margin:0;white-space:nowrap}
+#media-review-dialog .review-close{padding:7px 12px;margin-left:auto}
+#media-review-dialog .review-tools label{margin:0;flex-direction:row;align-items:center}
+#media-review-dialog .review-tools .selected{border-color:#ddd;background:#454545}
+#media-review-dialog input{padding:8px;color:#eee;background:#111;border:1px solid #555;border-radius:5px}
+#media-review-dialog .review-range label{margin:0}#media-review-dialog .review-save{background:#eee;color:#111;border:1px solid #eee}
+
+/* Compact comment previews; the viewer retains the full-size original. */
+.chat-messages{padding:6px 12px}
+.chat-message{padding:8px 0}
+.chat-message-meta{gap:6px;font-size:10px;margin-bottom:5px}
+.chat-message .comment-body{font-size:13px;line-height:1.55}
+.chat-message .comment-body p{margin:0 0 5px}
+.chat-message .comment-body h1,.chat-message .comment-body h2,.chat-message .comment-body h3{font-size:15px;margin:8px 0 5px}
+.chat-message-media{grid-template-columns:repeat(auto-fill,minmax(min(160px,100%),1fr));gap:6px;align-items:start}
+.chat-message-media>div{min-width:0;max-width:240px}
+.chat-message-media:empty,.chat-message .comment-body:empty{display:none}
+.chat-message-media img,.chat-message-media video,.chat-message .comment-body img,.chat-message .comment-body video{width:auto;max-width:100%;max-height:160px;height:auto;object-fit:contain}
+.chat-message .review-media{margin:4px 0}
+.chat-message .review-media figcaption{font-size:10px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.chat-message button.quiet{width:auto;margin:3px 4px 0 0;padding:4px 7px!important;font-size:10px!important;line-height:1.4}
+.chat-attachment .review-image-inline>img{max-height:70px!important}
+.chat-settings{padding:7px 12px}
+.chat-composer{padding:9px 12px}
+.chat-composer textarea{min-height:56px}
+
+.review-resizable{position:relative;display:table;max-width:100%;min-width:100px;min-height:70px;background:#101010;border-radius:6px;padding:0 0 14px}
+#studio .review-resizable>.review-size-handle{position:absolute;right:0;bottom:0;width:20px;height:20px;min-width:0;margin:0;padding:0!important;border:0;background:#252525;color:#ddd;cursor:nwse-resize;touch-action:none;z-index:2;border-radius:4px}
+.review-size-handle:after{content:'';position:absolute;right:4px;bottom:4px;width:8px;height:8px;border-right:2px solid #bbb;border-bottom:2px solid #bbb}
+.chat-message-media>.review-expanded-item{grid-column:1/-1;max-width:100%}
+.review-resizable.review-custom-size{display:flex;align-items:center;justify-content:center;padding:0;overflow:hidden}
+.chat-card .review-custom-size>img,.chat-card .review-custom-size>video{width:100%;height:100%;max-height:none;object-fit:contain}
+.chat-card .review-custom-size>.review-image-inline{flex:none;max-width:100%;max-height:100%}
+.chat-card .review-custom-size>.review-image-inline>img{width:100%;height:100%!important;max-height:none!important;object-fit:fill!important}

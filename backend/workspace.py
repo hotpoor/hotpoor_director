@@ -55,8 +55,12 @@ def validate_project(data):
         if not isinstance(card, dict) or not isinstance(card.get('id'), str) or not ID.fullmatch(card['id']) or card['id'] in seen:
             raise ValueError('卡片 UUID 不正确或重复')
         seen.add(card['id'])
-        if card.get('type') not in ('image', 'video', 'asset') or card.get('mode') not in (('media',) if card.get('type') == 'asset' else ('text', 'image', 'reference','edit','series')):
+        if card.get('type') not in ('image', 'video', 'asset', 'chat') or card.get('mode') not in (('chat',) if card.get('type') == 'chat' else ('media',) if card.get('type') == 'asset' else ('text', 'image', 'reference','edit','series')):
             raise ValueError('卡片模式不正确')
+        if card['type'] == 'chat' and (not isinstance(card.get('chat_id'), str) or not ID.fullmatch(card['chat_id'])):
+            raise ValueError('评论区 ID 不正确')
+        if card['type'] == 'chat' and (not isinstance(card.get('name', ''), str) or len(card.get('name', '')) > 160):
+            raise ValueError('评论区名称过长')
         if not all(finite(card.get(k), lo, hi) for k, lo, hi in [('x', -1e7, 1e7), ('y', -1e7, 1e7), ('w', 380, 3000), ('h', 200 if card.get('type') == 'asset' else 520, 4000)]):
             raise ValueError('卡片尺寸不正确')
         if card['type'] == 'asset' and (not isinstance(card.get('asset_id'), str) or not ID.fullmatch(card['asset_id'])):
@@ -149,6 +153,10 @@ async def save_project(handler, project_id=None):
         raise tornado.web.HTTPError(400, reason=str(error))
     asset_ids = set(body['covers'])
     for card in body['canvas']['cards']:
+        if card['type'] == 'chat':
+            chat = await owned(handler.projects, card['chat_id'], handler.owner, 'chat')
+            if chat['body']['project_id'] != project_id:
+                raise tornado.web.HTTPError(400, reason='评论区不属于此项目')
         for draft in card.get('drafts', {}).values():
             if not isinstance(draft, dict) or not isinstance(draft.get('refs', []), list):
                 raise tornado.web.HTTPError(400, reason='参考素材格式不正确')
@@ -285,11 +293,16 @@ class AssetHandler(PrivateHandler):
 
 
 def workspace_routes():
+    from backend.comments import CreateChatHandler, ChatHandler, ChatMessagesHandler, ChatMaterialsHandler
     from backend.comfy_settings import ComfySettingsHandler, ComfyTestHandler
     from backend.inference import InferenceSettingsHandler, InferenceTestHandler
     from backend.cloud_storage import StorageSettingsHandler, StorageTestHandler, UploadGrantHandler, UploadConfirmHandler, CloudImageHandler
     from backend.generation import ModelsHandler, GenerateHandler, HistoryHandler, OutputHandler, CancelGenerationHandler, QueueOrderHandler
     return [
+        (r'/api/projects/([0-9a-f]{32})/chats', CreateChatHandler),
+        (r'/api/chats/([0-9a-f]{32})', ChatHandler),
+        (r'/api/chats/([0-9a-f]{32})/messages', ChatMessagesHandler),
+        (r'/api/chats/([0-9a-f]{32})/materials', ChatMaterialsHandler),
         (r'/api/settings/storage', StorageSettingsHandler),
         (r'/api/settings/storage/test', StorageTestHandler),
         (r'/api/storage/uploads', UploadGrantHandler),

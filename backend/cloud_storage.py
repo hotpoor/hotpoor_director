@@ -103,7 +103,7 @@ def normalize(data, previous=None):
     value={'provider':provider}
     for key in ('access_key_id','access_key_secret'):
         raw=data.get(key) or previous.get(key,'')
-        if not isinstance(raw,str) or not 5<=len(raw.strip())<=4096 or any(c.isspace() for c in raw.strip()):raise ValueError('请填写完整的访问密钥；留空只能保留当前厂商已保存的密钥')
+        if not isinstance(raw,str) or not 5<=len(raw.strip())<=4096 or any(c.isspace() for c in raw.strip()):raise ValueError('请填写完整的访问密钥；留空只能保留当前配置已保存的密钥')
         value[key]=raw.strip()
     bucket=data.get('bucket_name','')
     if not isinstance(bucket,str) or not re.fullmatch(r'[a-z0-9][a-z0-9-]{1,61}[a-z0-9]',bucket):raise ValueError('Bucket 名称需为 3–63 位小写字母、数字或连字符')
@@ -131,16 +131,21 @@ def access_domain(profile):
     return profile['domain'] or 'https://'+profile['bucket_name']+'.'+urlsplit(profile['endpoint']).netloc
 
 
+def active_id(value):
+    return value.get('active_profile_id', value.get('active_provider'))
+
+
 def public_view(value):
     profiles={}
-    for provider,p in value['profiles'].items():
-        profiles[provider]={k:v for k,v in p.items() if k not in ('access_key_id','access_key_secret')}
-        profiles[provider].update(credentials_configured=bool(p.get('access_key_id') and p.get('access_key_secret')),access_domain=access_domain(p))
-    return dict(active_provider=value['active_provider'],profiles=profiles,providers=PROVIDERS)
+    for profile_id,p in value['profiles'].items():
+        profiles[profile_id]={k:v for k,v in p.items() if k not in ('access_key_id','access_key_secret')}
+        profiles[profile_id].update(id=profile_id,name=p.get('name') or PROVIDERS[p['provider']]['name'],credentials_configured=bool(p.get('access_key_id') and p.get('access_key_secret')),access_domain=access_domain(p))
+    selected=active_id(value)
+    return dict(active_profile_id=selected,active_provider=value['profiles'].get(selected,{}).get('provider'),profiles=profiles,providers=PROVIDERS)
 
 
 def fingerprint(profile):
-    return hashlib.sha256(json.dumps(profile,sort_keys=True).encode()).hexdigest()
+    return hashlib.sha256(json.dumps({k:v for k,v in profile.items() if k not in ('name','id')},sort_keys=True).encode()).hexdigest()
 
 
 def aliyun(profile):
@@ -225,25 +230,48 @@ class StorageSettingsHandler(PrivateHandler):
         data=self.data()
         async with self.settings['storage_lock']:
             value=load(self.settings['config'])
-            if data.get('disable') is True:
-                value['active_provider']=None
-            elif data.get('clear') is True:
-                provider=data.get('provider')
-                if provider not in PROVIDERS:raise tornado.web.HTTPError(400,reason='未知厂商')
-                value['profiles'].pop(provider,None)
-                if value['active_provider']==provider:value['active_provider']=None
+            value['active_profile_id']=active_id(value)
+            action=data.get('action','disable' if data.get('disable') else 'clear' if data.get('clear') else 'save')
+            if action not in ('save','select','clear','disable'):
+                raise tornado.web.HTTPError(400,reason='未知配置操作')
+            # Missing ID supports the previous one-profile-per-provider API.
+            profile_id=data.get('id',data.get('provider'))
+            if profile_id is not None and not isinstance(profile_id,str):raise tornado.web.HTTPError(400,reason='配置 ID 不正确')
+            previous=value['profiles'].get(profile_id)
+            if action in ('select','clear') and not previous:
+                raise tornado.web.HTTPError(404,reason='存储配置不存在')
+            if action=='disable':value['active_profile_id']=None
+            elif action=='select':value['active_profile_id']=profile_id
+            elif action=='clear':
+                value['profiles'].pop(profile_id)
+                if value['active_profile_id']==profile_id:value['active_profile_id']=None
             else:
-                try:profile=normalize(data,value['profiles'].get(data.get('provider')))
+                if profile_id and not previous and profile_id not in PROVIDERS:
+                    raise tornado.web.HTTPError(404,reason='存储配置不存在')
+                if previous and previous['provider']!=data.get('provider'):
+                    raise tornado.web.HTTPError(400,reason='更换厂商请添加一套新配置')
+                try:
+                    profile=normalize(data,previous)
+                    name=data.get('name',previous.get('name') if previous else None) or PROVIDERS[profile['provider']]['name']
+                    if not isinstance(name,str) or not 1<=len(name.strip())<=80:raise ValueError('配置名称需为 1–80 个字符')
+                    profile['name']=name.strip()
                 except ValueError as error:raise tornado.web.HTTPError(400,reason=str(error))
-                value['profiles'][profile['provider']]=profile
-                if data.get('activate',True) is True:value['active_provider']=profile['provider']
+                if not previous and len(value['profiles'])>=50:raise tornado.web.HTTPError(400,reason='最多保存 50 套云存储配置')
+                profile_id=profile_id or uuid.uuid4().hex
+                value['profiles'][profile_id]=profile
+                if data.get('activate',True) is True:value['active_profile_id']=profile_id
+            selected=value['profiles'].get(value['active_profile_id'])
+            value['active_provider']=selected['provider'] if selected else None
             save(self.settings['config'],value)
         self.finish(public_view(value))
 
 
 class StorageTestHandler(PrivateHandler):
     async def post(self):
-        data=self.data();previous=load(self.settings['config'])['profiles'].get(data.get('provider'))
+        data=self.data();profile_id=data.get('id',data.get('provider'))
+        if profile_id is not None and not isinstance(profile_id,str):raise tornado.web.HTTPError(400,reason='配置 ID 不正确')
+        previous=load(self.settings['config'])['profiles'].get(profile_id)
+        if previous and previous['provider']!=data.get('provider'):previous=None
         try:
             profile=normalize(data,previous)
             await asyncio.to_thread(probe,profile)
@@ -254,8 +282,8 @@ class StorageTestHandler(PrivateHandler):
 class UploadGrantHandler(PrivateHandler):
     async def post(self):
         data=self.data();value=load(self.settings['config'])
-        profile=value['profiles'].get(value['active_provider'])
-        if not profile:raise tornado.web.HTTPError(400,reason='请先在云存储设置中保存并启用一个厂商')
+        profile_id=active_id(value);profile=value['profiles'].get(profile_id)
+        if not profile:raise tornado.web.HTTPError(400,reason='请先在云存储设置中保存并启用一套配置')
         mime,size,name=data.get('mime'),data.get('size'),data.get('name')
         if mime not in MIMES or not isinstance(size,int) or isinstance(size,bool) or not 1<=size<=(20 if mime.startswith('image/') else 200)*1024*1024 or not isinstance(name,str) or not 1<=len(name)<=255:
             raise tornado.web.HTTPError(400,reason='请选择图片（20 MB 内）、视频或音频（200 MB 内）')
@@ -273,7 +301,7 @@ class UploadGrantHandler(PrivateHandler):
         try:grant=await asyncio.to_thread(sign_upload,profile,key,mime,size)
         except Exception:raise tornado.web.HTTPError(502,reason='生成直传凭证失败，请检查存储配置') from None
         url=access_domain(profile)+'/'+quote(key,safe='/')
-        body=dict(kind='cloud_upload',owner_id=self.owner,provider=profile['provider'],profile_fingerprint=fingerprint(profile),
+        body=dict(kind='cloud_upload',owner_id=self.owner,profile_id=profile_id,provider=profile['provider'],profile_fingerprint=fingerprint(profile),
                   key=key,url=url,mime=mime,size=size,name=name,md5=digest,project_id=project_id,status='pending',expires_at=int(time.time())+TTL)
         async with self.projects.connection() as conn:
             await conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s) ON CONFLICT (block_id) DO NOTHING',(upload_id,Jsonb(body)))
@@ -290,9 +318,9 @@ class UploadConfirmHandler(PrivateHandler):
         row=await owned(self.projects,upload_id,self.owner,'cloud_upload');body=row['body']
         if body['status']=='completed':
             self.finish(upload_result(upload_id,body));return
-        profile=load(self.settings['config'])['profiles'].get(body['provider'])
+        profile=load(self.settings['config'])['profiles'].get(body.get('profile_id',body['provider']))
         if not profile or fingerprint(profile)!=body['profile_fingerprint']:
-            raise tornado.web.HTTPError(409,reason='该厂商配置已更改，请重新直传文件')
+            raise tornado.web.HTTPError(409,reason='本次上传所用配置已更改或删除，请恢复原配置后重试确认')
         # Confirmation is still allowed after a grant expires: large uploads may finish later.
         try:
             await asyncio.to_thread(verify_object,profile,body['key'],body['size'],body['mime'])
