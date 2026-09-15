@@ -153,7 +153,7 @@ class InferenceSettingsHandler(PrivateHandler):
             if action in ('select','refresh','delete') and not profile:raise tornado.web.HTTPError(404,reason='Key 配置不存在')
             if action=='delete' or action=='save' and profile and data.get('api_key') and data['api_key'].strip()!=profile['api_key']:
                 async with self.jobs.connection() as conn:
-                    busy=await (await conn.execute("SELECT 1 FROM entities WHERE body->>'provider'=%s AND body->>'status' IN ('submitting','queued','running') AND COALESCE(body->>'credential_id','legacy')=%s LIMIT 1",(PROVIDER,profile['id']))).fetchone()
+                    busy=await (await conn.scan("SELECT 1 FROM entities WHERE body->>'provider'=%s AND body->>'status' IN ('submitting','queued','running') AND COALESCE(body->>'credential_id','legacy')=%s LIMIT 1",(PROVIDER,profile['id']))).fetchone()
                 if busy:raise tornado.web.HTTPError(409,reason='此 Key 仍有生成任务，请完成后再修改密钥或删除；可以切换其他 Key')
             try:
                 if action=='delete':
@@ -322,11 +322,11 @@ class InferenceManager:
 
     async def update(self, job_id, **patch):
         async with self.pool.connection() as conn:
-            await conn.execute('UPDATE entities SET body=body || %s WHERE block_id=%s', (Jsonb(patch), job_id))
+            await conn.execute('UPDATE entities SET body=body || %s WHERE block_id=%s', (Jsonb(patch), job_id), block_id=job_id)
 
     async def start(self):
         async with self.pool.connection() as conn:
-            rows = await (await conn.execute("SELECT * FROM entities WHERE body->>'provider'=%s AND body->>'status' IN ('submitting','queued','running')", (PROVIDER,))).fetchall()
+            rows = await (await conn.scan("SELECT * FROM entities WHERE body->>'provider'=%s AND body->>'status' IN ('submitting','queued','running')", (PROVIDER,))).fetchall()
         for row in rows:
             if row['body'].get('remote_task_id'):
                 self.launch(row['block_id'], row['body'])
@@ -459,7 +459,7 @@ async def submit(handler, project_id, data):
                   type=card['type'],model=model['id'],mode=data['mode'],params=params,refs=[],ref_info={},
                   status='submitting',outputs=[],usage={'tokens':None},submitted_at=time.time_ns()//1_000_000)
         async with handler.jobs.connection() as conn:
-            inserted=await (await conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s) ON CONFLICT DO NOTHING RETURNING block_id',(job_id,Jsonb(body)))).fetchone()
+            inserted=await (await conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s) ON CONFLICT DO NOTHING RETURNING block_id',(job_id,Jsonb(body)), block_id=job_id)).fetchone()
         if inserted:
             manager.launch(job_id,body,payload)
     handler.finish(await owned(handler.jobs,job_id,handler.owner,'generation'))

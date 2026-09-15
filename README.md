@@ -27,13 +27,23 @@ Electron 桌面端，内置 Python/Tornado 后端和 PostgreSQL，提供私有�
 | `hotpoor_director1` | `entities`（唯一的用户表） | `block_id`, `body`, `createtime`, `updatetime` |
 | `hotpoor_director2` | `entities`（唯一的用户表） | `block_id`, `body`, `createtime`, `updatetime` |
 
-- `block_id` 和 `user_id`：32 个小写十六进制字符的 UUID，无连字符。`block_id` 由数据库默认生成并校验格式。
+- `block_id` 和 `user_id`：32 个小写十六进制字符的 UUID，无连字符。`block_id` 通常由应用生成，数据库也提供符合本库分片规则的默认 UUID，并校验格式与分片归属。
 - `body`：JSONB，默认 `{}`；包含 GIN 索引和 `updatetime` 索引。
 - `createtime`、`updatetime`：BIGINT Unix 毫秒时间戳。数据库写入默认值，UPDATE 触发器自动更新 `updatetime` 并保留创建时间。
 - `login`：去除两端空格、统一小写、唯一；同一账号映射一个 `user_id`。
 - 主库另有 `auth_credentials`（Argon2id 密码哈希）和 `auth_sessions`（随机会话令牌的 SHA-256、用户和有效期）。密码不放入 `index_login` 或实体 JSONB。
 - 初始化可重复执行，不清空数据。运行应用使用普通数据库角色，建库使用独立的管理角色。
-- 三个库不是主从副本，当前没有实现主从复制或读写路由。后续读写分离需另行部署副本与路由，跨库也不是同一事务。
+- `hotpoor_director` 是索引库；另有 `index_entity_commits` 保存跨分片事务的提交决定，不存实体正文。
+- 实体统一按 `int(block_id, 16) % 2` 路由：余数 `0` → `hotpoor_director1`，余数 `1` → `hotpoor_director2`。项目、素材、评论、消息包、生成任务及云上传记录均遵循此规则，业务类型不决定数据库。
+- 按 ID 的读写只访问对应分片；列表查询汇总两个库，再按时间全局排序。数据库 CHECK 约束拒绝向错误分片写入 UUID。
+- 评论等跨分片写入采用 PostgreSQL 两阶段提交，索引库保存提交决定；下一次实体访问或启动时恢复中断事务。为保证恢复与查询一致性，实体事务通过索引库 advisory lock 串行执行，适用于当前本地工作台，尚未做高并发扩展。
+- 内置 PostgreSQL 启动参数自动设置 `max_prepared_transactions=32`；外置实例需自行配置该值并重启，最低要求为 `2`。三个库仍是独立数据库，没有主从复制。
+
+### 从旧的业务分库迁移
+
+关闭所有旧版本工作台后启动新版本，或执行 `python -m backend init-db`。初始化会自动检查并迁移放错分片的实体：先在配置目录的 `backups/uuid-shards-*.jsonl` 保存待迁移记录，再逐条复制、核对全部字段，最后删除旧库副本。UUID、JSONB、创建时间和更新时间均保留；迁移可重复执行。若两个库存在同 UUID、不同内容的记录，会停止并报告冲突，不覆盖数据。备份包含实体原始内容，应按工作台数据妥善保存。
+
+已有内置 PostgreSQL 进程若使用旧参数运行，需完全退出工作台并停止该实例后再启动，才能启用两阶段提交。
 
 ## macOS 源码启动
 
@@ -107,8 +117,8 @@ PyInstaller 将 Python/Tornado 打包为独立后端；Electron Builder 将后�
 
 登录后进入自己的项目列表。可创建或编辑主标题、副标题、描述和多张封面（第一张为主封面，最多 20 张）。每个项目由服务端生成 32 位 UUID，创建/更新时间使用数据库毫秒时间戳。
 
-- `hotpoor_director1.entities` 保存项目 JSON 和上传图片元信息；图片文件保存在本地配置目录的 `media/` 中。
-- `hotpoor_director2.entities` 保存生成任务及历史。两个库仍各只有一张 `entities` 表，通过 JSON 的 `kind` 区分内容。
+- 项目 JSON 和上传图片元信息按各自 `block_id` 的 UUID 求余分配到两个实体库；图片文件保存在本地配置目录的 `media/` 中。
+- 生成任务及历史同样按 UUID 求余分配。两个库各只有一张 `entities` 表，通过 JSON 的 `kind` 区分内容。
 - 所有项目、上传图片、生成历史与输出接口都校验当前登录用户；不会接受客户端指定的 owner。
 - 画布保存 `viewport` 和 `cards`，卡片有独立 UUID、位置、宽高、类型、各模式参数、选中历史和 pin 列表。编辑后 700ms 自动保存；请求串行，失败保留当前窗口草稿并重试。多窗口修改采用 revision 检查，冲突时停止覆盖，可先导出 JSON 草稿。
 - 拖动空白处平移、空白处滚轮缩放；卡片内部滚轮滚动内容，Ctrl+滚轮缩放画布。拖动标题移动卡片，四边及四角均可调整尺寸。底栏可适配全部卡片或恢复 100%。
@@ -273,7 +283,7 @@ ComfyUI 默认没有账号保护，只向可信局域网开放，不需要路由
 
 每条评论最多 10 个图片/视频附件，可选择文件、拖入或粘贴，选择上传到本机或已配置的云存储；也可填写 HTTP / HTTPS 直链并指定图片/视频类型。引用下拉框提供本项目画布的图片/视频素材卡片及已完成的生成结果，保存引用而不复制文件。图片最多 20 MB，视频最多 200 MB；文件类型沿用现有上传限制。地址附件保留原始地址，需要目标可访问且浏览器支持对应编码。
 
-评论存放于项目数据库 `hotpoor_director1.entities`，不塞入画布 JSON：
+评论区和消息包分别按自身 UUID 求余存放于两个库的 `entities` 中，不塞入画布 JSON：
 
 - `kind=chat`：`block_id` 即 `chat_id`，记录项目、所有者、分包大小、头尾包 ID 和评论/包计数。
 - `kind=chat_pack`：独立 entity，含 `chat_id`、`prev_id`、`next_id`、固定 `capacity` 和 `messages` 数组。结构为 `chat → head ↔ … ↔ tail`。

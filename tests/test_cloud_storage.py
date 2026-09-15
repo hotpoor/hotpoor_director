@@ -86,7 +86,7 @@ def test_md5_grant_reuses_completed_project_upload(tmp_path):
         def __init__(self):self.rows={}
         @asynccontextmanager
         async def connection(self):yield self
-        async def execute(self,sql,args):
+        async def execute(self,sql,args, **routing):
             if sql.startswith('INSERT'):self.rows.setdefault(args[0],{'body':args[1].obj})
             return SimpleNamespace(fetchone=AsyncMock(return_value=self.rows.get(args[0])))
     pool=Pool();p=profile();s.save({'data_dir':tmp_path},{'active_provider':'qiniu','profiles':{'qiniu':p}})

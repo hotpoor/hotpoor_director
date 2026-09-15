@@ -50,7 +50,7 @@ def test_api_ownership_and_snapshot_validation(foreign,stale):
     rows=[{'block_id':a,'body':{'prompt_id':'p-a'}},{'block_id':b,'body':{'prompt_id':'p-b'}}]
     @asynccontextmanager
     async def connection():
-        yield SimpleNamespace(execute=AsyncMock(return_value=SimpleNamespace(fetchall=AsyncMock(return_value=rows))))
+        yield SimpleNamespace(scan=AsyncMock(return_value=SimpleNamespace(fetchall=AsyncMock(return_value=rows))))
     payload={'order':['c'*32,a] if foreign else [b,a],'previous':[b,a] if stale else [a,b]}
     h=SimpleNamespace(owner='alice',projects=object(),jobs=SimpleNamespace(connection=connection),data=lambda:payload,finish=Mock(),settings={})
     async def remote(path,data=None):

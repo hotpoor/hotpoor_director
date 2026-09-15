@@ -240,7 +240,7 @@ class GenerateHandler(PrivateHandler):
                     model=expected_model, mode=mode, params=p, refs=refs, ref_info={a['block_id']: {'mime': a['body']['mime'], 'name': a['body']['name']} for a in assets}, status='submitting', outputs=[],
                     usage={'tokens': None, 'note': '本地 ComfyUI 未提供 token 用量；不按 token 计费'}, submitted_at=time.time_ns()//1_000_000)
         async with self.jobs.connection() as conn:
-            inserted = await (await conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s) ON CONFLICT DO NOTHING RETURNING block_id', (job_id, Jsonb(body)))).fetchone()
+            inserted = await (await conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s) ON CONFLICT DO NOTHING RETURNING block_id', (job_id, Jsonb(body)), block_id=job_id)).fetchone()
         if not inserted:
             self.finish(await owned(self.jobs, job_id, self.owner, 'generation'))
             return
@@ -280,7 +280,7 @@ class GenerateHandler(PrivateHandler):
                 except ValueError:
                     pass
         async with self.jobs.connection() as conn:
-            row = await (await conn.execute('UPDATE entities SET body=%s WHERE block_id=%s RETURNING *', (Jsonb(body), job_id))).fetchone()
+            row = await (await conn.execute('UPDATE entities SET body=%s WHERE block_id=%s RETURNING *', (Jsonb(body), job_id), block_id=job_id)).fetchone()
         self.finish(row)
 
 
@@ -304,7 +304,7 @@ class CancelGenerationHandler(PrivateHandler):
         if result.get('cancelled'):
             patch = dict(status='stopping', cancel_requested=True, cancel_requested_at=time.time_ns()//1_000_000)
             async with self.jobs.connection() as conn:
-                await conn.execute("UPDATE entities SET body=body || %s WHERE block_id=%s AND body->>'status' IN ('queued','running')", (Jsonb(patch), job_id))
+                await conn.execute("UPDATE entities SET body=body || %s WHERE block_id=%s AND body->>'status' IN ('queued','running')", (Jsonb(patch), job_id), block_id=job_id)
         self.finish(await owned(self.jobs, job_id, self.owner, 'generation'))
 
 
@@ -315,7 +315,7 @@ class QueueOrderHandler(PrivateHandler):
         if not isinstance(order, list) or len(order) > 1000 or any(not isinstance(x, str) or not ID.fullmatch(x) for x in order) or len(set(order)) != len(order):
             raise tornado.web.HTTPError(400, reason='排序列表不正确')
         async with self.jobs.connection() as conn:
-            rows = await (await conn.execute("SELECT * FROM entities WHERE body->>'kind'='generation' AND body->>'owner_id'=%s AND body->>'project_id'=%s", (self.owner, project_id))).fetchall()
+            rows = await (await conn.scan("SELECT * FROM entities WHERE body->>'kind'='generation' AND body->>'owner_id'=%s AND body->>'project_id'=%s", (self.owner, project_id))).fetchall()
         jobs = {r['block_id']: r['body'].get('prompt_id') for r in rows if r['body'].get('provider') != PROVIDER and r['body'].get('comfy_url', COMFY) == endpoint(self.settings)}
         if any(job not in jobs for job in order):
             raise tornado.web.HTTPError(404, reason='任务不存在或无权操作')
@@ -341,7 +341,7 @@ class HistoryHandler(PrivateHandler):
     async def get(self, project_id):
         await owned(self.projects, project_id, self.owner, 'project')
         async with self.jobs.connection() as conn:
-            rows = await (await conn.execute("SELECT * FROM entities WHERE body->>'kind'='generation' AND body->>'owner_id'=%s AND body->>'project_id'=%s ORDER BY createtime DESC", (self.owner, project_id))).fetchall()
+            rows = await (await conn.scan("SELECT * FROM entities WHERE body->>'kind'='generation' AND body->>'owner_id'=%s AND body->>'project_id'=%s ORDER BY createtime DESC", (self.owner, project_id), order_by='createtime')).fetchall()
         tracker = self.settings['progress_tracker']
         active = any(r['body'].get('provider') != PROVIDER and r['body']['status'] in ('queued', 'running', 'stopping') for r in rows)
         queue = None
@@ -370,7 +370,7 @@ class HistoryHandler(PrivateHandler):
                     continue
                 body.update(status='cancelled', elapsed_ms=time.time_ns()//1_000_000 - body.get('submitted_at', row['createtime']))
                 async with self.jobs.connection() as conn:
-                    updated = await (await conn.execute('UPDATE entities SET body=%s WHERE block_id=%s AND body=%s RETURNING *', (Jsonb(body), row['block_id'], Jsonb(original)))).fetchone()
+                    updated = await (await conn.execute('UPDATE entities SET body=%s WHERE block_id=%s AND body=%s RETURNING *', (Jsonb(body), row['block_id'], Jsonb(original)), block_id=row['block_id'])).fetchone()
                 if not updated:
                     row.update(await owned(self.jobs, row['block_id'], self.owner, 'generation'))
                 continue
@@ -408,7 +408,7 @@ class HistoryHandler(PrivateHandler):
             start, end = timestamps.get('execution_start'), timestamps.get('execution_success') or timestamps.get('execution_interrupted') or timestamps.get('execution_error')
             body['elapsed_ms'] = end - start if start is not None and end is not None else None
             async with self.jobs.connection() as conn:
-                updated = await (await conn.execute('UPDATE entities SET body=%s WHERE block_id=%s AND body=%s RETURNING *', (Jsonb(body), row['block_id'], Jsonb(original)))).fetchone()
+                updated = await (await conn.execute('UPDATE entities SET body=%s WHERE block_id=%s AND body=%s RETURNING *', (Jsonb(body), row['block_id'], Jsonb(original)), block_id=row['block_id'])).fetchone()
             if not updated:
                 row.update(await owned(self.jobs, row['block_id'], self.owner, 'generation'))
         pending_ids = [item[1] for item in sorted((queue or {}).get('queue_pending', []))]

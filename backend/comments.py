@@ -113,7 +113,7 @@ class CreateChatHandler(PrivateHandler):
         body = dict(kind='chat', owner_id=self.owner, project_id=project_id, batch_size=size,
                     head_id=None, tail_id=None, message_count=0, pack_count=0)
         async with self.projects.connection() as conn:
-            await conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s) ON CONFLICT DO NOTHING', (chat_id, Jsonb(body)))
+            await conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s) ON CONFLICT DO NOTHING', (chat_id, Jsonb(body)), block_id=chat_id)
         row = await owned(self.projects, chat_id, self.owner, 'chat')
         if row['body']['project_id'] != project_id:
             raise HTTPError(409, reason='评论区 ID 已使用')
@@ -127,11 +127,11 @@ class ChatHandler(PrivateHandler):
     async def post(self, chat_id):
         size = batch_size(self.data().get('batch_size'))
         async with self.projects.connection() as conn:
-            row = await (await conn.execute("SELECT * FROM entities WHERE block_id=%s AND body->>'owner_id'=%s AND body->>'kind'='chat' FOR UPDATE", (chat_id, self.owner))).fetchone()
+            row = await (await conn.execute("SELECT * FROM entities WHERE block_id=%s AND body->>'owner_id'=%s AND body->>'kind'='chat' FOR UPDATE", (chat_id, self.owner), block_id=chat_id)).fetchone()
             if not row:
                 raise HTTPError(404)
             # Existing packs retain their capacity. New packs use the new setting.
-            row = await (await conn.execute('UPDATE entities SET body=body || %s WHERE block_id=%s RETURNING *', (Jsonb({'batch_size':size}), chat_id))).fetchone()
+            row = await (await conn.execute('UPDATE entities SET body=body || %s WHERE block_id=%s RETURNING *', (Jsonb({'batch_size':size}), chat_id), block_id=chat_id)).fetchone()
         self.finish(row)
 
 
@@ -139,14 +139,14 @@ class ChatMessagesHandler(PrivateHandler):
     async def get(self, chat_id):
         # Hold a consistent snapshot of the head/tail and one pack during appends.
         async with self.projects.connection() as conn:
-            chat = await (await conn.execute("SELECT * FROM entities WHERE block_id=%s AND body->>'owner_id'=%s AND body->>'kind'='chat' FOR SHARE", (chat_id, self.owner))).fetchone()
+            chat = await (await conn.execute("SELECT * FROM entities WHERE block_id=%s AND body->>'owner_id'=%s AND body->>'kind'='chat' FOR SHARE", (chat_id, self.owner), block_id=chat_id)).fetchone()
             if not chat:
                 raise HTTPError(404)
             pack_id = self.get_query_argument('pack_id', None) or chat['body']['tail_id']
             pack = None
             if pack_id:
                 identifier(pack_id)
-                pack = await (await conn.execute("SELECT * FROM entities WHERE block_id=%s AND body->>'chat_id'=%s AND body->>'kind'='chat_pack' AND body->>'owner_id'=%s", (pack_id, chat_id, self.owner))).fetchone()
+                pack = await (await conn.execute("SELECT * FROM entities WHERE block_id=%s AND body->>'chat_id'=%s AND body->>'kind'='chat_pack' AND body->>'owner_id'=%s", (pack_id, chat_id, self.owner), block_id=pack_id)).fetchone()
                 if not pack:
                     raise HTTPError(404)
         self.finish({'chat':chat, 'pack':pack})
@@ -162,9 +162,9 @@ class ChatMessagesHandler(PrivateHandler):
         attachments = [await attachment(self, item, chat['body']['project_id']) for item in items]
         fingerprint = hashlib.sha256(json.dumps([fmt,content,attachments], sort_keys=True, ensure_ascii=False).encode()).hexdigest()
         async with self.projects.connection() as conn:
-            chat = await (await conn.execute("SELECT * FROM entities WHERE block_id=%s AND body->>'owner_id'=%s AND body->>'kind'='chat' FOR UPDATE", (chat_id,self.owner))).fetchone()
+            chat = await (await conn.execute("SELECT * FROM entities WHERE block_id=%s AND body->>'owner_id'=%s AND body->>'kind'='chat' FOR UPDATE", (chat_id,self.owner), block_id=chat_id)).fetchone()
             b = chat['body']
-            existing = await (await conn.execute("SELECT body FROM entities WHERE body @> %s LIMIT 1", (Jsonb({'kind':'chat_pack','chat_id':chat_id,'messages':[{'id':message_id}]}),))).fetchone()
+            existing = await (await conn.scan("SELECT body FROM entities WHERE body @> %s LIMIT 1", (Jsonb({'kind':'chat_pack','chat_id':chat_id,'messages':[{'id':message_id}]}),))).fetchone()
             if existing:
                 message = next(m for m in existing['body']['messages'] if m['id']==message_id)
                 if message['fingerprint'] != fingerprint:
@@ -173,22 +173,22 @@ class ChatMessagesHandler(PrivateHandler):
             else:
                 pack = None
                 if b['tail_id']:
-                    pack = await (await conn.execute('SELECT * FROM entities WHERE block_id=%s', (b['tail_id'],))).fetchone()
+                    pack = await (await conn.execute('SELECT * FROM entities WHERE block_id=%s', (b['tail_id'],), block_id=b['tail_id'])).fetchone()
                 if not pack or len(pack['body']['messages']) >= pack['body']['capacity']:
                     pack_id = uuid.uuid4().hex
                     pack_body = dict(kind='chat_pack', owner_id=self.owner, project_id=b['project_id'], chat_id=chat_id,
                                      prev_id=b['tail_id'], next_id=None, capacity=b['batch_size'], messages=[])
                     if pack:
-                        await conn.execute('UPDATE entities SET body=body || %s WHERE block_id=%s', (Jsonb({'next_id':pack_id}), pack['block_id']))
-                    pack = await (await conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s) RETURNING *', (pack_id,Jsonb(pack_body)))).fetchone()
+                        await conn.execute('UPDATE entities SET body=body || %s WHERE block_id=%s', (Jsonb({'next_id':pack_id}), pack['block_id']), block_id=pack['block_id'])
+                    pack = await (await conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s) RETURNING *', (pack_id,Jsonb(pack_body)), block_id=pack_id)).fetchone()
                     b['head_id'] = b['head_id'] or pack_id
                     b['tail_id'] = pack_id; b['pack_count'] += 1
                 b['message_count'] += 1
                 message = dict(id=message_id, seq=b['message_count'], author=self.user['login'], owner_id=self.owner,
                                created_at=time.time_ns()//1_000_000, format=fmt, content=content, attachments=attachments, fingerprint=fingerprint)
                 pack['body']['messages'].append(message)
-                await conn.execute('UPDATE entities SET body=%s WHERE block_id=%s', (Jsonb(pack['body']),pack['block_id']))
-                chat = await (await conn.execute('UPDATE entities SET body=%s WHERE block_id=%s RETURNING *', (Jsonb(b),chat_id))).fetchone()
+                await conn.execute('UPDATE entities SET body=%s WHERE block_id=%s', (Jsonb(pack['body']),pack['block_id']), block_id=pack['block_id'])
+                chat = await (await conn.execute('UPDATE entities SET body=%s WHERE block_id=%s RETURNING *', (Jsonb(b),chat_id), block_id=chat_id)).fetchone()
                 result = {'message':message, 'chat':chat, 'duplicate':False}
         self.finish(result)
 
@@ -202,7 +202,7 @@ class ChatMaterialsHandler(PrivateHandler):
             self.finish({'pack_id':None,'prev_id':None,'sealed':True,'materials':[]});return
         identifier(pack_id)
         async with self.projects.connection() as conn:
-            row=await (await conn.execute("SELECT body FROM entities WHERE block_id=%s AND body->>'chat_id'=%s AND body->>'kind'='chat_pack' AND body->>'owner_id'=%s",(pack_id,chat_id,self.owner))).fetchone()
+            row=await (await conn.execute("SELECT body FROM entities WHERE block_id=%s AND body->>'chat_id'=%s AND body->>'kind'='chat_pack' AND body->>'owner_id'=%s",(pack_id,chat_id,self.owner), block_id=pack_id)).fetchone()
         if not row:raise HTTPError(404)
         b=row['body'];materials=[]
         for message in b['messages']:

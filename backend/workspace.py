@@ -1,4 +1,4 @@
-"""Private projects/assets in director1; generation records in director2."""
+"""Private workspace records routed by entity UUID."""
 import asyncio
 import json
 import math
@@ -22,7 +22,7 @@ async def owned(pool, block_id, owner, kind):
     async with pool.connection() as conn:
         row = await (await conn.execute(
             "SELECT * FROM entities WHERE block_id=%s AND body->>'owner_id'=%s AND body->>'kind'=%s",
-            (block_id, owner, kind))).fetchone()
+            (block_id, owner, kind), block_id=block_id)).fetchone()
     if not row:
         raise tornado.web.HTTPError(404, reason='内容不存在或无权访问')
     return row
@@ -114,8 +114,7 @@ class PrivateHandler(BaseHandler):
         if not self.user:
             raise tornado.web.HTTPError(401, reason='请先登录')
         self.owner = self.user['user_id']
-        self.projects = self.settings['projects_pool']
-        self.jobs = self.settings['jobs_pool']
+        self.projects = self.jobs = self.settings['entities']
 
     def data(self):
         try:
@@ -130,7 +129,7 @@ class PrivateHandler(BaseHandler):
 class ProjectsHandler(PrivateHandler):
     async def get(self):
         async with self.projects.connection() as conn:
-            rows = await (await conn.execute("SELECT block_id, body - 'canvas' AS body, createtime, updatetime FROM entities WHERE body->>'kind'='project' AND body->>'owner_id'=%s ORDER BY updatetime DESC", (self.owner,))).fetchall()
+            rows = await (await conn.scan("SELECT block_id, body - 'canvas' AS body, createtime, updatetime FROM entities WHERE body->>'kind'='project' AND body->>'owner_id'=%s ORDER BY updatetime DESC", (self.owner,), order_by='updatetime')).fetchall()
         self.finish({'projects': rows})
 
     async def post(self):
@@ -183,18 +182,20 @@ async def save_project(handler, project_id=None):
             else:
                 for key in ('storage','url','provider'):card.pop(key,None)
     body.update(kind='project', owner_id=handler.owner)
+    creating = project_id is None
+    project_id = project_id or uuid.uuid4().hex
     async with handler.projects.connection() as conn:
-        if project_id:
-            row = await (await conn.execute("SELECT * FROM entities WHERE block_id=%s AND body->>'owner_id'=%s AND body->>'kind'='project' FOR UPDATE", (project_id, handler.owner))).fetchone()
+        if not creating:
+            row = await (await conn.execute("SELECT * FROM entities WHERE block_id=%s AND body->>'owner_id'=%s AND body->>'kind'='project' FOR UPDATE", (project_id, handler.owner), block_id=project_id)).fetchone()
             if not row:
                 raise tornado.web.HTTPError(404)
             if data.get('revision') != row['body'].get('revision', 1):
                 raise tornado.web.HTTPError(409, reason='此项目已在其他窗口更新，请导出草稿后重新打开')
             body['revision'] = row['body'].get('revision', 1) + 1
-            row = await (await conn.execute('UPDATE entities SET body=%s WHERE block_id=%s RETURNING *', (Jsonb(body), project_id))).fetchone()
+            row = await (await conn.execute('UPDATE entities SET body=%s WHERE block_id=%s RETURNING *', (Jsonb(body), project_id), block_id=project_id)).fetchone()
         else:
             body['revision'] = 1
-            row = await (await conn.execute('INSERT INTO entities(body) VALUES (%s) RETURNING *', (Jsonb(body),))).fetchone()
+            row = await (await conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s) RETURNING *', (project_id, Jsonb(body)), block_id=project_id)).fetchone()
     handler.finish(row)
 
 
@@ -232,7 +233,7 @@ class UploadHandler(PrivateHandler):
         await asyncio.to_thread((directory / filename).write_bytes, raw)
         body = dict(kind='asset', owner_id=self.owner, filename=filename, mime=mime, name=files[0]['filename'][:254], size=len(raw))
         async with self.projects.connection() as conn:
-            await conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s)', (asset_id, Jsonb(body)))
+            await conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s)', (asset_id, Jsonb(body)), block_id=asset_id)
         self.finish({'id': asset_id, 'url': '/api/assets/' + asset_id, 'name': body['name'], 'mime': mime, 'size': len(raw)})
 
 

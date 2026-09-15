@@ -68,7 +68,10 @@ class Pool:
     def __init__(self,rows=None):self.rows=rows or {};self.patches=[]
     @asynccontextmanager
     async def connection(self):yield self
-    async def execute(self,sql,args=()):
+    async def scan(self, *args, **kwargs):
+        return await self.execute(*args, **kwargs)
+
+    async def execute(self,sql,args=(), **routing):
         if sql.startswith('UPDATE'):
             delta,job=args;delta=delta.obj
             self.patches.append(copy.deepcopy(delta));self.rows[job]['body'].update(delta)

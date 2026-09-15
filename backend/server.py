@@ -116,7 +116,7 @@ class LogoutHandler(BaseHandler):
         self.finish({'ok': True})
 
 
-def application(config, pool, projects_pool=None, jobs_pool=None):
+def application(config, pool, entities):
     from backend.workspace import workspace_routes
     from backend.progress import ProgressTracker
     from backend.comfy_settings import load_connection, connection_url
@@ -128,7 +128,7 @@ def application(config, pool, projects_pool=None, jobs_pool=None):
         (r'/api/me', MeHandler), (r'/api/logout', LogoutHandler),
         *workspace_routes(),
         (r'/static/(.*)', tornado.web.StaticFileHandler, {'path': str(WEB)}),
-    ], storage_lock=asyncio.Lock(), inference_manager=InferenceManager(config, jobs_pool), comfy_connection=connection, comfy_lock=asyncio.Lock(), progress_tracker=ProgressTracker(connection_url(connection)), pool=pool, projects_pool=projects_pool, jobs_pool=jobs_pool, config=config,
+    ], storage_lock=asyncio.Lock(), inference_manager=InferenceManager(config, entities), comfy_connection=connection, comfy_lock=asyncio.Lock(), progress_tracker=ProgressTracker(connection_url(connection)), pool=pool, entities=entities, config=config,
        cookie_secret=config['cookie_secret'], xsrf_cookies=True,
        xsrf_cookie_kwargs={'samesite': 'Strict'}, login_attempts=OrderedDict(),
        auth_slots=asyncio.Semaphore(4), bootstrap_token=os.environ.get('DIRECTOR_BOOTSTRAP_TOKEN', ''),

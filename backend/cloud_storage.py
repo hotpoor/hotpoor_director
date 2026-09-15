@@ -295,7 +295,7 @@ class UploadGrantHandler(PrivateHandler):
         key=object_key(profile,self.owner,digest,mime,project_id)
         upload_id=hashlib.sha256(json.dumps([self.owner,project_id,fingerprint(profile),key,mime,size]).encode()).hexdigest()[:32]
         async with self.projects.connection() as conn:
-            existing=await (await conn.execute('SELECT body FROM entities WHERE block_id=%s',(upload_id,))).fetchone()
+            existing=await (await conn.execute('SELECT body FROM entities WHERE block_id=%s',(upload_id,), block_id=upload_id)).fetchone()
         if existing and existing['body'].get('status')=='completed':
             self.finish({'reused':True,'asset':upload_result(upload_id,existing['body'])});return
         try:grant=await asyncio.to_thread(sign_upload,profile,key,mime,size)
@@ -304,7 +304,7 @@ class UploadGrantHandler(PrivateHandler):
         body=dict(kind='cloud_upload',owner_id=self.owner,profile_id=profile_id,provider=profile['provider'],profile_fingerprint=fingerprint(profile),
                   key=key,url=url,mime=mime,size=size,name=name,md5=digest,project_id=project_id,status='pending',expires_at=int(time.time())+TTL)
         async with self.projects.connection() as conn:
-            await conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s) ON CONFLICT (block_id) DO NOTHING',(upload_id,Jsonb(body)))
+            await conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s) ON CONFLICT (block_id) DO NOTHING',(upload_id,Jsonb(body)), block_id=upload_id)
         # Only short-lived, single-object credentials cross into the renderer.
         self.finish(dict(upload_id=upload_id,provider=profile['provider'],expires_in=TTL,upload=grant))
 
@@ -327,7 +327,7 @@ class UploadConfirmHandler(PrivateHandler):
             body['url']=await verify_public(body['url'],body['size']) or body['url']
         except StorageError as error:raise tornado.web.HTTPError(502,reason=str(error))
         async with self.projects.connection() as conn:
-            await conn.execute("UPDATE entities SET body=body || %s WHERE block_id=%s",(Jsonb({'status':'completed','url':body['url']}),upload_id))
+            await conn.execute("UPDATE entities SET body=body || %s WHERE block_id=%s",(Jsonb({'status':'completed','url':body['url']}),upload_id), block_id=upload_id)
         self.finish(upload_result(upload_id,body))
 
 

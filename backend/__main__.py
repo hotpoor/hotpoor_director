@@ -13,6 +13,7 @@ import tornado.netutil
 from backend.auth import create_user
 from backend.config import load_config
 from backend.database import initialize, make_pool
+from backend.entities import EntityStore
 from backend.postgres import Postgres
 from backend.server import application
 
@@ -55,7 +56,7 @@ async def run(args):
             entity_pool = make_pool(config, database)
             entity_pools.append(entity_pool)
             await entity_pool.open(wait=True)
-        app = application(config, pool, *entity_pools)
+        app = application(config, pool, EntityStore(pool, entity_pools))
         await app.settings['inference_manager'].start()
         server = tornado.httpserver.HTTPServer(app, max_body_size=210 * 1024 * 1024)
         sockets = tornado.netutil.bind_sockets(args.port, '127.0.0.1')

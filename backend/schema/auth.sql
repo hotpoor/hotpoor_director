@@ -24,3 +24,8 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
     createtime bigint NOT NULL DEFAULT floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint
 );
 CREATE INDEX IF NOT EXISTS auth_sessions_expires_idx ON auth_sessions(expires_at);
+
+-- Durable decisions for atomic writes spanning both UUID shards.
+CREATE TABLE IF NOT EXISTS index_entity_commits (
+    transaction_id text PRIMARY KEY
+);

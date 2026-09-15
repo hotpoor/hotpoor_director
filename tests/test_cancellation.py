@@ -18,7 +18,10 @@ class Pool:
     async def connection(self):
         yield self
 
-    async def execute(self, sql, args):
+    async def scan(self, *args, **kwargs):
+        return await self.execute(*args, **kwargs)
+
+    async def execute(self, sql, args, **routing):
         self.statements.append((sql, args))
         return SimpleNamespace(fetchall=AsyncMock(return_value=self.rows), fetchone=AsyncMock(return_value=self.rows[0]))
 

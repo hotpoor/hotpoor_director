@@ -55,9 +55,9 @@ ComfyUI 是独立运行的推理服务。先在目标机器安装并启动兼容
 ```mermaid
 flowchart LR
     UI[Electron 中的项目列表与无限画布] --> API[本机 Tornado HTTP API]
-    API --> AUTH[(hotpoor_director：账号与会话)]
-    API --> PROJECT[(hotpoor_director1：项目与素材元信息)]
-    API --> JOB[(hotpoor_director2：生成任务与历史)]
+    API --> AUTH[(hotpoor_director：索引、认证与事务协调)]
+    API --> PROJECT[(hotpoor_director1：UUID 求余为 0)]
+    API --> JOB[(hotpoor_director2：UUID 求余为 1)]
     API --> MEDIA[工作台 media：上传素材与提取帧]
     API --> COMFY[ComfyUI：加载模型与执行工作流]
     COMFY --> OUTPUT[ComfyUI output：生成图片与视频]
@@ -73,7 +73,7 @@ flowchart LR
 | 进度 | `backend/progress.py` 通过 WebSocket 接收实际执行与采样事件；百分比反映采样阶段，不能等同于整个任务剩余时间。 |
 | 前端 | `backend/web/studio.js` 管理项目、画布、卡片、连线、历史和队列；`preview.js` 管理图片放大及复制。 |
 
-三个数据库位于同一实例，是逻辑分库，**不是读写分离或主从复制**。主库包含 `index_login`、`auth_credentials`、`auth_sessions`；另外两个库各有一张 `entities` 表，通过 JSONB 的 `kind` 区分数据。
+三个数据库位于同一实例，是逻辑分库，**不是读写分离或主从复制**。主库作为索引库，包含 `index_login`、`auth_credentials`、`auth_sessions` 和跨库事务提交决定 `index_entity_commits`；另外两个库各有一张 `entities` 表，按 `int(block_id, 16) % 2` 分配（0 → director1，1 → director2），通过 JSONB 的 `kind` 区分数据。实体查询与写入必须经过 `backend.entities.EntityStore`，不能按业务类型选库。旧数据在初始化时备份并迁移，跨库写入使用可恢复的两阶段提交；内置 PostgreSQL 自动启用 `max_prepared_transactions=32`。
 
 `block_id` / `user_id` 使用 32 位小写十六进制 UUID，无连字符。创建与更新时间为 BIGINT Unix 毫秒，数据库触发器维护更新时间。结构定义见 [backend/schema](backend/schema)。登录密码为 Argon2id 哈希；随机会话令牌以 SHA-256 保存。私有接口检查用户归属，写请求有 XSRF 校验。
 

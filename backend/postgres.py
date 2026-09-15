@@ -44,7 +44,7 @@ class Postgres:
         if self.run('pg_ctl', '-D', self.data, 'status', check=False).returncode == 0:
             return
         self.run('pg_ctl', '-D', self.data, '-l', self.config['data_dir'] / 'postgres.log',
-                 '-o', f"-h 127.0.0.1 -p {int(pg['port'])}", '-w', 'start')
+                 '-o', f"-h 127.0.0.1 -p {int(pg['port'])} -c max_prepared_transactions=32", '-w', 'start')
         self.started = True
 
     def stop(self):

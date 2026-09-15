@@ -19,6 +19,7 @@ import pytest
 from backend.auth import create_user
 from backend.config import DATABASES, connection_kwargs, load_config
 from backend.database import initialize, make_pool
+from backend.entities import shard_index
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -305,7 +306,7 @@ def test_cloud_settings_project_and_private_local_outputs(service):
         owner=client.get('/api/me').json()['user_id']
         body={'kind':'generation','provider':'service-inference','owner_id':owner,'project_id':project_id,'card_id':card['id'],
               'model':model,'type':'video','status':'completed','outputs':[{'filename':filename,'mime':'video/mp4'}]}
-        with psycopg.connect(**connection_kwargs(config,DATABASES[2])) as conn:
+        with psycopg.connect(**connection_kwargs(config,DATABASES[1 + shard_index(job_id)])) as conn:
             conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s)',(job_id,Jsonb(body)))
         output=client.get('/api/outputs/'+job_id+'/0',headers={'Range':'bytes=2-4'})
         assert output.status_code==206 and output.content==b'234'
@@ -377,16 +378,16 @@ def test_comment_packs_retry_concurrency_and_private_media(service):
         assert client.get(path+'/materials?pack_id='+prev).json()['sealed'] is True
         owner=client.get('/api/me').json()['user_id']
         output_id=uuid.uuid4().hex;cloud_id=uuid.uuid4().hex
-        with psycopg.connect(**connection_kwargs(config,DATABASES[2])) as conn:
+        with psycopg.connect(**connection_kwargs(config,DATABASES[1 + shard_index(output_id)])) as conn:
             conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s)',(output_id,Jsonb(dict(kind='generation',owner_id=owner,project_id=pid,status='completed',type='video',model='fixture',outputs=[{'filename':'fixture.mp4'}]))))
-        with psycopg.connect(**connection_kwargs(config,DATABASES[1])) as conn:
+        with psycopg.connect(**connection_kwargs(config,DATABASES[1 + shard_index(cloud_id)])) as conn:
             conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s)',(cloud_id,Jsonb(dict(kind='cloud_upload',owner_id=owner,project_id=pid,status='completed',mime='image/png',name='cloud.png',url='https://example.com/cloud.png'))))
         r=client.post(path+'/messages',json=dict(id=uuid.uuid4().hex,attachments=[dict(source='output',id=output_id,index=0),dict(source='cloud',id=cloud_id)]),headers=headers)
         assert r.status_code==200,r.text
         assert r.json()['message']['attachments'][0]['url']==f'/api/outputs/{output_id}/0'
         assert client.post(path+'/messages',json=dict(id=uuid.uuid4().hex,attachments=[dict(source='output',id=output_id,index=1)]),headers=headers).status_code==400
         foreign=uuid.uuid4().hex
-        with psycopg.connect(**connection_kwargs(config,DATABASES[1])) as conn:
+        with psycopg.connect(**connection_kwargs(config,DATABASES[1 + shard_index(foreign)])) as conn:
             conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s)',(foreign,Jsonb(dict(kind='chat',owner_id='0'*32,project_id=pid))))
         assert client.get('/api/chats/'+foreign).status_code==404
         assert client.get('/api/chats/'+foreign+'/messages').status_code==404
@@ -402,3 +403,143 @@ def test_comment_packs_retry_concurrency_and_private_media(service):
         assert client.post('/api/projects/'+other_project['block_id'],json=other_body,headers=headers).status_code==400
     with httpx.Client(base_url=url,trust_env=False) as anonymous:
         assert anonymous.get(path+'/messages').status_code==401
+
+
+@contextmanager
+def entity_store(config):
+    from backend.entities import EntityStore
+
+    async def run(callback):
+        pools = [make_pool(config, name) for name in DATABASES]
+        try:
+            for pool in pools:
+                await pool.open(wait=True)
+            return await callback(EntityStore(pools[0], pools[1:]))
+        finally:
+            for pool in pools:
+                await pool.close()
+    yield lambda callback: asyncio.run(run(callback))
+
+
+def test_uuid_routing_cross_shard_order_and_rollback(service):
+    import uuid
+    from psycopg.types.json import Jsonb
+    config, _ = service
+    ids = [uuid.uuid4().hex[:-1] + digit for digit in ('0', '1')]
+
+    async def exercise(store):
+        async with store.connection() as conn:
+            for number, block_id in enumerate(ids):
+                await conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s)',
+                                   (block_id, Jsonb({'kind': 'shard_test', 'number': number})), block_id=block_id)
+        async with store.connection() as conn:
+            rows = await (await conn.scan('SELECT * FROM entities WHERE block_id=ANY(%s) ORDER BY createtime DESC', (ids,), order_by='createtime')).fetchall()
+            assert {row['block_id'] for row in rows} == set(ids)
+            assert rows == sorted(rows, key=lambda r: (r['createtime'], r['block_id']), reverse=True)
+        with pytest.raises(ValueError, match='abort both shards'):
+            async with store.connection() as conn:
+                for block_id in ids:
+                    await conn.execute("UPDATE entities SET body=body || '{\"changed\":true}'::jsonb WHERE block_id=%s", (block_id,), block_id=block_id)
+                raise ValueError('abort both shards')
+    with entity_store(config) as run:
+        run(exercise)
+    for number, name in enumerate(DATABASES[1:]):
+        with psycopg.connect(**connection_kwargs(config, name)) as conn:
+            rows = conn.execute('SELECT block_id,body FROM entities WHERE block_id=ANY(%s)', (ids,)).fetchall()
+            assert len(rows) == 1 and rows[0][0] == ids[number]
+            assert 'changed' not in rows[0][1]
+            with pytest.raises(psycopg.errors.CheckViolation):
+                conn.execute('INSERT INTO entities(block_id) VALUES (%s)', (ids[1 - number],))
+
+
+@pytest.mark.parametrize('startup', [False, True])
+@pytest.mark.parametrize('commit_decided,first_committed', [(False, False), (True, False), (True, True)])
+def test_prepared_entity_transaction_recovery(service, commit_decided, first_committed, startup):
+    import uuid
+    from backend.entities import PREFIX
+    config, _ = service
+    transaction = PREFIX + uuid.uuid4().hex
+    ids = [uuid.uuid4().hex[:-1] + digit for digit in ('0', '1')]
+    # Simulate process death after preparing both shards, before or after the
+    # durable commit decision in the index database.
+    for number, name in enumerate(DATABASES[1:]):
+        conn = psycopg.connect(**connection_kwargs(config, name))
+        try:
+            conn.tpc_begin(transaction + '_' + str(number))
+            conn.execute('INSERT INTO entities(block_id) VALUES (%s)', (ids[number],))
+            conn.tpc_prepare()
+        finally:
+            conn.close()
+    if commit_decided:
+        with psycopg.connect(**connection_kwargs(config, DATABASES[0])) as conn:
+            conn.execute('INSERT INTO index_entity_commits(transaction_id) VALUES (%s)', (transaction,))
+
+    if first_committed:
+        from psycopg import sql
+        with psycopg.connect(**connection_kwargs(config, DATABASES[1]), autocommit=True) as conn:
+            conn.execute(sql.SQL('COMMIT PREPARED {}').format(sql.Literal(transaction + '_0')))
+    if startup:
+        initialize(config)
+
+    async def trigger_recovery(store):
+        async with store.connection() as conn:
+            rows = await (await conn.scan('SELECT * FROM entities WHERE block_id=ANY(%s)', (ids,))).fetchall()
+            assert len(rows) == (2 if commit_decided else 0)
+    with entity_store(config) as run:
+        run(trigger_recovery)
+    with psycopg.connect(**connection_kwargs(config, DATABASES[0])) as conn:
+        assert conn.execute('SELECT 1 FROM pg_prepared_xacts WHERE gid=ANY(%s)', ([transaction + '_0', transaction + '_1'],)).fetchone() is None
+        assert conn.execute('SELECT 1 FROM index_entity_commits WHERE transaction_id=%s', (transaction,)).fetchone() is None
+
+
+def test_legacy_shard_migration_preserves_body_timestamps_and_is_repeatable(service):
+    import uuid
+    from psycopg.types.json import Jsonb
+    config, _ = service
+    ids = [uuid.uuid4().hex[:-1] + digit for digit in ('0', '1')]
+    body = {'kind': 'legacy_migration', 'nested': {'chat_id': ids[1], 'references': ids}}
+    for number, name in enumerate(DATABASES[1:]):
+        with psycopg.connect(**connection_kwargs(config, name, admin=True)) as conn:
+            conn.execute('ALTER TABLE entities DROP CONSTRAINT entities_uuid_shard')
+            conn.execute('INSERT INTO entities(block_id,body,createtime,updatetime) VALUES (%s,%s,123,456)', (ids[1 - number], Jsonb(body)))
+    initialize(config)
+    initialize(config)
+    for number, name in enumerate(DATABASES[1:]):
+        with psycopg.connect(**connection_kwargs(config, name)) as conn:
+            rows = conn.execute('SELECT block_id,body,createtime,updatetime FROM entities WHERE block_id=ANY(%s)', (ids,)).fetchall()
+            assert rows == [(ids[number], body, 123, 456)]
+    backups = list((config['data_dir'] / 'backups').glob('uuid-shards-*.jsonl'))
+    assert backups
+    saved = [json.loads(line) for p in backups for line in p.read_text().splitlines()]
+    assert set(ids) <= {row['block_id'] for row in saved}
+
+
+@pytest.mark.parametrize('conflicting', [False, True])
+def test_legacy_duplicate_is_verified_before_source_removal(service, conflicting):
+    import uuid
+    from psycopg.types.json import Jsonb
+    config, _ = service
+    block_id = uuid.uuid4().hex[:-1] + '0'
+    for number, name in enumerate(DATABASES[1:]):
+        with psycopg.connect(**connection_kwargs(config, name, admin=True)) as conn:
+            if number == 1:
+                conn.execute('ALTER TABLE entities DROP CONSTRAINT entities_uuid_shard')
+            conn.execute('INSERT INTO entities(block_id,body,createtime,updatetime) VALUES (%s,%s,123,456)',
+                         (block_id, Jsonb({'kind': 'duplicate_test', 'value': number if conflicting else 0})))
+    try:
+        if conflicting:
+            with pytest.raises(RuntimeError, match='Conflicting entity'):
+                initialize(config)
+        else:
+            initialize(config)
+        for number, name in enumerate(DATABASES[1:]):
+            with psycopg.connect(**connection_kwargs(config, name)) as conn:
+                row = conn.execute('SELECT body FROM entities WHERE block_id=%s', (block_id,)).fetchone()
+                if conflicting or number == 0:
+                    assert row[0]['value'] == (number if conflicting else 0)
+                else:
+                    assert row is None
+    finally:
+        with psycopg.connect(**connection_kwargs(config, DATABASES[2], admin=True)) as conn:
+            conn.execute('DELETE FROM entities WHERE block_id=%s', (block_id,))
+        initialize(config)

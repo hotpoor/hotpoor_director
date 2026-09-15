@@ -44,7 +44,10 @@ class Pool:
     async def connection(self):
         yield self
 
-    async def execute(self, sql):
+    async def scan(self, *args, **kwargs):
+        return await self.execute(*args, **kwargs)
+
+    async def execute(self, sql, **routing):
         return SimpleNamespace(fetchone=AsyncMock(return_value={'active':1} if self.active else None))
 
 
