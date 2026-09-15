@@ -243,7 +243,7 @@ class TimelineHandler(PrivateHandler):
             events = await (await conn.scan("SELECT * FROM entities WHERE body->>'owner_id'=%s AND body->>'project_id'=%s AND body->>'kind'='change_event'" + condition + " ORDER BY createtime DESC,block_id DESC LIMIT 21", params, order_by='createtime')).fetchall()
         page = events[:20]
         self.finish({'events': [{'id': r['block_id'], 'at': r['createtime'], 'entity_id': r['body']['entity_id'],
-            'operation': r['body']['operation'], 'changes': protocol.diff(protocol.portable(r['body']['before'], strict=False) if r['body']['before'] else {},
+            'operation': r['body']['operation'], 'actor': r['body'].get('actor'), 'changes': protocol.diff(protocol.portable(r['body']['before'], strict=False) if r['body']['before'] else {},
              protocol.portable(r['body']['after'], strict=False) if r['body']['after'] else {})} for r in page],
              'next_cursor': str(page[-1]['createtime']) + ':' + page[-1]['block_id'] if len(events) > 20 else None})
 

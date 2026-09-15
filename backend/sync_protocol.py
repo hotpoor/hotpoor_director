@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 VERSION = 1
 ID = re.compile(r'^[0-9a-f]{32}$')
 KINDS = {'project', 'asset', 'cloud_upload', 'generation', 'chat', 'chat_pack'}
-PRIVATE = {'imported', 'owner_id', 'filename', 'comfy_url', 'prompt_id', 'provider_task_id', 'key_id',
+PRIVATE = {'credential_owner', 'created_by', 'imported', 'owner_id', 'filename', 'comfy_url', 'prompt_id', 'provider_task_id', 'key_id',
            'remote_task_id', 'profile_id', 'profile_fingerprint', 'key', 'expires_at', 'cloud_versions', 'revision'}
 IDENTITIES = {'id', 'block_id', 'project_id', 'card_id', 'asset_id', 'chat_id', 'job_id',
               'pack_id', 'prev_block_id', 'next_block_id', 'first_pack_id', 'last_pack_id',

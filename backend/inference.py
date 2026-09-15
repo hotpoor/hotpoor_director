@@ -153,7 +153,9 @@ class InferenceSettingsHandler(PrivateHandler):
             if action in ('select','refresh','delete') and not profile:raise tornado.web.HTTPError(404,reason='Key 配置不存在')
             if action=='delete' or action=='save' and profile and data.get('api_key') and data['api_key'].strip()!=profile['api_key']:
                 async with self.jobs.connection() as conn:
-                    busy=await (await conn.scan("SELECT 1 FROM entities WHERE body->>'provider'=%s AND body->>'status' IN ('submitting','queued','running') AND COALESCE(body->>'credential_id','legacy')=%s LIMIT 1",(PROVIDER,profile['id']))).fetchone()
+                    owner_filter = " AND COALESCE(body->>'credential_owner',body->>'owner_id')=%s" if config.get('cloud_owner') else ''
+                    params = (PROVIDER,profile['id']) + ((config['cloud_owner'],) if owner_filter else ())
+                    busy=await (await conn.scan("SELECT 1 FROM entities WHERE body->>'provider'=%s AND body->>'status' IN ('submitting','queued','running') AND COALESCE(body->>'credential_id','legacy')=%s" + owner_filter + " LIMIT 1",params)).fetchone()
                 if busy:raise tornado.web.HTTPError(409,reason='此 Key 仍有生成任务，请完成后再修改密钥或删除；可以切换其他 Key')
             try:
                 if action=='delete':
@@ -350,7 +352,7 @@ class InferenceManager:
         async with self.pool.connection() as conn:
             rows = await (await conn.scan("SELECT * FROM entities WHERE body->>'provider'=%s AND body->>'status' IN ('submitting','queued','running')", (PROVIDER,))).fetchall()
         for row in rows:
-            if self.config.get('cloud_owner') and row['body'].get('owner_id') != self.config['cloud_owner']:
+            if self.config.get('cloud_owner') and row['body'].get('credential_owner', row['body'].get('owner_id')) != self.config['cloud_owner']:
                 continue
             if row['body'].get('remote_task_id'):
                 self.launch(row['block_id'], row['body'])
@@ -500,7 +502,7 @@ async def submit(handler, project_id, data):
         fields=('prompt','size','resolution','ratio','duration','generate_audio','image_urls','video_urls','audio_urls','first_frame','last_frame','output_format','optimize_mode','watermark','max_images')
         params={k:data[k] for k in fields if k in data}
         params.update({k:payload[k] for k in ('size','resolution','ratio','duration','generate_audio') if k in payload})
-        body=dict(provider=PROVIDER,kind='generation',credential_id=credential['id'],credential_name=credential['name'],owner_id=handler.owner,project_id=project_id,card_id=card['id'],
+        body=dict(provider=PROVIDER,kind='generation',credential_owner=getattr(handler,'user',{'user_id':handler.owner})['user_id'],created_by=getattr(handler,'user',{'user_id':handler.owner}),credential_id=credential['id'],credential_name=credential['name'],owner_id=handler.owner,project_id=project_id,card_id=card['id'],
                   type=card['type'],model=model['id'],mode=data['mode'],params=params,refs=[],ref_info={},
                   status='submitting',outputs=[],usage={'tokens':None},submitted_at=time.time_ns()//1_000_000)
         async with handler.jobs.connection() as conn:

@@ -108,12 +108,32 @@ def validate_project(data):
 
 
 class PrivateHandler(BaseHandler):
+    @property
+    def settings(self):
+        settings = super().settings
+        actor_id = self.request.headers.get('X-Director-Actor', '')
+        actor = settings.get('collaboration_actors', {}).get(actor_id)
+        if actor and (self.request.method == 'POST' or self.request.path == '/api/models'):
+            return {**settings, 'config': actor['config'], 'inference_manager': actor['manager']}
+        return settings
+
+    def on_finish(self):
+        if hasattr(self, '_actor_token'):
+            from backend.entities import actor_context
+            actor_context.reset(self._actor_token)
+
+
     async def prepare(self):
         super().prepare()
         self.user = await self.session_user()
         if not self.user:
             raise tornado.web.HTTPError(401, reason='请先登录')
         self.owner = self.user['user_id']
+        actor = self.application.settings.get('collaboration_actors', {}).get(self.request.headers.get('X-Director-Actor', ''))
+        if actor: self.user = actor['user']
+        self.collaboration_project = self.request.headers.get('X-Director-Project')
+        from backend.entities import actor_context
+        self._actor_token = actor_context.set({'user_id': self.user['user_id'], 'login': self.user['login']})
         self.projects = self.jobs = self.settings['entities']
 
     def data(self):
@@ -246,7 +266,7 @@ class CloudAssetHandler(PrivateHandler):
         if body.get('status') != 'completed' or not body.get('url', '').startswith('https://'):
             raise tornado.web.HTTPError(400, reason='请先完成 HTTPS 云存储上传确认')
         identifier = uuid.uuid5(uuid.NAMESPACE_URL, 'cloud-asset:' + self.owner + ':' + upload['block_id']).hex
-        value = dict(kind='asset', owner_id=self.owner, remote_url=body['url'], name=body['name'], mime=body['mime'], size=body['size'])
+        value = dict(kind='asset', owner_id=self.owner, project_id=body.get('project_id'), created_by=self.user, remote_url=body['url'], name=body['name'], mime=body['mime'], size=body['size'])
         async with self.projects.connection() as conn:
             await conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s) ON CONFLICT DO NOTHING', (identifier, Jsonb(value)), block_id=identifier)
         self.finish({'id': identifier, 'url': '/api/assets/' + identifier, 'name': body['name'], 'mime': body['mime'], 'size': body['size']})

@@ -21,6 +21,7 @@
   function tell(text) { $('#studio-message').textContent = text; $('#studio-message').hidden = !text; }
   function saveLabel(text) { $('#save-status').textContent = text; }
   function changed() {
+    if(state.project?.permission&&!['owner','editor','admin'].includes(state.project.permission.role)){saveLabel('只读画布 · 本地浏览调整不保存');return;}
     state.version++;
     window.dispatchEvent(new Event('director-changed'));
     saveLabel('未保存…');
@@ -64,7 +65,7 @@
     const term = $('#project-search').value.toLowerCase();
     const list = state.projects.filter(p => [p.body.title,p.body.subtitle,p.body.description].some(x => x.toLowerCase().includes(term)));
     $('#project-count').textContent = String(state.projects.length).padStart(2,'0');
-    $('#project-list').innerHTML = list.length ? list.map(p => `<button class="project-tile" data-project="${p.block_id}"><div class="project-cover">${p.body.covers.length ? `<img src="/api/assets/${p.body.covers[0]}" alt="${esc(p.body.title)} 的封面" loading="lazy">` : '<span>◧<small>UNTITLED FRAME / 等待你的第一帧</small></span>'}<b>${p.body.covers.length ? p.body.covers.length + ' 张封面' : 'DIRECTOR PROJECT'}</b></div><div class="project-copy"><h3>${esc(p.body.title)}</h3><p>${esc(p.body.subtitle || '为下一个故事留白')}</p><div class="project-description">${esc(p.body.description)}</div><small>创建 ${date(p.createtime)}<br>更新 ${date(p.updatetime)}</small><code>${p.block_id}</code></div></button>`).join('') : '<div class="empty-projects"><span>01 / 第一部作品</span><h2>你的创作现场，尚未开场。</h2><p>创建项目，收集灵感，让画面和故事一起生长。</p><button id="empty-create">＋ 创建第一个项目</button></div>';
+    $('#project-list').innerHTML = list.length ? list.map(p => `<button class="project-tile" data-project="${p.block_id}"><div class="project-cover">${p.body.covers.length ? `<img src="/api/assets/${p.body.covers[0]}" alt="${esc(p.body.title)} 的封面" loading="lazy">` : '<span>◧<small>UNTITLED FRAME / 等待你的第一帧</small></span>'}<b>${p.body.covers.length ? p.body.covers.length + ' 张封面' : 'DIRECTOR PROJECT'}</b></div><div class="project-copy"><h3>${esc(p.body.title)}</h3><p>${esc(p.body.subtitle || '为下一个故事留白')}</p><div class="project-description">${esc(p.body.description)}</div><small>${p.permission?'共享项目 · '+esc(({viewer:'只读',commenter:'可评论',editor:'可编辑',admin:'管理员'})[p.permission.role]||'')+'<br>':''}创建 ${date(p.createtime)}<br>更新 ${date(p.updatetime)}</small><code>${p.block_id}</code></div></button>`).join('') : '<div class="empty-projects"><span>01 / 第一部作品</span><h2>你的创作现场，尚未开场。</h2><p>创建项目，收集灵感，让画面和故事一起生长。</p><button id="empty-create">＋ 创建第一个项目</button></div>';
   }
   async function openProject(id) {
     if(importing||window.directorComments?.busy())throw Error('请等待素材上传或评论发送完成');
@@ -72,7 +73,7 @@
     const project = await request('/api/projects/' + id);
     state.project = project; state.version = 0; state.saved = 0; state.conflict = false; state.history = [];
     $('#dashboard').hidden = true; $('#editor').hidden = false; $('#project-title').textContent = project.body.title;
-    saveLabel('已保存'); tell(''); renderCanvas(); renderQueue(); await pollHistory();
+    saveLabel('已保存'); tell(''); renderCanvas(); renderQueue(); window.dispatchEvent(new Event('director-project-opened')); await pollHistory();
   }
   function openDialog(edit = false) {
     editing = edit; const body = edit ? state.project.body : {title:'',subtitle:'',description:'',covers:[]};

@@ -1,5 +1,8 @@
 """UUID-routed entities; the main database coordinates cross-shard commits."""
 from contextlib import AsyncExitStack, asynccontextmanager
+from contextvars import ContextVar
+
+actor_context = ContextVar("director_actor", default=None)
 import re
 import uuid
 import time
@@ -126,7 +129,7 @@ class EntityTransaction:
                 await conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s)', (event_id, Jsonb({
                     'kind': 'change_event', 'owner_id': body['owner_id'], 'entity_id': block_id,
                     'project_id': block_id if body['kind'] == 'project' else body.get('project_id'),
-                    'recorded_at': time.time_ns() // 1_000_000,
+                    'recorded_at': time.time_ns() // 1_000_000, 'actor': actor_context.get() or body.get('created_by'),
                     'operation': 'create' if old is None else 'delete' if new is None else 'update',
                     'before': old, 'after': new})))
         return result

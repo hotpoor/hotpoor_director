@@ -30,7 +30,7 @@ def gateway(service):
     with psycopg.connect(host=pg['host'], port=pg['port'], user=pg['admin_user'], password=pg['admin_password'], dbname='postgres', autocommit=True) as conn:
         conn.execute('CREATE ROLE xialiwei_app')
     import os
-    for migration in ('init.psql', 'auth.psql', 'director.psql'):
+    for migration in ('init.psql', 'auth.psql', 'director.psql', 'director-collaboration.psql'):
         subprocess.run([str(config['pg_bin'] / 'psql'), '-h', pg['host'], '-p', str(pg['port']), '-U', pg['admin_user'],
             '-d', 'postgres', '-f', str(API_ROOT / 'sql' / migration)], env={**os.environ, 'PGPASSWORD': pg['admin_password']},
             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, check=True)
@@ -280,3 +280,85 @@ def test_cloud_generation_result_never_writes_media(tmp_path, monkeypatch):
     with pytest.raises(ValueError):
         asyncio.run(InferenceManager.store_outputs(manager, uuid.uuid4().hex, {'type': 'image'}, [{'b64_json': base64.b64encode(raw).decode()}]))
     assert list(tmp_path.iterdir()) == []
+
+
+def test_project_membership_roles_links_and_revocation(gateway):
+    c, app, users = gateway
+    login(c, users[0]); project=c.post('/hotpoor/director/api/projects',json={'title':'共享测试'}).json(); pid=project['block_id']
+    route='/hotpoor/director/api/projects/'+pid; manage='/hotpoor/director/api/collaboration/'+pid
+    chat_id=uuid.uuid4().hex
+    assert c.post(route+'/chats',json={'chat_id':chat_id}).status_code==200
+    login(c,users[1]);assert c.get(route).status_code==404
+    login(c,users[0])
+    def invite(role, generate=False):
+        login(c,users[0]);response=c.post(manage+'/members',json={'login':users[1]['login'],'role':role,'can_generate':generate});assert response.status_code==200,response.text;login(c,users[1])
+    invite('viewer')
+    shared=c.get(route);assert shared.status_code==200,shared.text
+    assert shared.json()['permission']['role']=='viewer'
+    assert any(p['block_id']==pid for p in c.get('/hotpoor/director/api/projects').json()['projects'])
+    body=shared.json()['body'];body['title']='不可写'
+    assert c.post(route,json=body).status_code==403
+    assert c.post('/hotpoor/director/api/chats/'+chat_id+'/messages',json={'id':uuid.uuid4().hex,'format':'text','content':'禁止','attachments':[]}).status_code==403
+    assert c.post(manage+'/members',json={'login':users[0]['login'],'role':'admin'}).status_code==403
+    invite('commenter')
+    comment=c.post('/hotpoor/director/api/chats/'+chat_id+'/messages',json={'id':uuid.uuid4().hex,'format':'text','content':'成员评论','attachments':[]});assert comment.status_code==200,comment.text
+    assert c.post(route,json=body).status_code==403
+    invite('editor')
+    body=c.get(route).json()['body'];body['title']='成员已编辑'
+    updated=c.post(route,json=body);assert updated.status_code==200,updated.text
+    assert c.post(route,json=body).status_code==409  # Existing revision conflict protection remains.
+    c.headers['X-Director-Project']=pid
+    events=c.get('/hotpoor/director/api/sync/projects/'+pid+'/timeline');assert events.status_code==200,events.text
+    assert any(e.get('actor',{}).get('user_id')==users[1]['user_id'] for e in events.json()['events'])
+    assert c.post(route+'/generate',json={'model':'si:dola-seedream-5-0-pro-260628'}).status_code==403
+    login(c,users[0]);private=c.post('/hotpoor/director/api/projects',json={'title':'未分享'}).json()
+    login(c,users[1]);assert c.get('/hotpoor/director/api/projects/'+private['block_id']).status_code==404
+    from psycopg.types.json import Jsonb
+    hidden_asset=uuid.uuid4().hex
+    with app.db('xialiwei_api'+str(int(hidden_asset,16)%2+1)) as db:
+        db.execute('INSERT INTO director.entities(block_id,body) VALUES(%s,%s)',(hidden_asset,Jsonb({'kind':'asset','owner_id':users[0]['user_id'],'project_id':private['block_id'],'remote_url':'https://cdn.example.com/private.png','mime':'image/png','name':'private.png','size':10})))
+    c.headers['X-Director-Project']=pid
+    assert c.get('/hotpoor/director/api/assets/'+hidden_asset).status_code==404
+    injected=c.get(route).json()['body'];injected['covers']=[hidden_asset]
+    assert c.post(route,json=injected).status_code==403
+    login(c,users[0]);assert c.post(manage+'/members/'+users[1]['user_id'],json={}).status_code==200
+    link=c.post(manage+'/links',json={'label':'审阅','expires_at':None}).json()
+    login(c,users[1]);assert c.get(route).status_code==404
+    joined=c.post('/hotpoor/director/api/collaboration/join',json={'token':link['token']});assert joined.status_code==200,joined.text
+    assert c.get(route).json()['permission']['role']=='viewer'
+    login(c,users[0]);assert c.post(manage+'/links/'+link['id'],json={}).status_code==200
+    login(c,users[1]);assert c.get(route).status_code==404
+    assert c.post('/hotpoor/director/api/collaboration/join',json={'token':link['token']}).status_code==404
+    login(c,users[0]); expiring=c.post(manage+'/links',json={'label':'短期分享','expires_at':app.now()+60000}).json()
+    login(c,users[1]);assert c.post('/hotpoor/director/api/collaboration/join',json={'token':expiring['token']}).status_code==200
+    with app.db() as db:db.execute('UPDATE director.share_links SET expires_at=%s WHERE id=%s',(app.now()-1,expiring['id']))
+    assert c.get(route).status_code==404
+    assert not any(p['block_id']==pid for p in c.get('/hotpoor/director/api/projects').json()['projects'])
+
+
+def test_editor_generation_uses_only_own_credentials(gateway,monkeypatch):
+    from unittest.mock import Mock
+    import director
+    from backend import inference,cloud_storage
+    c,app,users=gateway;model='si:dola-seedream-5-0-pro-260628';card_id=uuid.uuid4().hex
+    login(c,users[0]);p=c.post('/hotpoor/director/api/projects',json={'title':'独立 AK','canvas':{'viewport':{'x':0,'y':0,'zoom':1},'cards':[{'id':card_id,'type':'image','mode':'text','x':0,'y':0,'w':500,'h':600}]}}).json();pid=p['block_id']
+    route='/hotpoor/director/api/projects/'+pid
+    assert c.post('/hotpoor/director/api/collaboration/'+pid+'/members',json={'login':users[1]['login'],'role':'editor','can_generate':True}).status_code==200
+    login(c,users[1]);c.get(route)
+    owner=director.runtime.apps[users[0]['user_id']]['app'].settings
+    editor=director.runtime.apps[users[1]['user_id']]['app'].settings
+    def keys(config,name):
+        inference.save_keys(config,{'active_key_id':name,'keys':[{'id':name,'name':name,'api_key':name+'-secret','models':[{'id':inference.BY_ID[model]['remote_model'],'type':'image'}]}]})
+    keys(owner['config'],'owner-key')
+    monkeypatch.setattr(cloud_storage,'load',lambda config:{'active_profile_id':'storage','profiles':{'storage':{'domain':'https://cdn.example.com'}}})
+    payload={'request_id':uuid.uuid4().hex,'card_id':card_id,'model':model,'mode':'text','prompt':'使用自己的凭据'}
+    missing=c.post(route+'/generate',json=payload);assert missing.status_code==400 and 'API Key' in missing.text
+    keys(editor['config'],'editor-key')
+    settings=c.get('/hotpoor/director/api/settings/service-inference');assert 'editor-key' in settings.text and 'owner-key' not in settings.text
+    launch=Mock();monkeypatch.setattr(editor['inference_manager'],'launch',launch)
+    generated=c.post(route+'/generate',json=payload);assert generated.status_code==200,generated.text
+    body=generated.json()['body'];assert body['credential_id']=='editor-key' and body['credential_owner']==users[1]['user_id']
+    assert body['owner_id']==users[0]['user_id'] and body['created_by']['user_id']==users[1]['user_id']
+    launch.assert_called_once();assert 'secret' not in generated.text
+    with app.db('xialiwei_api'+str(int(payload['request_id'],16)%2+1)) as db:
+        db.execute("UPDATE director.entities SET body=body || %s WHERE block_id=%s",(json.dumps({'status':'failed'}),payload['request_id']))

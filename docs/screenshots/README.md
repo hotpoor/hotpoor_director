@@ -42,3 +42,7 @@ Windows 对应入口为 `node_modules/.bin/electron.cmd`。两个脚本各自创
 ## 双向同步截图
 
 `cloud-sync-diff.png` 由 `electron scripts/smoke-sync.cjs --readme` 采集，展示多目标配置、AK 不回显、三方差异、冲突提示和拉回副本入口。使用独立数据库，云端差异为界面测试样例；完整双端流程另由 `tests/test_cloud_gateway.py` 验证。
+
+## 分享与成员截图
+
+`collaboration.png` 来自 `electron scripts/smoke-collaboration.cjs`，使用独立数据库和模拟成员接口，展示角色 / 生成许可、成员自己的 AK 入口和可选期限只读链接。账号授权、成员独立凭据、到期 / 撤销和跨项目隔离由 `tests/test_cloud_gateway.py` 验证。

@@ -76,6 +76,17 @@
       "sha256": "3db9f14a839290fcfacb13d58240ec51b3ccf19d72aa052293646a1c19de61d7",
       "environment": "Actual Electron UI + disposable PostgreSQL; remote diff fixture; no real credentials or production data",
       "ui_revision": "working tree: cloud sync implementation on 2026-09-15"
+    },
+    {
+      "file": "collaboration.png",
+      "source_script": "scripts/smoke-collaboration.cjs",
+      "source_output": "collaboration.png",
+      "width": 2880,
+      "height": 1950,
+      "bytes": 240669,
+      "sha256": "a92a874eb294dadd609f6b756ae49c61dee527a6a274ed2079ff762ea4e57cbd",
+      "environment": "Actual Electron UI and disposable PostgreSQL; membership API fixtures, no real keys or invitations",
+      "ui_revision": "working tree: project collaboration on 2026-09-15"
     }
   ]
 }
