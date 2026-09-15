@@ -118,6 +118,7 @@ with av.open(sys.argv[1],'w') as c:
     await js("document.querySelector('.review-start').value=.2;document.querySelector('.review-end').value=.55;document.querySelector('.review-play').click()");
     await wait("document.querySelector('.review-video').paused && document.querySelector('.review-video').currentTime>=.54");
     if(await js("document.querySelector('.review-video').currentTime")>.61)throw Error('Clip exceeded end');
+    fs.writeFileSync(path.join(directory,'video-clip.png'),(await win.webContents.capturePage()).toPNG());
     await js("document.querySelector('.review-save').click();writeComment('text','0.20 到 0.55 秒需要修改。');document.querySelector('.chat-composer').requestSubmit()");
     await wait("document.querySelector('.chat-count').textContent==='29 条 · 2 包' && document.querySelector('.chat-messages video[data-review-start]')");
     await js("document.querySelector('.chat-messages video[data-review-start]').closest('figure').querySelector('[data-review-view]').click()");
@@ -140,6 +141,20 @@ with av.open(sys.argv[1],'w') as c:
       if(!await js(`(()=>{const img=resizeBox.querySelector('.review-image-inline img'),svg=resizeBox.querySelector('svg');if(!img)return true;const a=img.getBoundingClientRect(),b=svg.getBoundingClientRect();return Math.abs(a.width-b.width)<1&&Math.abs(a.height-b.height)<1&&Math.abs(a.width/a.height-img.naturalWidth/img.naturalHeight)<.01;})()`))throw Error('Resized SVG misaligned');
       await js(`resizeBox.querySelector('.review-size-handle').dispatchEvent(new MouseEvent('dblclick',{bubbles:true}));`);
       if(await js('resizeBox.classList.contains("review-custom-size")'))throw Error('Preview reset failed');
+    }
+    if(process.argv.includes('--readme')){
+      win.setContentSize(1500,1000);
+      await js("document.querySelector('#fit-cards').click()");
+      await wait("document.querySelector('#save-status').textContent.startsWith('已自动保存')");
+      await js(`(async()=>{const api=async(path,body)=>{const r=await fetch(path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json','X-XSRFToken':decodeURIComponent(document.cookie.split('; ').find(x=>x.startsWith('_xsrf=')).slice(6))},body:body?JSON.stringify(body):undefined});const d=await r.json();if(!r.ok)throw Error(JSON.stringify(d));return d;};const id=(await api('/api/projects')).projects[0].block_id,p=await api('/api/projects/'+id);const order={asset:0,chat:1,image:2,video:2};p.body.canvas.cards.sort((a,b)=>order[a.type]-order[b.type]);p.body.canvas.cards.forEach((c,i)=>Object.assign(c,{x:i*540,y:[30,150,0][i],w:420,h:720}));await api('/api/projects/'+id,p.body);})()`);
+      await win.reload();await wait("!document.querySelector('#dashboard').hidden && !!document.querySelector('[data-project]')");
+      await js("document.querySelector('[data-project]').click()");
+      await wait("!document.querySelector('#editor').hidden && document.querySelectorAll('.connection-hit').length===2 && document.querySelector('.chat-messages video[data-review-start]')");
+      await js("document.querySelector('#fit-cards').click()");
+      await wait("document.querySelector('#save-status').textContent.startsWith('已自动保存')");
+      await js("(()=>{const c=document.querySelector('.generation-card:not(.chat-card):not(.asset-card)'),content=c.querySelector('.card-content'),target=c.querySelector('.imported-library');content.scrollTop+=target.getBoundingClientRect().top-content.getBoundingClientRect().top;})()");
+      await new Promise(r=>setTimeout(r,350));
+      fs.writeFileSync(path.join(directory,'reference-connections.png'),(await win.webContents.capturePage()).toPNG());
     }
     await js("document.querySelector('.chat-card').style.height='520px'");
     fs.writeFileSync(path.join(directory,'review-chain.png'),(await win.webContents.capturePage()).toPNG());

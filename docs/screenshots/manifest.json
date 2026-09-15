@@ -1,0 +1,70 @@
+{
+  "captured_on": "2026-09-15",
+  "ui_commit": "685e857",
+  "environment": "macOS Electron; isolated local PostgreSQL; simulated cloud providers; fixture logo and color videos",
+  "screenshots": [
+    {
+      "file": "workspace.png",
+      "source_script": "scripts/smoke-comments.cjs --readme",
+      "source_output": "reference-connections.png",
+      "width": 3000,
+      "height": 2000,
+      "bytes": 424951,
+      "sha256": "e480da894cfdb04fef41e86d01776e9efdf47146801a13f4771217884067fab9"
+    },
+    {
+      "file": "pins-comparison.png",
+      "source_script": "scripts/smoke-inference.cjs --readme",
+      "source_output": "pins-comparison.png",
+      "width": 3000,
+      "height": 2000,
+      "bytes": 342693,
+      "sha256": "2771c02bfe3f448a57a21517af48153b2131ed5bc60d2f498171447aee66fbe1"
+    },
+    {
+      "file": "model-guidance.png",
+      "source_script": "scripts/smoke-inference.cjs --readme",
+      "source_output": "model-guidance.png",
+      "width": 3000,
+      "height": 2000,
+      "bytes": 358788,
+      "sha256": "461fa72ef9da6b55e2f20da128942f15c4263cfdf33e586c01b009e58e60cad9"
+    },
+    {
+      "file": "service-inference-keys.png",
+      "source_script": "scripts/smoke-inference.cjs --readme",
+      "source_output": "keys-overview.png",
+      "width": 3000,
+      "height": 2300,
+      "bytes": 324227,
+      "sha256": "edddae22a67d3e7bdb1c594f2d5d1d023a2dc1d266ea78157918ac57978ed304"
+    },
+    {
+      "file": "cloud-storage-profiles.png",
+      "source_script": "scripts/smoke-inference.cjs --readme",
+      "source_output": "storage-profiles.png",
+      "width": 3000,
+      "height": 2300,
+      "bytes": 353151,
+      "sha256": "50b13a9be72a085ef689e72294474224573788ba45ca7c293373605bbbab8d53"
+    },
+    {
+      "file": "video-clip.png",
+      "source_script": "scripts/smoke-comments.cjs --readme",
+      "source_output": "video-clip.png",
+      "width": 2360,
+      "height": 1576,
+      "bytes": 159942,
+      "sha256": "d6a3facbed57bd0779e097b1aec864ecfd862c70a8e60439c66683cc77fb5820"
+    },
+    {
+      "file": "image-review.png",
+      "source_script": "scripts/smoke-comments.cjs --readme",
+      "source_output": "image-review.png",
+      "width": 2360,
+      "height": 1576,
+      "bytes": 228344,
+      "sha256": "48eef55f1bab648220e6b36955a26eab867a99b120b8bb8a1a5472fe032710c4"
+    }
+  ]
+}

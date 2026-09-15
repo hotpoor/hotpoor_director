@@ -28,7 +28,7 @@ app.whenReady().then(async()=>{
     await win.webContents.session.cookies.set({url:origin,name:'director_bootstrap',value:'inference-ui-bootstrap',httpOnly:true,path:'/',sameSite:'strict'});
     win.webContents.session.webRequest.onBeforeRequest({urls:['https://cdn.example.com/*']},(details,callback)=>callback({redirectURL:remoteImageURL}));
     await win.loadURL(origin);
-    const js=async code=>{try{return await win.webContents.executeJavaScript(code);}catch(error){throw Error(error.message+' in '+code.slice(0,240));}};
+    const js=async code=>{try{return await win.webContents.executeJavaScript(code,true);}catch(error){throw Error(error.message+' in '+code.slice(0,240));}};
     const wait=async code=>{for(let n=0;n<300;n++){if(await js(code))return;await new Promise(r=>setTimeout(r,100));}throw Error('Timed out: '+code);};
     await wait("document.querySelector('#login-panel h2').textContent==='创建第一个账号'");
     await js(`window.smokeApi=async(path,body)=>{const r=await fetch(path,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json','X-XSRFToken':decodeURIComponent(document.cookie.split('; ').find(x=>x.startsWith('_xsrf=')).slice(6))},body:body===undefined?undefined:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw Error(JSON.stringify(d));return d;};void 0;`);
@@ -182,6 +182,7 @@ app.whenReady().then(async()=>{
     await wait("document.querySelector('#inference-status').textContent.includes('已保存') && !document.querySelectorAll('[data-card]')[0].querySelector('.generate').disabled");
     if((await js("smokeApi('/api/settings/service-inference')")).active_key_id!==firstKey)throw Error('Radio failed to reactivate first Key');
     await js("document.querySelector('#close-inference-settings').click()");
+    if(process.argv.includes('--readme'))await require('./capture-readme-scenes.cjs')({win,js,wait,directory});
     win.setContentSize(640,760);
     await new Promise(r=>setTimeout(r,200));
     if(await js('document.documentElement.scrollWidth>innerWidth'))throw Error('Narrow layout overflow');
