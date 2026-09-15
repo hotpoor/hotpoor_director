@@ -29,6 +29,9 @@ app.whenReady().then(async()=>{
     if(!await js("!document.querySelector('#sync-pull').disabled && document.querySelectorAll('#sync-diff .sync-change').length===3"))throw Error('Diff actions/rows missing');
     const png=(await win.webContents.capturePage()).toPNG();fs.writeFileSync(path.join(directory,'cloud-sync-diff.png'),png);
     if(process.argv.includes('--readme'))fs.writeFileSync(path.join(root,'docs/screenshots/cloud-sync-diff.png'),png);
+    await js(`window.fetch=async(url,options)=>{if(String(url).includes('/api/sync/projects/')&&String(url).includes('/targets/'))return new Response(JSON.stringify({error:'请先在云存储设置中保存并启用一套配置'}),{status:400,headers:{'Content-Type':'application/json'}});return originalFetch(url,options);};testApi('/api/sync/projects/'+directorStudio.currentProject().block_id+'/status',{target_id:fixtureTarget,enabled:true});`);
+    await wait("document.querySelector('[data-desktop-sync]').textContent==='同步云端 · 需处理'");
+    if(!await js("document.querySelector('#sync-errors').textContent.includes('目标云端尚未启用云存储')"))throw Error('Missing actionable destination storage error');
     await js("document.querySelector('#sync-close').click();[...document.querySelectorAll('.canvas-bottom button')].find(b=>b.textContent==='修改历史').click()");
     await wait("document.querySelector('#history-events details')!==null");
     if(errors.some(e=>!e.includes('401')&&!e.includes('ERR_CONNECTION_REFUSED')))throw Error('Renderer errors: '+errors.join('\n'));
