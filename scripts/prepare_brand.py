@@ -19,6 +19,7 @@ def main():
     white.thumbnail((640,640), Image.Resampling.LANCZOS)
     web = ROOT / 'backend/web/brand'
     white.save(web / 'logo.png')
+    logo.save(web / 'favicon-black.png')
     icon.save(web / 'favicon.ico', sizes=[(n,n) for n in (16,32,48,64)])
     icon.resize((180,180), Image.Resampling.LANCZOS).save(web / 'apple-touch-icon.png')
     print('Transparent brand assets regenerated:', bounds)

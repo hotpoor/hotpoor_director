@@ -13,6 +13,7 @@ else app.whenReady().then(async () => {
   nativeTheme.themeSource = 'dark';
   app.setAppUserModelId('com.hotpoor.director');
   const root = path.resolve(__dirname, '..');
+  if (process.platform === 'darwin') app.dock.setIcon(path.join(root, 'assets', 'icon.png'));
   const development = !app.isPackaged;
   const localDirectory = path.join(root, '.local');
   const savedDirectory = app.getPath('userData');

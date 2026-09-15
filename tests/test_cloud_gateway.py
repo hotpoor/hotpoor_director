@@ -64,12 +64,12 @@ def test_device_authorization_scoping_revocation_and_expiry(gateway):
     assert device['device_secret'] not in device['verification_url']
     poll = {'device_secret': device['device_secret']}
     assert c.post('/hotpoor/director/auth/device/poll', json=poll).json()['status'] == 'pending'
-    assert c.post('/hotpoor/director/auth/device/approve', json={'code': device['user_code']}).status_code == 401
+    assert c.post('/hotpoor/director/auth/device/approve', json={'code': device['user_code'], 'expires_at': None}).status_code == 401
     login(c, users[0]); c.headers['Origin'] = 'https://attacker.example'
-    assert c.post('/hotpoor/director/auth/device/approve', json={'code': device['user_code']}).status_code == 403
+    assert c.post('/hotpoor/director/auth/device/approve', json={'code': device['user_code'], 'expires_at': None}).status_code == 403
     c.headers['Origin'] = 'https://api.xialiwei.com'
-    assert c.post('/hotpoor/director/auth/device/approve', json={'code': device['user_code']}).status_code == 200
-    assert c.post('/hotpoor/director/auth/device/approve', json={'code': device['user_code']}).status_code == 409
+    assert c.post('/hotpoor/director/auth/device/approve', json={'code': device['user_code'], 'expires_at': None}).status_code == 200
+    assert c.post('/hotpoor/director/auth/device/approve', json={'code': device['user_code'], 'expires_at': None}).status_code == 409
     with app.db() as db: db.execute('UPDATE director.devices SET last_poll=0 WHERE device_hash=%s', (app.digest(device['device_secret']),))
     c.cookies.clear(); c.headers.clear()
     authorized = c.post('/hotpoor/director/auth/device/poll', json=poll); assert authorized.status_code == 200
@@ -77,7 +77,7 @@ def test_device_authorization_scoping_revocation_and_expiry(gateway):
     c.headers['Authorization'] = 'Bearer ' + key
     assert c.get('/hotpoor/director/api/me').json()['user_id'] == users[0]['user_id']
     assert c.get('/v1/auth/me').status_code in (401, 404)  # Scoped AK is never a general API session.
-    assert c.post('/hotpoor/director/auth/keys', json={'name': 'must use browser login'}).status_code == 401
+    assert c.post('/hotpoor/director/auth/keys', json={'name': 'must use browser login', 'expires_at': None}).status_code == 401
     login(c, users[0]); keys = c.get('/hotpoor/director/auth/keys').json()['keys']; identifier = keys[0]['key_id']
     assert key not in json.dumps(keys) and 'token_hash' not in json.dumps(keys)
     login(c, users[1]); assert c.post('/hotpoor/director/auth/keys/' + identifier + '/revoke', json={}).status_code == 404
@@ -120,7 +120,7 @@ def test_real_desktop_push_cloud_edit_pull_new_uuid_and_receipt(gateway, service
     from backend.sync_protocol import digest as snapshot_digest
     c, app, users = gateway; config, _ = service
     login(c, users[0])
-    key = c.post('/hotpoor/director/auth/keys', json={'name': '双端集成测试'}).json()['access_key']
+    key = c.post('/hotpoor/director/auth/keys', json={'name': '双端集成测试', 'expires_at': None}).json()['access_key']
     with closing(socket.socket()) as sock:
         sock.bind(('127.0.0.1', 0)); cloud_port = sock.getsockname()[1]
     directory = config['data_dir'] / 'desktop-sync'; directory.mkdir()
@@ -200,3 +200,41 @@ def test_dedicated_cloud_database_migration_is_repeatable(gateway, service):
         subprocess.run([str(config['pg_bin'] / 'psql'), '-h', pg['host'], '-p', str(pg['port']), '-U', pg['admin_user'],
             '-d', 'postgres', '-f', str(API_ROOT / 'sql/director-runtime.psql')],
             env={**os.environ, 'PGPASSWORD': pg['admin_password']}, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, check=True)
+
+
+def test_user_selected_key_expiration_and_management(gateway):
+    c, app, users = gateway
+    login(c, users[0])
+    route = '/hotpoor/director/auth/keys'
+    assert c.post(route, json={'name': 'missing choice'}).status_code == 422
+    for invalid in (app.now() - 1, True, 'tomorrow', 253402300800000):
+        assert c.post(route, json={'name': 'invalid', 'expires_at': invalid}).status_code == 422
+    expires = app.now() + 7 * 86400000
+    tokens = []
+    for label, expiration in [('permanent', None), ('calendar date', expires)]:
+        response = c.post(route, json={'name': label, 'expires_at': expiration})
+        assert response.status_code == 200, response.text
+        assert response.json()['expires_at'] == expiration
+        tokens.append(response.json()['access_key'])
+    listed = c.get(route).json()['keys']
+    permanent = next(k for k in listed if k['label'] == 'permanent')
+    dated = next(k for k in listed if k['label'] == 'calendar date')
+    assert permanent['expires_at'] is None and dated['expires_at'] == expires
+    for token in tokens:
+        c.cookies.clear(); c.headers.clear(); c.headers['Authorization'] = 'Bearer ' + token
+        assert c.get('/hotpoor/director/api/me').status_code == 200
+    login(c, users[1])
+    endpoint = route + '/' + permanent['key_id'] + '/expiration'
+    assert c.post(endpoint, json={'expires_at': expires}).status_code == 404
+    login(c, users[0])
+    assert c.post(endpoint, json={'expires_at': expires}).status_code == 200
+    assert c.post(endpoint, json={'expires_at': None}).status_code == 200
+    with app.db() as db:
+        db.execute('UPDATE director.access_keys SET expires_at=%s WHERE key_id=%s', (app.now()-1, dated['key_id']))
+    c.cookies.clear(); c.headers.clear(); c.headers['Authorization'] = 'Bearer ' + tokens[1]
+    assert c.get('/hotpoor/director/api/me').status_code == 401
+    login(c, users[0])
+    assert c.post(route + '/' + permanent['key_id'] + '/revoke', json={}).status_code == 200
+    assert c.post(endpoint, json={'expires_at': None}).status_code == 404
+    c.cookies.clear(); c.headers.clear(); c.headers['Authorization'] = 'Bearer ' + tokens[0]
+    assert c.get('/hotpoor/director/api/me').status_code == 401
