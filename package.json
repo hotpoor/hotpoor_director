@@ -23,7 +23,7 @@
     "appId": "com.hotpoor.director",
     "productName": "Hotpoor Director",
     "directories": {"output": "release"},
-    "files": ["desktop/**/*", "assets/icon.ico", "assets/icon.png", "package.json"],
+    "files": ["desktop/**/*", "backend/web/dialogs.js", "backend/web/dialogs.css", "assets/icon.ico", "assets/icon.png", "package.json"],
     "extraResources": [
       {"from": "dist/director-backend", "to": "backend"},
       {"from": "runtime/pgsql", "to": "pgsql", "filter": ["bin/**/*", "lib/**/*", "share/**/*", "*.txt"]}

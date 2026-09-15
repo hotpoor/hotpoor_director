@@ -87,6 +87,15 @@
       "sha256": "a92a874eb294dadd609f6b756ae49c61dee527a6a274ed2079ff762ea4e57cbd",
       "environment": "Actual Electron UI and disposable PostgreSQL; membership API fixtures, no real keys or invitations",
       "ui_revision": "working tree: project collaboration on 2026-09-15"
+    },
+    {
+      "file": "dialog-confirmation.png",
+      "source_script": "scripts/smoke-card-removal.cjs",
+      "source_output": "remove-card.png",
+      "width": 2880,
+      "height": 1954,
+      "bytes": 138909,
+      "sha256": "62211de976935acbb566097f922ac78aefebeab78873d7c5f800fcd5ae5ff660"
     }
   ]
 }

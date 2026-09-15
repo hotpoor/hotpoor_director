@@ -46,3 +46,7 @@ Windows 对应入口为 `node_modules/.bin/electron.cmd`。两个脚本各自创
 ## 分享与成员截图
 
 `collaboration.png` 来自 `electron scripts/smoke-collaboration.cjs`，使用独立数据库和模拟成员接口，展示角色 / 生成许可、成员自己的 AK 入口和可选期限只读链接。账号授权、成员独立凭据、到期 / 撤销和跨项目隔离由 `tests/test_cloud_gateway.py` 验证。
+
+## 自定义确认遮罩
+
+`dialog-confirmation.png` 由 `electron scripts/smoke-card-removal.cjs` 在隔离数据库采集（2026-09-15，基于 `2e26ad1` 的本次弹窗改动），展示卡片移除确认。该脚本验证取消、确认后保存与项目切换保护；`electron scripts/smoke-dialogs.cjs` 另外验证嵌套弹窗层级、Esc、焦点、输入、排队及桌面离线错误界面。

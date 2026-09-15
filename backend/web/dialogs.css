@@ -1,0 +1,12 @@
+.director-message-dialog{box-sizing:border-box;width:min(460px,calc(100vw - 32px));max-height:calc(100dvh - 32px);padding:28px;margin:auto;border:1px solid #454545;border-radius:12px;background:#191919;color:#eee;box-shadow:0 24px 100px #0009;font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color-scheme:dark;overflow:auto}
+.director-message-dialog::backdrop{background:#000b;backdrop-filter:blur(5px)}
+.director-message-dialog h2{margin:0 0 14px;font-size:20px;letter-spacing:0;line-height:1.4;color:#eee}
+.director-message-dialog p{margin:0 0 24px;color:#b8b8b8;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.7}
+.director-message-dialog input{box-sizing:border-box;width:100%;margin:0 0 24px;padding:12px;border:1px solid #454545;border-radius:6px;background:#111;color:#eee;font:inherit}
+.director-message-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+.director-message-dialog button{box-sizing:border-box;width:auto;margin:0;padding:10px 20px;border:1px solid #eee;border-radius:6px;background:#eee;color:#191919;font:600 14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:0;cursor:pointer}
+.director-message-dialog button.quiet{background:transparent;color:#bbb;border-color:#454545}
+.director-message-dialog button:hover{background:#d6d6d6}
+.director-message-dialog button.quiet:hover{background:#292929;color:#fff}
+.director-message-dialog :focus-visible{outline:2px solid #eee;outline-offset:4px}
+.director-message-dialog [hidden]{display:none!important}

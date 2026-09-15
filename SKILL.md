@@ -169,3 +169,5 @@ Git clone 只获得代码、Logo/图标、建表脚本和示例配置，不获�
 服务器 cloud_mode 必须仅用云存储保存新媒体：导入 / 评论 / 封面 / 参考图 / 截帧与生成结果均不得持久落盘。前端限制与后端校验要同时保持；结果可用有大小限制的内存转存，完成后保存对象存储 HTTPS URL。桌面存储选择不受影响。历史服务器文件未经完整迁移和确认不得自动删除。
 
 在线协作按项目授权 viewer/commenter/editor/admin，生成另有 can_generate 开关。成员调用模型必须用自己的 credential_owner 对应账号配置；不得退回所有者 AK。云存储配置同样属于实际上传者。成员/链接检查在公开网关执行，转发时只允许当前项目可达实体；私有配置接口始终返回当前登录者配置。分享链接需登录加入，可选期限，过期/撤销回收链接派生权限。新版本 UUID 不自动继承权限。
+
+应用交互提示统一使用 `await window.directorDialogs.alert/confirm/prompt`，不得调用系统 `alert/confirm/prompt` 或 Electron `showErrorBox/showMessageBox`。该组件使用浏览器 top layer，确认默认聚焦取消；等待确认后必须重新检查当前项目 / 对象与业务忙碌状态。桌面致命错误使用同样的离线遮罩界面。

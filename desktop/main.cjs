@@ -1,9 +1,10 @@
-const {app, BrowserWindow, dialog, nativeTheme, ipcMain, shell} = require('electron');
+const {app, BrowserWindow, nativeTheme, ipcMain, shell} = require('electron');
 const {spawn} = require('node:child_process');
 const path = require('node:path');
 const readline = require('node:readline');
 const {randomBytes} = require('node:crypto');
 const fs = require('node:fs');
+const {showFailure} = require('./failure.cjs');
 
 let backend;
 let closing = false;
@@ -74,12 +75,12 @@ else app.whenReady().then(async () => {
         }
       });
     }
-    backend.on('exit', () => {if (!closing) {dialog.showErrorBox('服务已停止', '请重新启动应用。'); app.quit();}});
-  } catch (error) {dialog.showErrorBox('无法启动', error.message); app.quit();}
+    backend.on('exit', async () => {if (!closing) {await showFailure('服务已停止', '请退出后重新启动应用。', window); app.quit();}});
+  } catch (error) {await showFailure('无法启动', error.message); app.quit();}
 });
 app.on('window-all-closed', () => app.quit());
 app.on('before-quit', event => {
-  if (!backend || backend.exitCode !== null || quitting) return;
+  if (!backend?.pid || backend.exitCode !== null || backend.signalCode !== null || quitting) return;
   event.preventDefault();
   if (closing) return;
   closing = true;
