@@ -37,7 +37,7 @@
     <section id="editor" hidden>
       <div class="canvas-toolbar"><button id="back-dashboard" class="quiet">← 项目列表</button><div class="canvas-title"><strong id="project-title"></strong><span id="save-status" role="status">已保存</span></div><button id="edit-project" class="quiet">项目设置</button><select id="asset-import-mode" aria-label="素材添加方式"><option value="local">添加到本机</option><option value="cloud">直传云存储</option></select><button id="add-assets" class="quiet">＋ 导入素材</button><input id="asset-upload" type="file" accept="image/png,image/jpeg,image/webp,video/mp4,video/webm,audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/webm,.m4a,.opus" multiple hidden><button id="add-image">＋ 图片卡片</button><button id="add-video">＋ 视频卡片</button><button id="add-chat" class="quiet">＋ 评论区</button><button id="toggle-queue" class="quiet" aria-expanded="false" aria-controls="queue-panel">队列 <span id="queue-count">0</span></button></div>
       <div class="canvas-region"><div id="canvas" tabindex="0" aria-label="无限画布：拖动空白处平移，滚轮缩放"><div id="canvas-world"></div><div id="canvas-empty">一张卡片，开启一个镜头。<br><small>添加生成卡片，或导入图片、视频、音频素材。支持拖入与 Ctrl+V 粘贴。</small></div></div>
-      <aside id="queue-panel" aria-label="当前画布生成队列" hidden><header><div><strong>生成队列</strong><small>当前画布</small></div><button id="close-queue" class="quiet" aria-label="收起队列">✕</button></header><p id="queue-notice"></p><div id="queue-items"></div></aside></div>
+      <aside id="queue-panel" aria-label="当前画布队列" hidden><header><div><strong>任务队列</strong><small>当前画布</small></div><button id="close-queue" class="quiet" aria-label="收起队列">✕</button></header><div class="queue-tabs" role="tablist" aria-label="队列类型"><button id="queue-generation-tab" role="tab" aria-selected="true" aria-controls="queue-generation-panel">生成队列</button><button id="queue-sync-tab" role="tab" aria-selected="false" aria-controls="queue-sync-panel" tabindex="-1">同步进度</button></div><section id="queue-generation-panel" role="tabpanel" aria-labelledby="queue-generation-tab"><p id="queue-notice"></p><div id="queue-items"></div></section><section id="queue-sync-panel" role="tabpanel" aria-labelledby="queue-sync-tab" hidden><p class="sync-queue-help">查看各云端的同步状态、失败原因和最近成功时间。</p><div id="sync-queue-items"></div></section></aside></div>
       <div class="canvas-bottom"><span>拖动空白处平移 · 滚轮缩放 · 拖动卡片标题移动 · 四边四角缩放</span><button id="export-draft" class="quiet">导出 JSON</button><button id="zoom-out" class="quiet">−</button><button id="zoom-reset" class="quiet">100%</button><button id="zoom-in" class="quiet">＋</button><button id="fit-cards" class="quiet">适配</button></div>
     </section>
     <aside id="upload-progress" hidden aria-label="云存储上传进度"><div class="upload-progress-heading"><strong id="upload-progress-title">上传素材</strong><button type="button" id="close-upload-progress" class="quiet" aria-label="关闭上传进度">✕</button></div><p id="upload-progress-file"></p><p id="upload-progress-stage" role="status" aria-live="polite"></p><progress id="upload-progress-bar" max="100" aria-label="当前阶段进度"></progress><small id="upload-progress-detail"></small></aside>
@@ -57,7 +57,7 @@
   <script src="/static/comfy-settings.js"></script>
   <script src="/static/inference-settings.js"></script>
   <script src="/static/preview.js"></script>
-  <script src="/static/sync.js"></script>
+  <script src="/static/sync.js"></script><script src="/static/sync-queue.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

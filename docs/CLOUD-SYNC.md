@@ -51,3 +51,7 @@ API 项目的 `director.py` 负责账号与 AK、授权页、URL 前缀、内部
 - `tests/test_sync.py`：引用重写、UUID 不误改提示词、三方差异、请求幂等、预览后冲突、审计历史、匿名权限。
 - `tests/test_cloud_gateway.py`：临时 API PostgreSQL、浏览器授权、CSRF、AK 撤销、跨账号隔离、真实 FastAPI → Tornado 桥接；独立桌面进程推送、云端修改、双方冲突、拉回新 UUID、副本保留与回执去重。存储上传通过测试适配器模拟，无真实云存储费用。
 - 先安装 `requirements-cloud-test.txt`；云端伴随仓库测试可通过 `DIRECTOR_API_CHECKOUT` 指定目录；目录或测试依赖不存在时跳过对应集成测试，不影响 Windows 桌面使用。
+
+## 查看同步进度
+
+打开画布右上角「队列」，切换「同步进度」Tab。按云端显示正在比较、上传并提交、拉回或回传、待处理差异、失败原因和最近成功时间；可打开对应云端处理差异 / 重试。上传目前显示等待指示，不提供字节百分比。生成任务仍在「生成队列」Tab 中。
