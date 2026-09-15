@@ -442,8 +442,8 @@ class OutputHandler(PrivateHandler):
             headers['Range'] = self.request.headers['Range']
         try:
             response = await AsyncHTTPClient().fetch(HTTPRequest(row['body'].get('comfy_url', COMFY) + '/view?' + urlencode(outputs[int(index)]), headers=headers, request_timeout=120))
-        except HTTPClientError:
-            raise tornado.web.HTTPError(502, reason='生成文件暂不可用，请确认 ComfyUI 正在运行')
+        except (HTTPClientError, OSError, asyncio.TimeoutError):
+            raise tornado.web.HTTPError(502, reason='无法读取原 ComfyUI 生成文件，请确认生成时的 ComfyUI 设备在线且当前网络可达')
         self.set_status(response.code)
         for name in ('Content-Type', 'Content-Range', 'Accept-Ranges'):
             if name in response.headers:

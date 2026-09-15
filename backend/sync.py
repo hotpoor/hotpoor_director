@@ -346,8 +346,12 @@ async def upload_resources(handler, project_id, target):
                 # Use existing authenticated output handler, including ComfyUI and service-inference.
                 headers = {'Cookie': handler.request.headers.get('Cookie', '')}
                 if handler.settings.get('bridge_secret'): headers['X-Director-Bridge'] = handler.settings['bridge_secret']
-                response = await AsyncHTTPClient().fetch(HTTPRequest('http://' + handler.request.host + f'/api/outputs/{identifier}/{index}',
-                    headers=headers, request_timeout=180))
+                try:
+                    response = await AsyncHTTPClient().fetch(HTTPRequest('http://' + handler.request.host + f'/api/outputs/{identifier}/{index}',
+                        headers=headers, request_timeout=180))
+                except (HTTPClientError, OSError, asyncio.TimeoutError):
+                    source = '本地生成文件' if original.get('provider') == 'service-inference' else '原 ComfyUI 设备上的生成文件'
+                    raise HTTPError(502, reason=f'同步暂停：无法读取任务 {identifier} 的第 {index + 1} 个结果（{source}）。请确认原文件存在、设备在线且网络可达，再重试。已上传资源会保留。') from None
                 raw = response.body; mime = response.headers.get('Content-Type', '').split(';')[0]
                 saved[str(index)] = await upload_bytes(target, raw, mime, identifier + '-' + str(index))
         async with handler.projects.connection() as conn:

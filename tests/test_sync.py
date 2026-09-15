@@ -140,3 +140,30 @@ def test_imported_reference_download_checks_checksum_before_caching(tmp_path, co
             path = asyncio.run(ensure_local_asset(handler, asset)); assert path.read_bytes() == data
             assert asset['body']['filename'] == path.name
             conn.execute.assert_awaited_once()
+
+
+def test_unavailable_generation_reports_resource_and_preserves_uploads(monkeypatch):
+    import asyncio
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    from tornado.httpclient import HTTPClientError
+    from tornado.web import HTTPError
+    from backend import sync
+    identifier = uid()
+    body = {'kind': 'generation', 'outputs': [{'filename': 'existing.mp4'}]}
+    @asynccontextmanager
+    async def connection():
+        yield SimpleNamespace(execute=AsyncMock())
+    monkeypatch.setattr(sync, 'capture', AsyncMock(return_value={'records': {identifier: body}}))
+    monkeypatch.setattr(sync, 'owned', AsyncMock(return_value={'body': body}))
+    monkeypatch.setattr(sync, 'AsyncHTTPClient', lambda: SimpleNamespace(fetch=AsyncMock(side_effect=HTTPClientError(502))))
+    upload = AsyncMock(); monkeypatch.setattr(sync, 'upload_bytes', upload)
+    handler = SimpleNamespace(projects=SimpleNamespace(connection=connection), owner=uid(),
+                              request=SimpleNamespace(host='127.0.0.1:1234', headers={}), settings={})
+    with pytest.raises(HTTPError) as error:
+        asyncio.run(sync.upload_resources(handler, uid(), {'id': uid()}))
+    assert error.value.status_code == 502
+    assert identifier in error.value.reason and '原 ComfyUI' in error.value.reason
+    assert '已上传资源会保留' in error.value.reason
+    upload.assert_not_called()
