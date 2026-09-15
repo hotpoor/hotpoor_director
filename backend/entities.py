@@ -2,6 +2,8 @@
 from contextlib import AsyncExitStack, asynccontextmanager
 import re
 import uuid
+import time
+from psycopg.types.json import Jsonb
 
 from psycopg import sql
 
@@ -105,10 +107,29 @@ class EntityTransaction:
         return self.connections[number]
 
     async def execute(self, query, params=None, *, block_id):
-        if not query.lstrip().upper().startswith('SELECT '):
+        writing = not query.lstrip().upper().startswith('SELECT ')
+        if writing:
             self.writes = True
         conn = await self._connection(shard_index(block_id))
-        return await conn.execute(query, params)
+        before = None
+        if writing:
+            before = await (await conn.execute('SELECT body FROM entities WHERE block_id=%s', (block_id,))).fetchone()
+        result = await conn.execute(query, params)
+        if writing:
+            after = await (await conn.execute('SELECT body FROM entities WHERE block_id=%s', (block_id,))).fetchone()
+            old, new = (before or {}).get('body'), (after or {}).get('body')
+            body = new or old or {}
+            if old != new and body.get('kind') in ('project', 'chat', 'chat_pack', 'generation', 'asset', 'cloud_upload'):
+                event_id = uuid.uuid4().hex
+                # Audit and entity are always written to the same shard/transaction.
+                event_id = event_id[:-1] + block_id[-1]
+                await conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s)', (event_id, Jsonb({
+                    'kind': 'change_event', 'owner_id': body['owner_id'], 'entity_id': block_id,
+                    'project_id': block_id if body['kind'] == 'project' else body.get('project_id'),
+                    'recorded_at': time.time_ns() // 1_000_000,
+                    'operation': 'create' if old is None else 'delete' if new is None else 'update',
+                    'before': old, 'after': new})))
+        return result
 
     async def scan(self, query, params=None, *, order_by=None):
         if not query.lstrip().upper().startswith('SELECT '):

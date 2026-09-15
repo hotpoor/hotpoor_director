@@ -56,6 +56,8 @@ async def run(args):
             entity_pool = make_pool(config, database)
             entity_pools.append(entity_pool)
             await entity_pool.open(wait=True)
+        from tornado.httpclient import AsyncHTTPClient
+        AsyncHTTPClient.configure('tornado.simple_httpclient.SimpleAsyncHTTPClient', max_buffer_size=220 * 1024 * 1024)
         app = application(config, pool, EntityStore(pool, entity_pools))
         await app.settings['inference_manager'].start()
         server = tornado.httpserver.HTTPServer(app, max_body_size=210 * 1024 * 1024)

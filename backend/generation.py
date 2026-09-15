@@ -184,6 +184,8 @@ class GenerateHandler(PrivateHandler):
             from backend.inference import submit
             await submit(self, project_id, data)
             return
+        if self.settings['config'].get('cloud_mode'):
+            raise tornado.web.HTTPError(400, reason='本地模型请拉回桌面新副本后执行；云端可使用 service-inference 模型')
         async with self.settings['comfy_lock']:
             await self.submit(project_id)
 
@@ -247,7 +249,8 @@ class GenerateHandler(PrivateHandler):
         try:
             names = []
             for asset in assets:
-                path = self.settings['config']['data_dir'] / 'media' / asset['body']['filename']
+                from backend.workspace import ensure_local_asset
+                path = await ensure_local_asset(self, asset)
                 media_kind = asset['body']['mime'].split('/')[0]
                 if media_kind != 'image':
                     with tempfile.TemporaryDirectory(dir=path.parent) as temporary:
@@ -428,6 +431,8 @@ class OutputHandler(PrivateHandler):
         outputs = row['body'].get('outputs', [])
         if int(index) >= len(outputs):
             raise tornado.web.HTTPError(404)
+        if outputs[int(index)].get('remote_url', '').startswith('https://'):
+            self.redirect(outputs[int(index)]['remote_url']); return
         if row['body'].get('provider') == PROVIDER:
             from backend.inference import serve_output
             await serve_output(self, outputs[int(index)])

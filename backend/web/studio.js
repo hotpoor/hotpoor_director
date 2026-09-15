@@ -22,6 +22,7 @@
   function saveLabel(text) { $('#save-status').textContent = text; }
   function changed() {
     state.version++;
+    window.dispatchEvent(new Event('director-changed'));
     saveLabel('未保存…');
     clearTimeout(state.timer);
     state.timer = setTimeout(() => save().catch(error => tell(error.message)), 700);
@@ -686,6 +687,7 @@
   $('#studio-logout').onclick=async()=>{try{if(importing||window.directorComments?.busy())throw Error('请等待素材上传或评论发送完成');await save();await request('/api/logout',{});location.reload();}catch(e){tell(e.message);}};
   window.addEventListener('beforeunload',event=>{if(importing||uploading||window.directorComments?.busy()||state.version!==state.saved){event.preventDefault();event.returnValue='';}});
   window.directorStudio={
+    save, openProject, currentProject:()=>state.project,
     async refreshModels(){const data=await request('/api/models');state.models=data.models;if(data.model_error)tell(data.model_error);if(state.project)renderCanvas();},
     async enter(user){state.user=user;document.body.classList.add('studio-active');$('#studio').hidden=false;$('#studio-account').textContent=user.login;try{const data=await request('/api/models');state.models=data.models;if(!data.online)tell('ComfyUI 未连接，仅影响本地模型；云端模型可通过 service-inference 设置使用。');await dashboard();}catch(error){tell(error.message);}},
     leave(){clearTimeout(state.polling);clearTimeout(state.timer);state.user=null;state.project=null;updateElapsedClocks();state.version=state.saved=0;$('#studio').hidden=true;document.body.classList.remove('studio-active');}

@@ -245,6 +245,8 @@ class AssetHandler(PrivateHandler):
         row = await owned(self.projects, asset_id, self.owner, 'asset')
         path = self.settings['config']['data_dir'] / 'media' / row['body']['filename']
         if not path.is_file():
+            if row['body'].get('remote_url', '').startswith('https://'):
+                self.redirect(row['body']['remote_url']); return
             raise tornado.web.HTTPError(404)
         size = path.stat().st_size
         start, end = 0, size - 1
@@ -320,3 +322,36 @@ def workspace_routes():
         (r'/api/projects/([0-9a-f]{32})/history', HistoryHandler),
         (r'/api/outputs/([0-9a-f]{32})/(\d+)', OutputHandler),
     ]
+
+
+async def ensure_local_asset(handler, asset):
+    """Lazily cache an imported cloud asset before local ComfyUI reference processing."""
+    import hashlib
+    import os
+    from backend.cloud_storage import MIMES
+    from backend.inference import download
+    body = asset['body']; directory = handler.settings['config']['data_dir'] / 'media'
+    current = directory / body.get('filename', '')
+    if current.is_file(): return current
+    url = body.get('remote_url', '')
+    if not url.startswith('https://') or body.get('mime') not in MIMES:
+        raise ValueError('参考素材没有可用的本地文件或云端地址')
+    directory.mkdir(exist_ok=True)
+    name = asset['block_id'] + MIMES[body['mime']]
+    temporary = directory / (asset['block_id'] + '-' + uuid.uuid4().hex + '.download')
+    try:
+        await download(url, temporary)
+        if temporary.stat().st_size != body.get('size'):
+            raise ValueError('云端参考素材大小变化，原记录保留，请重新导入确认')
+        if body.get('sha256'):
+            def checksum():
+                with temporary.open('rb') as stream: return hashlib.file_digest(stream, 'sha256').hexdigest()
+            actual = await asyncio.to_thread(checksum)
+            if actual != body['sha256']: raise ValueError('云端参考素材校验和变化，未写入本地缓存')
+        os.replace(temporary, directory / name)
+        async with handler.projects.connection() as conn:
+            await conn.execute('UPDATE entities SET body=body || %s WHERE block_id=%s', (Jsonb({'filename': name}), asset['block_id']), block_id=asset['block_id'])
+        body['filename'] = name
+        return directory / name
+    finally:
+        temporary.unlink(missing_ok=True)

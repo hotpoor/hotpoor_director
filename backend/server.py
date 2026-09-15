@@ -20,6 +20,8 @@ class BaseHandler(tornado.web.RequestHandler):
         self.set_header('Content-Security-Policy', "default-src 'self'; connect-src 'self' https://*.qiniup.com https://*.aliyuncs.com https://*.myqcloud.com; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: https: http:; media-src 'self' blob: https: http:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
 
     def prepare(self):
+        if self.settings.get('cloud_user') and not hmac.compare_digest(self.request.headers.get('X-Director-Bridge', ''), self.settings['bridge_secret']):
+            raise tornado.web.HTTPError(403)
         if self.request.host_name not in ('127.0.0.1', 'localhost'):
             raise tornado.web.HTTPError(403)
 
@@ -31,6 +33,10 @@ class BaseHandler(tornado.web.RequestHandler):
         self.finish({'error': message})
 
     async def session_user(self):
+        if self.settings.get('cloud_user'):
+            if hmac.compare_digest(self.request.headers.get('X-Director-Bridge', ''), self.settings['bridge_secret']):
+                return self.settings['cloud_user']
+            return None
         token = self.get_cookie('director_session')
         if not token or len(token) > 128:
             return None
@@ -118,6 +124,7 @@ class LogoutHandler(BaseHandler):
 
 def application(config, pool, entities):
     from backend.workspace import workspace_routes
+    from backend.sync import routes as sync_routes
     from backend.progress import ProgressTracker
     from backend.comfy_settings import load_connection, connection_url
     from backend.inference import InferenceManager
@@ -126,9 +133,9 @@ def application(config, pool, entities):
         (r'/', IndexHandler), (r'/api/login', LoginHandler), (r'/api/setup', SetupHandler),
         (r'/favicon.ico', tornado.web.RedirectHandler, {'url': '/static/brand/favicon.ico'}),
         (r'/api/me', MeHandler), (r'/api/logout', LogoutHandler),
-        *workspace_routes(),
+        *workspace_routes(), *sync_routes(),
         (r'/static/(.*)', tornado.web.StaticFileHandler, {'path': str(WEB)}),
-    ], storage_lock=asyncio.Lock(), inference_manager=InferenceManager(config, entities), comfy_connection=connection, comfy_lock=asyncio.Lock(), progress_tracker=ProgressTracker(connection_url(connection)), pool=pool, entities=entities, config=config,
+    ], sync_lock=asyncio.Lock(), storage_lock=asyncio.Lock(), inference_manager=InferenceManager(config, entities), comfy_connection=connection, comfy_lock=asyncio.Lock(), progress_tracker=ProgressTracker(connection_url(connection)), pool=pool, entities=entities, config=config,
        cookie_secret=config['cookie_secret'], xsrf_cookies=True,
        xsrf_cookie_kwargs={'samesite': 'Strict'}, login_attempts=OrderedDict(),
        auth_slots=asyncio.Semaphore(4), bootstrap_token=os.environ.get('DIRECTOR_BOOTSTRAP_TOKEN', ''),

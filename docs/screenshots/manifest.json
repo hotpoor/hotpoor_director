@@ -65,6 +65,17 @@
       "height": 1576,
       "bytes": 228344,
       "sha256": "48eef55f1bab648220e6b36955a26eab867a99b120b8bb8a1a5472fe032710c4"
+    },
+    {
+      "file": "cloud-sync-diff.png",
+      "source_script": "scripts/smoke-sync.cjs --readme",
+      "source_output": "cloud-sync-diff.png",
+      "width": 2880,
+      "height": 1946,
+      "bytes": 332170,
+      "sha256": "3db9f14a839290fcfacb13d58240ec51b3ccf19d72aa052293646a1c19de61d7",
+      "environment": "Actual Electron UI + disposable PostgreSQL; remote diff fixture; no real credentials or production data",
+      "ui_revision": "working tree: cloud sync implementation on 2026-09-15"
     }
   ]
 }

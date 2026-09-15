@@ -328,6 +328,8 @@ class InferenceManager:
         async with self.pool.connection() as conn:
             rows = await (await conn.scan("SELECT * FROM entities WHERE body->>'provider'=%s AND body->>'status' IN ('submitting','queued','running')", (PROVIDER,))).fetchall()
         for row in rows:
+            if self.config.get('cloud_owner') and row['body'].get('owner_id') != self.config['cloud_owner']:
+                continue
             if row['body'].get('remote_task_id'):
                 self.launch(row['block_id'], row['body'])
             else:

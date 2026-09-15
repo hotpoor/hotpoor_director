@@ -1,4 +1,4 @@
-const {app, BrowserWindow, dialog, nativeTheme} = require('electron');
+const {app, BrowserWindow, dialog, nativeTheme, ipcMain, shell} = require('electron');
 const {spawn} = require('node:child_process');
 const path = require('node:path');
 const readline = require('node:readline');
@@ -48,7 +48,13 @@ else app.whenReady().then(async () => {
     const window = new BrowserWindow({width:1180,height:820,minWidth:640,minHeight:660, show:process.env.DIRECTOR_SMOKE_TEST !== '1',
       title:'Hotpoor Director · 导演工作站', backgroundColor:'#101010', autoHideMenuBar:true,
       icon:path.join(root, 'assets', windows ? 'icon.ico' : 'icon.png'),
-      webPreferences:{nodeIntegration:false,contextIsolation:true,sandbox:true,backgroundThrottling:process.env.DIRECTOR_SMOKE_TEST !== '1'}});
+      webPreferences:{preload:path.join(__dirname,'preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,backgroundThrottling:process.env.DIRECTOR_SMOKE_TEST !== '1'}});
+    ipcMain.handle('director:open-authorization', async (event, value) => {
+      if (event.sender !== window.webContents || event.senderFrame?.url !== origin + '/') throw Error('Invalid sender');
+      const url = new URL(value);
+      if (url.protocol !== 'https:' || url.username || url.password || !url.pathname.endsWith('/authorize') || !/^[A-F0-9]{8}$/.test(url.searchParams.get('code') || '')) throw Error('Invalid authorization URL');
+      await shell.openExternal(url.href);
+    });
     window.webContents.setWindowOpenHandler(() => ({action:'deny'}));
     window.webContents.on('will-navigate', (event, url) => {if (new URL(url).origin !== origin) event.preventDefault();});
     await window.webContents.session.cookies.set({url:origin,name:'director_bootstrap',value:bootstrapToken,httpOnly:true,sameSite:'strict',path:'/'});

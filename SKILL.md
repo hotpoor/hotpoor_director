@@ -1,6 +1,6 @@
 ---
 name: hotpoor-director
-description: 部署、运行和维护 Hotpoor Director 导演工作台，解释 Electron、Tornado、PostgreSQL、ComfyUI、service-inference 和云存储的协作方式。适用于本仓库的源码启动、本地与云端生成配置、素材直传及故障排查。
+description: 部署、运行和维护 Hotpoor Director 导演工作台，解释 Electron、Tornado、PostgreSQL、ComfyUI、service-inference 和云存储的协作方式。适用于本仓库的源码启动、本地与云端生成配置、素材直传、多云端双向版本同步及故障排查。
 ---
 
 # Hotpoor Director 部署与工作原理
@@ -153,3 +153,13 @@ Git clone 只获得代码、Logo/图标、建表脚本和示例配置，不获�
 部署完成至少确认：源码窗口能启动、用户能登录或完成首次设置、项目重开后保存内容仍在，以及本次选用服务的只读连接检查通过；本地生成检查 ComfyUI，云端生成检查 Key 与模型发现，素材直传检查所选存储配置。若本次包含模型安装，再验证对应模型实际生成与历史回看。报告已验证范围和仍缺少的权重或运行条件。
 
 维护改动时更新 [开发日志](DEVELOPMENT_LOG.md)。需要更新 README 界面截图时，按 [截图来源与更新步骤](docs/screenshots/README.md) 运行隔离界面脚本并注明模拟数据范围。提交、推送与目标分支遵循当前使用者的授权，不把本文视为自动发布或重置数据的许可。
+
+## 云端工作站与版本同步
+
+阅读 [docs/CLOUD-SYNC.md](docs/CLOUD-SYNC.md) 了解两端协议和边界。桌面「同步云端」配置多个 HTTPS 域名 / 产品路径，通过浏览器授权码领取仅限 Director 的 AK；不要将存储 AK/SK、推理 Key、Cookie、ComfyUI 地址或磁盘路径放入同步快照。
+
+同步按共同内容版本做三方 diff，以哈希与父版本判断冲突，时间只辅助阅读。保留修改历史，禁止按客户端时间静默覆盖。线上拉回本地必须重新创建项目及关联 UUID、修正引用、保留旧项目，再回传幂等接收记录。回执失败时重试回执，不重复复制。新云端内容提交同样保留旧项目。
+
+卡片同步状态按目标区分；启用自动同步后，云端新修改会暂停提交并提示。资源通过目标云端签发的短期凭证上传，记录多个 `cloud_versions`，不自动删除原文件。云端复用 `backend` 导出快照，使用 `scripts/export-cloud-runtime.py` 更新 API 仓库；不可单独改导出副本造成界面漂移。
+
+修改后验证 `tests/test_sync.py` 和可用时的 `tests/test_cloud_gateway.py`，更新两端文档及导出清单。线上 Director 使用独立 PostgreSQL，账号复用现有 API；准备候选、检查回归后再切换流量，保留旧 worker。

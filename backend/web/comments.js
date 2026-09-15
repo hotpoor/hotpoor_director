@@ -3,14 +3,17 @@
   const esc = v => String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const uid = () => crypto.randomUUID().replaceAll('-','');
   const sessions = new Map();
+  const apiBase = new URL(document.currentScript.src).pathname.replace(/\/static\/comments\.js$/, '');
   function clean(html) {
     const fragment=DOMPurify.sanitize(html,{RETURN_DOM_FRAGMENT:true,
       ALLOWED_TAGS:['p','div','br','strong','b','em','i','u','s','del','blockquote','pre','code','h1','h2','h3','h4','h5','h6','ul','ol','li','hr','a','table','thead','tbody','tr','th','td','img','video','source'],
       ALLOWED_ATTR:['href','src','alt','title','controls','colspan','rowspan'],ALLOW_DATA_ATTR:false,ALLOW_ARIA_ATTR:false});
     for(const el of fragment.querySelectorAll('[src],[href]')) {
       for(const attr of ['src','href'])if(el.hasAttribute(attr)){
-        const value=el.getAttribute(attr);
-        if(!/^https?:\/\//i.test(value)&&!/^\/api\/(assets|outputs)\//.test(value))el.removeAttribute(attr);
+        let value=el.getAttribute(attr);
+        if(apiBase && /^\/api\//.test(value)){value=apiBase+value;el.setAttribute(attr,value);}
+        const local=apiBase&&value.startsWith(apiBase+'/')?value.slice(apiBase.length):value;
+        if(!/^https?:\/\//i.test(value)&&!/^\/api\/(assets|outputs)\//.test(local))el.removeAttribute(attr);
       }
       if(el.tagName==='A'){el.target='_blank';el.rel='noopener noreferrer';}
       if(el.tagName==='VIDEO'){el.controls=true;el.preload='metadata';}
