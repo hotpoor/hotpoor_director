@@ -284,6 +284,8 @@ class UploadGrantHandler(PrivateHandler):
         data=self.data();value=load(self.settings['config'])
         profile_id=active_id(value);profile=value['profiles'].get(profile_id)
         if not profile:raise tornado.web.HTTPError(400,reason='请先在云存储设置中保存并启用一套配置')
+        if self.settings['config'].get('cloud_mode') and not access_domain(profile).startswith('https://'):
+            raise tornado.web.HTTPError(400, reason='服务器版云存储访问域名必须使用 HTTPS')
         mime,size,name=data.get('mime'),data.get('size'),data.get('name')
         if mime not in MIMES or not isinstance(size,int) or isinstance(size,bool) or not 1<=size<=(20 if mime.startswith('image/') else 200)*1024*1024 or not isinstance(name,str) or not 1<=len(name)<=255:
             raise tornado.web.HTTPError(400,reason='请选择图片（20 MB 内）、视频或音频（200 MB 内）')

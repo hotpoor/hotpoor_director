@@ -87,6 +87,7 @@
   async function uploadMedia(file) {
     const limit=file.type.startsWith('image/')?20:200;
     if(file.size>limit*1024*1024)throw new Error(`${file.name} 不能超过 ${limit} MB`);
+    if(window.directorCloud){const cloud=await window.directorStorage.uploadFile(file);return request('/api/assets/cloud',{upload_id:cloud.id});}
     const form=new FormData();form.append('file',file);return request('/api/assets',form);
   }
   async function upload(file) {
@@ -616,7 +617,7 @@
   async function importAssets(files,point){
     if(!state.project||importing)return;
     if(cards().length+files.length>200){tell('当前画布最多 200 张卡片');return;}
-    const cloud=$('#asset-import-mode').value==='cloud';
+    const cloud=window.directorCloud||$('#asset-import-mode').value==='cloud';
     const project=state.project,v=project.body.canvas.viewport,r=$('#canvas').getBoundingClientRect();
     const x=point?(point.x-r.left-v.x)/v.zoom:cards().length?Math.max(...cards().map(c=>c.x+c.w))+80:(40-v.x)/v.zoom;
     const y=point?(point.y-r.top-v.y)/v.zoom:(40-v.y)/v.zoom;

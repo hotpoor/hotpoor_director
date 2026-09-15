@@ -358,8 +358,9 @@ async def upload_resources(handler, project_id, target):
             await conn.execute('UPDATE entities SET body=body || %s WHERE block_id=%s', (Jsonb({'cloud_versions': versions}), identifier), block_id=identifier)
 
 
-async def upload_bytes(target, raw, mime, name):
-    grant = await remote(target, '/api/storage/uploads', {'name': name, 'mime': mime, 'size': len(raw),
+async def upload_bytes(target, raw, mime, name, transport=None):
+    request = transport or (lambda path, body: remote(target, path, body))
+    grant = await request('/api/storage/uploads', {'name': name, 'mime': mime, 'size': len(raw),
                          'md5': hashlib.md5(raw).hexdigest()})
     if grant.get('reused'): result = grant['asset']
     else:
@@ -381,7 +382,7 @@ async def upload_bytes(target, raw, mime, name):
             headers=headers, follow_redirects=False, request_timeout=1800), raise_error=False)
         if not 200 <= response.code < 300 and not (grant['provider'] == 'qiniu' and response.code == 614):
             raise HTTPError(502, reason='素材上传未完成；本地副本保留，请重试')
-        result = await remote(target, '/api/storage/uploads/' + grant['upload_id'] + '/confirm', {})
+        result = await request('/api/storage/uploads/' + grant['upload_id'] + '/confirm', {})
     return {**result, 'sha256': hashlib.sha256(raw).hexdigest(), 'verified_at': stamp()}
 
 

@@ -311,6 +311,28 @@ async def download(url, destination):
     raise ValueError('生成文件重定向过多')
 
 
+async def download_memory(url):
+    """Fetch provider output with the same public-host restrictions, without disk files."""
+    for _ in range(5):
+        public_url(url); parts = urlsplit(url)
+        addresses = await asyncio.get_running_loop().getaddrinfo(parts.hostname, parts.port or (443 if parts.scheme == 'https' else 80), type=socket.SOCK_STREAM)
+        if not addresses or any(not ipaddress.ip_address(item[4][0]).is_global for item in addresses):
+            raise ValueError('生成文件地址不是公网地址')
+        chunks = []; size = 0
+        def receive(data):
+            nonlocal size
+            size += len(data)
+            if size > MAX_OUTPUT: raise ValueError('生成文件超过转存上限')
+            chunks.append(data)
+        response = await AsyncHTTPClient().fetch(HTTPRequest(url, request_timeout=300, connect_timeout=20,
+            follow_redirects=False, streaming_callback=receive), raise_error=False)
+        if response.code in (301, 302, 303, 307, 308):
+            url = urljoin(url, response.headers.get('Location', '')); continue
+        if response.code != 200 or not size: raise ValueError('生成文件读取失败')
+        return b''.join(chunks)
+    raise ValueError('生成文件重定向过多')
+
+
 class InferenceManager:
     poll_intervals = {'v1': 15, 'v2': 10}
 
@@ -349,6 +371,20 @@ class InferenceManager:
         await asyncio.gather(*tasks, return_exceptions=True)
 
     async def store_outputs(self, job_id, body, outputs):
+        if self.config.get('cloud_mode'):
+            if not isinstance(outputs, list) or not 1 <= len(outputs) <= 15: raise ValueError('任务没有返回有效生成文件')
+            from backend.sync import upload_bytes
+            result = []
+            for index, output in enumerate(outputs):
+                if isinstance(output, dict) and output.get('b64_json'):
+                    raw = base64.b64decode(output['b64_json'], validate=True)
+                else:
+                    raw = await download_memory(output.get('url') if isinstance(output, dict) else output)
+                if not raw or len(raw) > MAX_OUTPUT: raise ValueError('生成文件大小异常')
+                mime = 'video/mp4' if body['type'] == 'video' else 'image/png' if raw.startswith(b'\x89PNG') else 'image/jpeg'
+                uploaded = await upload_bytes({}, raw, mime, f'{job_id}-{index}', transport=self.config['storage_transport'])
+                result.append({'remote_url': uploaded['url'], 'mime': mime, 'sha256': uploaded['sha256'], 'size': len(raw)})
+            return result
         directory = self.config['data_dir'] / 'generated'
         directory.mkdir(exist_ok=True)
         result = []
@@ -447,6 +483,13 @@ async def submit(handler, project_id, data):
     manager=handler.settings['inference_manager']
     async with manager.lock:
         credentials=load_keys(handler.settings['config']);credential=key_profile(credentials)
+        if handler.settings['config'].get('cloud_mode'):
+            from backend.cloud_storage import load, active_id, access_domain
+            storage = load(handler.settings['config'])
+            if not storage['profiles'].get(active_id(storage)):
+                raise tornado.web.HTTPError(400, reason='请先保存并启用云存储，用于保存生成结果')
+            if not access_domain(storage['profiles'][active_id(storage)]).startswith('https://'):
+                raise tornado.web.HTTPError(400, reason='服务器版云存储访问域名必须使用 HTTPS')
         if not credential:
             raise tornado.web.HTTPError(400,reason='请先在 service-inference 设置中保存 API Key')
         if credential.get('models') is None:

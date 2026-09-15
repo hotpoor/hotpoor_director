@@ -238,3 +238,45 @@ def test_user_selected_key_expiration_and_management(gateway):
     assert c.post(endpoint, json={'expires_at': None}).status_code == 404
     c.cookies.clear(); c.headers.clear(); c.headers['Authorization'] = 'Bearer ' + tokens[0]
     assert c.get('/hotpoor/director/api/me').status_code == 401
+
+
+def test_cloud_upload_is_remote_only(gateway):
+    c, app, users = gateway
+    login(c, users[0])
+    response = c.post('/hotpoor/director/api/assets', files={'file': ('test.png', b'\x89PNG\r\n\x1a\n', 'image/png')})
+    assert response.status_code == 403 and '云存储' in response.text
+    script = c.get('/hotpoor/director/static/app.js').text
+    assert "window.directorCloud=true" in script and "option[value=local]" in script
+    import director
+    directory = director.runtime.apps[users[0]['user_id']]['app'].settings['config']['data_dir']
+    assert not (directory / 'media').exists()
+    upload_id = uuid.uuid4().hex
+    from psycopg.types.json import Jsonb
+    with app.db('xialiwei_api' + str(int(upload_id, 16) % 2 + 1)) as db:
+        db.execute('INSERT INTO director.entities(block_id,body) VALUES(%s,%s)', (upload_id, Jsonb({'kind':'cloud_upload','owner_id':users[0]['user_id'],'status':'completed','url':'https://cdn.example.com/test.png','name':'test.png','mime':'image/png','size':20})))
+    alias = c.post('/hotpoor/director/api/assets/cloud', json={'upload_id': upload_id})
+    assert alias.status_code == 200, alias.text
+    resource = c.get('/hotpoor/director/api/assets/' + alias.json()['id'], follow_redirects=False)
+    assert resource.status_code == 302 and resource.headers['location'] == 'https://cdn.example.com/test.png'
+    assert not (directory / 'media').exists()
+
+
+def test_cloud_generation_result_never_writes_media(tmp_path, monkeypatch):
+    import asyncio
+    import base64
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    from backend.inference import InferenceManager
+    from backend import sync
+    raw = b'\x89PNG\r\n\x1a\nfixture'
+    upload = AsyncMock(return_value={'url': 'https://cdn.example.com/generated.png', 'sha256': 'a'*64})
+    monkeypatch.setattr(sync, 'upload_bytes', upload)
+    manager = SimpleNamespace(config={'cloud_mode': True, 'data_dir': tmp_path, 'storage_transport': AsyncMock()})
+    outputs = asyncio.run(InferenceManager.store_outputs(manager, uuid.uuid4().hex, {'type': 'image'}, [{'b64_json': base64.b64encode(raw).decode()}]))
+    assert outputs[0]['remote_url'].startswith('https://cdn.') and 'filename' not in outputs[0]
+    assert list(tmp_path.iterdir()) == []
+    upload.assert_awaited_once()
+    upload.side_effect = ValueError('cloud storage unavailable')
+    with pytest.raises(ValueError):
+        asyncio.run(InferenceManager.store_outputs(manager, uuid.uuid4().hex, {'type': 'image'}, [{'b64_json': base64.b64encode(raw).decode()}]))
+    assert list(tmp_path.iterdir()) == []

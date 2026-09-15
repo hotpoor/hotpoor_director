@@ -201,6 +201,8 @@ async def save_project(handler, project_id=None):
 
 class UploadHandler(PrivateHandler):
     async def post(self):
+        if self.settings['config'].get('cloud_mode'):
+            raise tornado.web.HTTPError(403, reason='服务器版仅支持云存储，请通过云存储直传导入素材')
         files = self.request.files.get('file', [])
         if len(files) != 1 or len(files[0]['body']) > 200 * 1024 * 1024:
             raise tornado.web.HTTPError(400, reason='请选择一个不超过 200 MB 的素材文件')
@@ -237,12 +239,27 @@ class UploadHandler(PrivateHandler):
         self.finish({'id': asset_id, 'url': '/api/assets/' + asset_id, 'name': body['name'], 'mime': mime, 'size': len(raw)})
 
 
+class CloudAssetHandler(PrivateHandler):
+    async def post(self):
+        upload = await owned(self.projects, self.data().get('upload_id'), self.owner, 'cloud_upload')
+        body = upload['body']
+        if body.get('status') != 'completed' or not body.get('url', '').startswith('https://'):
+            raise tornado.web.HTTPError(400, reason='请先完成 HTTPS 云存储上传确认')
+        identifier = uuid.uuid5(uuid.NAMESPACE_URL, 'cloud-asset:' + self.owner + ':' + upload['block_id']).hex
+        value = dict(kind='asset', owner_id=self.owner, remote_url=body['url'], name=body['name'], mime=body['mime'], size=body['size'])
+        async with self.projects.connection() as conn:
+            await conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s) ON CONFLICT DO NOTHING', (identifier, Jsonb(value)), block_id=identifier)
+        self.finish({'id': identifier, 'url': '/api/assets/' + identifier, 'name': body['name'], 'mime': body['mime'], 'size': body['size']})
+
+
 class AssetHandler(PrivateHandler):
     async def head(self, asset_id):
         await self.get(asset_id, include_body=False)
 
     async def get(self, asset_id, include_body=True):
         row = await owned(self.projects, asset_id, self.owner, 'asset')
+        if row['body'].get('remote_url', '').startswith('https://') and (self.settings['config'].get('cloud_mode') or not row['body'].get('filename')):
+            self.redirect(row['body']['remote_url']); return
         path = self.settings['config']['data_dir'] / 'media' / row['body']['filename']
         if not path.is_file():
             if row['body'].get('remote_url', '').startswith('https://'):
@@ -315,7 +332,7 @@ def workspace_routes():
         (r'/api/settings/service-inference/test', InferenceTestHandler),
         (r'/api/settings/comfyui', ComfySettingsHandler), (r'/api/settings/comfyui/test', ComfyTestHandler),
         (r'/api/projects', ProjectsHandler), (r'/api/projects/([0-9a-f]{32})', ProjectHandler),
-        (r'/api/assets', UploadHandler), (r'/api/assets/([0-9a-f]{32})', AssetHandler),
+        (r'/api/assets/cloud', CloudAssetHandler), (r'/api/assets', UploadHandler), (r'/api/assets/([0-9a-f]{32})', AssetHandler),
         (r'/api/generations/([0-9a-f]{32})/cancel', CancelGenerationHandler),
         (r'/api/projects/([0-9a-f]{32})/queue-order', QueueOrderHandler),
         (r'/api/models', ModelsHandler), (r'/api/projects/([0-9a-f]{32})/generate', GenerateHandler),
