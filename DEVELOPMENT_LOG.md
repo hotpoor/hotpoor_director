@@ -479,3 +479,9 @@ LTX 安装跟进：用户开通访问后，官方权重 HEAD 请求返回 200；
 - Electron 启动失败和服务退出使用同样的提示样式，离线页面无需后端，用户确认后退出；删除原生系统错误弹窗调用。
 - 验证：两个 Electron smoke 通过，覆盖遮罩层级、键盘、360px 布局、取消 / 删除持久化、项目切换保护及无后端启动错误；同步与云网关 22 项测试通过。README 新增隔离测试截图。
 - 线上已部署 `0.11.2-director-dialogs`（8619），候选与生产 HTTPS 各 45 项检查通过；保留旧 worker。
+
+## 2026-09-16 · Windows 本机升级与 UUID 分片迁移验证
+
+- 安装新版云存储 Python 依赖，pip check 通过。旧工作台及 PostgreSQL 停止后，在忽略的 .local 升级备份目录创建完整冷备份并逐文件 SHA256 校验，再运行数据库初始化与分片迁移。
+- 迁移前后逐条比较实体 UUID、JSONB、创建和更新时间，以及账号与密码哈希；全部一致，素材文件保留，UUID 分片归属和 prepared transactions 配置验证通过。源码 Electron 和本机 ComfyUI 已启动，工作台页面、新界面资源及 ComfyUI system_stats 正常。
+- 完整回归首次结果为 192 passed、8 skipped、1 failed；唯一失败为 Windows 不支持 POSIX 0600 stat 权限语义。修正测试为在实际配置目录保护流程下验证 Windows ACL，允许当前用户与系统/管理员/所有者权限，拒绝其他主体；POSIX 保持 0600 检查。修正后云存储专项 32 passed。8 项伴随云端环境集成测试跳过，本次未调用付费模型或执行真实云上传。

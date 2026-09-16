@@ -1,6 +1,8 @@
 import asyncio
 import base64
 import json
+import os
+import subprocess
 from types import SimpleNamespace
 from unittest.mock import Mock, AsyncMock, patch
 from urllib.parse import urlsplit,parse_qs,unquote
@@ -30,10 +32,31 @@ def test_scoped_real_sdk_signatures(provider):
         assert ('x-oss-signature' if provider=='aliyun' else 'q-signature') in query
 
 
-def test_separate_profiles_permissions_and_no_disclosure(tmp_path):
-    config={'data_dir':tmp_path};value={'active_provider':'qiniu','profiles':{p:profile(p) for p in s.PROVIDERS}}
+def test_separate_profiles_permissions_and_no_disclosure(tmp_path, monkeypatch):
+    from backend.config import load_config
+    monkeypatch.setenv('DIRECTOR_DATA_DIR', str(tmp_path))
+    config=load_config();value={'active_provider':'qiniu','profiles':{p:profile(p) for p in s.PROVIDERS}}
     s.save(config,value);assert s.load(config)==value
-    assert (tmp_path/'.cloud-storage.json').stat().st_mode&0o777==0o600
+    if os.name == 'nt':
+        script = """
+        $ErrorActionPreference = 'Stop'
+        $file = Get-Acl -LiteralPath $env:DIRECTOR_TEST_ACL_FILE
+        $parent = Get-Acl -LiteralPath (Split-Path $env:DIRECTOR_TEST_ACL_FILE)
+        $allow = @($file.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier]) | Where-Object {$_.AccessControlType -eq 'Allow'} | ForEach-Object {$_.IdentityReference.Value})
+        @{protected=$parent.AreAccessRulesProtected;allow=$allow;user=[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value} | ConvertTo-Json -Compress
+        """
+        result = subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-Command', script],
+            env={**{k:v for k,v in os.environ.items() if k.lower() != 'psmodulepath'},
+                 'DIRECTOR_TEST_ACL_FILE':str(tmp_path/'.cloud-storage.json')},
+            capture_output=True, text=True, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
+        acl=json.loads(result.stdout)
+        # Windows may retain explicit SYSTEM, Administrators and OWNER RIGHTS
+        # entries; ordinary users/groups must not gain access to the secret.
+        allowed={acl['user'], 'S-1-5-18', 'S-1-5-32-544', 'S-1-3-4'}
+        assert acl['protected'] and acl['user'] in acl['allow']
+        assert set(acl['allow']) <= allowed
+    else:
+        assert (tmp_path/'.cloud-storage.json').stat().st_mode&0o777==0o600
     assert 'fake-access-id' not in json.dumps(s.public_view(value))
     assert 'fake-secret-value' not in json.dumps(s.public_view(value))
     assert s.normalize({**profile(),'access_key_id':'','access_key_secret':''},profile())==profile()
