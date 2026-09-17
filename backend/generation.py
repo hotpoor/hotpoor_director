@@ -17,6 +17,7 @@ from backend.reference_media import prepare_reference
 from backend.comfy_settings import endpoint
 from backend.workspace import PrivateHandler, owned, ID
 from backend.inference_models import MODELS as CLOUD_MODELS, BY_ID as CLOUD_BY_ID, PROVIDER
+from backend.billing import job_cost, summarize
 
 COMFY = 'http://127.0.0.1:8188'
 MODELS = [
@@ -171,10 +172,11 @@ class ModelsHandler(PrivateHandler):
             online = True
         except (HTTPClientError, OSError, asyncio.TimeoutError):
             online = False
-        from backend.inference import load_key,model_access
-        allowed,error=await model_access(self.settings['config'],self.settings['inference_manager'])
-        models=[{**m,'available':m.get('provider')!='service-inference' or m['remote_model'] in allowed} for m in MODELS]
-        self.finish({'models':models,'online':online,'inference_configured':bool(load_key(self.settings['config'])),'model_error':error})
+        from backend.inference import load_keys,keys_view,model_access,enabled_ids
+        allowed,error=await model_access(self.settings['config'],self.settings['inference_manager'],all_keys=True)
+        credentials=load_keys(self.settings['config'])
+        models=[{**m,'credential_ids':[p['id'] for p in credentials['keys'] if p['id'] in enabled_ids(credentials) and m.get('remote_model') in {x['id'] for x in p.get('models') or []}], 'available':m.get('provider')!='service-inference' or m['remote_model'] in allowed} for m in MODELS]
+        self.finish({'models':models,'online':online,'inference_configured':bool(credentials['keys']),'inference_credentials':keys_view(credentials),'model_error':error})
 
 
 class GenerateHandler(PrivateHandler):
@@ -422,7 +424,11 @@ class HistoryHandler(PrivateHandler):
             reorder_available = bool((await asyncio.wait_for(comfy_at(endpoint(self.settings), '/director/queue-capabilities'), 3)).get('reorder')) if any(r['body'].get('provider') != PROVIDER for r in rows) else False
         except (HTTPClientError, OSError, ValueError, asyncio.TimeoutError):
             reorder_available = False
-        self.finish({'history': rows, 'reorder_available': reorder_available})
+        for row in rows:
+            cost = job_cost(row['body'])
+            if cost:
+                row['body']['cost'] = cost
+        self.finish({'history': rows, 'summary': summarize(rows), 'reorder_available': reorder_available})
 
 
 class OutputHandler(PrivateHandler):

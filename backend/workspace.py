@@ -333,9 +333,10 @@ class AssetHandler(PrivateHandler):
 
 
 def workspace_routes():
+    from backend.management import ManagementSettingsHandler, ManagementTestHandler, ManagementReportHandler
     from backend.comments import CreateChatHandler, ChatHandler, ChatMessagesHandler, ChatMaterialsHandler
     from backend.comfy_settings import ComfySettingsHandler, ComfyTestHandler
-    from backend.inference import InferenceSettingsHandler, InferenceTestHandler
+    from backend.inference import InferenceSettingsHandler, InferenceTestHandler, InferenceCostHandler, InferenceCostImportHandler
     from backend.cloud_storage import StorageSettingsHandler, StorageTestHandler, UploadGrantHandler, UploadConfirmHandler, CloudImageHandler
     from backend.generation import ModelsHandler, GenerateHandler, HistoryHandler, OutputHandler, CancelGenerationHandler, QueueOrderHandler
     return [
@@ -350,13 +351,18 @@ def workspace_routes():
         (r'/api/storage/uploads/([0-9a-f]{32})/confirm', UploadConfirmHandler),
         (r'/api/settings/service-inference', InferenceSettingsHandler),
         (r'/api/settings/service-inference/test', InferenceTestHandler),
+        (r'/api/settings/service-inference/management', ManagementSettingsHandler),
+        (r'/api/settings/service-inference/management/test', ManagementTestHandler),
+        (r'/api/service-inference/management/report', ManagementReportHandler),
         (r'/api/settings/comfyui', ComfySettingsHandler), (r'/api/settings/comfyui/test', ComfyTestHandler),
         (r'/api/projects', ProjectsHandler), (r'/api/projects/([0-9a-f]{32})', ProjectHandler),
         (r'/api/assets/cloud', CloudAssetHandler), (r'/api/assets', UploadHandler), (r'/api/assets/([0-9a-f]{32})', AssetHandler),
         (r'/api/generations/([0-9a-f]{32})/cancel', CancelGenerationHandler),
+        (r'/api/generations/([0-9a-f]{32})/cost', InferenceCostHandler),
         (r'/api/projects/([0-9a-f]{32})/queue-order', QueueOrderHandler),
         (r'/api/models', ModelsHandler), (r'/api/projects/([0-9a-f]{32})/generate', GenerateHandler),
         (r'/api/projects/([0-9a-f]{32})/history', HistoryHandler),
+        (r'/api/projects/([0-9a-f]{32})/cost-import', InferenceCostImportHandler),
         (r'/api/outputs/([0-9a-f]{32})/(\d+)', OutputHandler),
     ]
 

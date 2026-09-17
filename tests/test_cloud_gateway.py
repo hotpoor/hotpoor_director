@@ -271,7 +271,7 @@ def test_cloud_generation_result_never_writes_media(tmp_path, monkeypatch):
     raw = b'\x89PNG\r\n\x1a\nfixture'
     upload = AsyncMock(return_value={'url': 'https://cdn.example.com/generated.png', 'sha256': 'a'*64})
     monkeypatch.setattr(sync, 'upload_bytes', upload)
-    manager = SimpleNamespace(config={'cloud_mode': True, 'data_dir': tmp_path, 'storage_transport': AsyncMock()})
+    manager = SimpleNamespace(config={'cloud_mode': True, 'data_dir': tmp_path, 'storage_transport': AsyncMock()}, update=AsyncMock())
     outputs = asyncio.run(InferenceManager.store_outputs(manager, uuid.uuid4().hex, {'type': 'image'}, [{'b64_json': base64.b64encode(raw).decode()}]))
     assert outputs[0]['remote_url'].startswith('https://cdn.') and 'filename' not in outputs[0]
     assert list(tmp_path.iterdir()) == []
@@ -362,3 +362,32 @@ def test_editor_generation_uses_only_own_credentials(gateway,monkeypatch):
     launch.assert_called_once();assert 'secret' not in generated.text
     with app.db('xialiwei_api'+str(int(payload['request_id'],16)%2+1)) as db:
         db.execute("UPDATE director.entities SET body=body || %s WHERE block_id=%s",(json.dumps({'status':'failed'}),payload['request_id']))
+
+
+def test_anonymous_public_share_read_only_and_resource_scope(gateway):
+    c,app,users=gateway
+    login(c,users[0]);project=c.post('/hotpoor/director/api/projects',json={'title':'公开观看'}).json();pid=project['block_id'];base='/hotpoor/director/api/'
+    private=c.post(base+'projects',json={'title':'私有项目'}).json()
+    chat=uuid.uuid4().hex;c.post(base+'projects/'+pid+'/chats',json={'chat_id':chat})
+    link=c.post(base+'collaboration/'+pid+'/links',json={'label':'公开链接','expires_at':None}).json()
+    from psycopg.types.json import Jsonb
+    media=uuid.uuid4().hex;foreign=uuid.uuid4().hex
+    for aid,project_id in [(media,pid),(foreign,private['block_id'])]:
+        with app.db('xialiwei_api'+str(int(aid,16)%2+1)) as db:
+            db.execute('INSERT INTO director.entities(block_id,body) VALUES(%s,%s)',(aid,Jsonb({'kind':'asset','owner_id':users[0]['user_id'],'project_id':project_id,'remote_url':'https://cdn.example.com/view.png','mime':'image/png','name':'view.png','size':10})))
+    c.headers.clear();c.cookies.clear();headers={'X-Director-Share':link['token']}
+    page=c.get('/hotpoor/director',params={'share':link['token']});assert page.status_code==200 and 'public-share.js' in page.text
+    assert c.get(base+'me',headers=headers).json()['public']
+    view=c.get(base+'projects/'+pid,headers=headers);assert view.status_code==200 and view.json()['permission']['role']=='viewer'
+    assert c.get(base+'projects/'+pid+'/history',headers=headers).status_code==200
+    assert c.get(base+'chats/'+chat+'/messages',headers=headers).status_code==200
+    assert c.get(base+'projects/'+private['block_id'],headers=headers).status_code==404
+    assert c.get(base+'assets/'+media,params={'share':link['token']},follow_redirects=False).status_code==302
+    assert c.get(base+'assets/'+foreign,params={'share':link['token']},follow_redirects=False).status_code==404
+    assert c.get(base+'assets/'+media).status_code==401
+    for path in ['settings/service-inference','sync/projects/'+pid+'/timeline','storage/uploads']:
+        assert c.get(base+path,headers=headers).status_code==403
+    assert c.post(base+'chats/'+chat+'/messages',headers=headers,json={'content':'禁止'}).status_code==403
+    assert c.post(base+'projects/'+pid,headers=headers,json={}).status_code==403
+    login(c,users[0]);c.post(base+'collaboration/'+pid+'/links/'+link['id'],json={})
+    c.headers.clear();c.cookies.clear();assert c.get(base+'projects/'+pid,headers=headers).status_code==404

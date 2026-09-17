@@ -17,6 +17,8 @@ import tornado.web
 
 from backend.inference_models import BY_ID, PROVIDER
 from backend.workspace import PrivateHandler, owned, ID
+from backend.cloud_storage import StorageError
+from backend.billing import reported_cost, job_cost, log_charges
 
 BASE_URL = 'https://model.service-inference.ai'
 ACTIVE = ('submitting', 'queued', 'running')
@@ -33,6 +35,11 @@ def load_keys(config):
     return {'active_key_id':'legacy' if key else None,'keys':[{'id':'legacy','name':'原有 Key','api_key':key,'models':None}] if key else []}
 
 
+def enabled_ids(value):
+    saved=value.get('enabled_key_ids')
+    return [p['id'] for p in value['keys'] if p['id'] in (saved if isinstance(saved,list) else [p['id'] for p in value['keys']])]
+
+
 def key_profile(value,key_id=None):
     target=value['active_key_id'] if key_id is None else key_id
     return next((p for p in value['keys'] if p['id']==target),None)
@@ -43,8 +50,8 @@ def load_key(config,key_id=None):
     return profile['api_key'] if profile else ''
 
 
-def save_keys(config,value):
-    directory=config['data_dir'];path=directory/'.service-inference.json'
+def save_keys(config,value,filename='.service-inference.json'):
+    directory=config['data_dir'];path=directory/filename
     temporary=directory/('.service-inference-'+uuid.uuid4().hex+'.tmp')
     try:
         fd=os.open(temporary,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
@@ -74,8 +81,9 @@ def model_inventory(models):
 
 
 def keys_view(value):
-    return dict(configured=bool(key_profile(value)),base_url=BASE_URL,active_key_id=value['active_key_id'],
+    return dict(configured=bool(enabled_ids(value)),base_url=BASE_URL,active_key_id=value['active_key_id'],enabled_key_ids=enabled_ids(value),
         keys=[{'id':p['id'],'name':p['name'],'models_checked_at':p.get('models_checked_at'),
+               'management_key_id':p.get('management_key_id'),
                'models':model_inventory(p.get('models')),'models_loaded':p.get('models') is not None} for p in value['keys']])
 
 
@@ -94,18 +102,26 @@ async def refresh_profile(profile):
     profile.update(models=models,models_checked_at=int(time.time()))
 
 
-async def model_access(config,manager):
+async def model_access(config,manager,all_keys=False):
     async with manager.lock:
-        value=load_keys(config);profile=key_profile(value);error=None
-        if profile and profile.get('models') is None:
-            try:await refresh_profile(profile);save_keys(config,value)
-            except ProviderError as e:error=str(e)
-        return ({m['id'] for m in profile.get('models') or []} if profile else set()),error
+        value=load_keys(config);error=None
+        profiles=[p for p in value['keys'] if p['id'] in enabled_ids(value)] if all_keys else [key_profile(value)]
+        allowed=set()
+        for profile in profiles:
+            if not profile:continue
+            if profile.get('models') is None:
+                try:await refresh_profile(profile);save_keys(config,value)
+                except ProviderError as e:error=str(e)
+            allowed.update(m['id'] for m in profile.get('models') or [])
+        return allowed,error
+
 
 
 def valid_key(value):
     if not isinstance(value, str) or not 8 <= len(value.strip()) <= 4096 or any(c.isspace() for c in value.strip()):
         raise tornado.web.HTTPError(400, reason='请输入有效的 API Key')
+    if value.strip().startswith('sk-mgmt-'):
+        raise tornado.web.HTTPError(400, reason='管理 AK 请填写到管理 AK 配置，不能用于生成')
     return value.strip()
 
 
@@ -121,7 +137,7 @@ async def api(key, path, data=None):
             method='GET' if data is None else 'POST',
             headers={'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json'},
             body=None if data is None else json.dumps(data), connect_timeout=20,
-            request_timeout=300, follow_redirects=False))
+            request_timeout=300 if data is not None else 45, follow_redirects=False))
     except HTTPClientError as error:
         # Never echo response bodies: gateways can include the original request/key.
         message = {400:'请求参数或参考素材不符合模型要求',401:'API Key 无效',402:'余额不足或用量超限',
@@ -136,6 +152,9 @@ async def api(key, path, data=None):
             raise ValueError()
         if result.get('error'):
             raise ProviderError('service-inference 返回错误，请在服务控制台查看详情')
+        request_id = response.headers.get('X-Request-Id')
+        if isinstance(request_id, str) and re.fullmatch(r'[a-zA-Z0-9_-]{1,200}', request_id):
+            result['_request_id'] = request_id
         return result
     except (ValueError, TypeError):
         raise ProviderError('service-inference 返回了无法识别的响应') from None
@@ -149,8 +168,9 @@ class InferenceSettingsHandler(PrivateHandler):
         async with self.settings['inference_manager'].lock:
             value=load_keys(config);action=data.get('action','save')
             profile=key_profile(value,data.get('id'));active=key_profile(value)
+            value['enabled_key_ids']=enabled_ids(value)
             if data.get('clear'):action='delete';profile=active
-            if action in ('select','refresh','delete') and not profile:raise tornado.web.HTTPError(404,reason='Key 配置不存在')
+            if action in ('select','refresh','delete','enable') and not profile:raise tornado.web.HTTPError(404,reason='Key 配置不存在')
             if action=='delete' or action=='save' and profile and data.get('api_key') and data['api_key'].strip()!=profile['api_key']:
                 async with self.jobs.connection() as conn:
                     owner_filter = " AND COALESCE(body->>'credential_owner',body->>'owner_id')=%s" if config.get('cloud_owner') else ''
@@ -158,12 +178,22 @@ class InferenceSettingsHandler(PrivateHandler):
                     busy=await (await conn.scan("SELECT 1 FROM entities WHERE body->>'provider'=%s AND body->>'status' IN ('submitting','queued','running') AND COALESCE(body->>'credential_id','legacy')=%s" + owner_filter + " LIMIT 1",params)).fetchone()
                 if busy:raise tornado.web.HTTPError(409,reason='此 Key 仍有生成任务，请完成后再修改密钥或删除；可以切换其他 Key')
             try:
-                if action=='delete':
+                if action=='enable':
+                    if not isinstance(data.get('enabled'),bool):raise tornado.web.HTTPError(400,reason='启用状态需为布尔值')
+                    if data['enabled']:
+                        await refresh_profile(profile)
+                        if profile['id'] not in value['enabled_key_ids']:value['enabled_key_ids'].append(profile['id'])
+                    else:value['enabled_key_ids']=[i for i in value['enabled_key_ids'] if i!=profile['id']]
+                    if value['active_key_id'] not in value['enabled_key_ids']:value['active_key_id']=next(iter(value['enabled_key_ids']),None)
+                elif action=='delete':
                     value['keys'].remove(profile)
+                    value['enabled_key_ids']=[i for i in value['enabled_key_ids'] if i!=profile['id']]
                     if value['active_key_id']==profile['id']:value['active_key_id']=None
                 elif action in ('select','refresh'):
                     await refresh_profile(profile)
-                    if action=='select':value['active_key_id']=profile['id']
+                    if action=='select':
+                        value['active_key_id']=profile['id']
+                        if profile['id'] not in value['enabled_key_ids']:value['enabled_key_ids'].append(profile['id'])
                 elif action=='save':
                     name=data.get('name') or (profile['name'] if profile else '新 Key')
                     if not isinstance(name,str) or not 1<=len(name.strip())<=80:raise tornado.web.HTTPError(400,reason='名称需为 1–80 个字符')
@@ -173,8 +203,16 @@ class InferenceSettingsHandler(PrivateHandler):
                         if len(value['keys'])>=30:raise tornado.web.HTTPError(400,reason='最多保存 30 个 Key')
                         profile={'id':uuid.uuid4().hex};value['keys'].append(profile)
                     profile.update(name=name.strip(),api_key=key)
+                    if 'management_key_id' in data:
+                        from backend.management import load as load_management
+                        management_id = data['management_key_id']
+                        if not isinstance(management_id, str) or not management_id or not key_profile(load_management(config), management_id):
+                            raise tornado.web.HTTPError(400, reason='请选择已保存的管理 AK，或先添加管理 AK')
+                        profile['management_key_id'] = management_id
                     await refresh_profile(profile)
-                    if data.get('activate',True):value['active_key_id']=profile['id']
+                    if data.get('activate',True):
+                        value['active_key_id']=profile['id']
+                        if profile['id'] not in value['enabled_key_ids']:value['enabled_key_ids'].append(profile['id'])
                 else:raise tornado.web.HTTPError(400,reason='未知配置操作')
             except ProviderError as error:raise tornado.web.HTTPError(502,reason=str(error))
             save_keys(config,value)
@@ -187,6 +225,64 @@ class InferenceTestHandler(PrivateHandler):
         try:models=await discover_models(key)
         except ProviderError as error:raise tornado.web.HTTPError(502,reason=str(error))
         self.finish({'ok':True,'models':model_inventory(models)})
+
+
+class InferenceCostHandler(PrivateHandler):
+    async def post(self, job_id):
+        row = await owned(self.jobs, job_id, self.owner, 'generation')
+        body = row['body']
+        if body.get('provider') != PROVIDER or body.get('type') != 'video':
+            raise tornado.web.HTTPError(400, reason='仅支持查询 service-inference 视频任务费用')
+        if body.get('status') in ACTIVE:
+            raise tornado.web.HTTPError(409, reason='任务进行中，完成后可查询费用')
+        config = self.settings['config']
+        if config.get('cloud_owner') and body.get('credential_owner', body.get('owner_id')) != config['cloud_owner']:
+            raise tornado.web.HTTPError(403, reason='请由生成任务的账号查询费用')
+        remote_id = body.get('remote_task_id')
+        if not isinstance(remote_id, str) or not re.fullmatch(r'[a-zA-Z0-9_-]{1,200}', remote_id):
+            raise tornado.web.HTTPError(400, reason='此记录没有可查询的云端任务 ID')
+        key = load_key(config, body.get('credential_id', 'legacy'))
+        if not key:
+            raise tornado.web.HTTPError(400, reason='原任务使用的 Key 已删除，请恢复原 Key 配置')
+        model = BY_ID.get(body.get('model'))
+        if not model:
+            raise tornado.web.HTTPError(400, reason='无法识别此记录的模型接口版本')
+        try:
+            response = await api(key, '/' + model['api_version'] + '/video/tasks/' + quote(remote_id, safe=''))
+        except ProviderError as error:
+            raise tornado.web.HTTPError(502, reason=str(error))
+        cost = reported_cost(response)
+        patch = {'cost_checked_at': int(time.time() * 1000)}
+        if cost:
+            patch['cost'] = cost
+        await self.settings['inference_manager'].update(job_id, **patch)
+        self.finish({'cost': cost or job_cost(body), 'reported': cost is not None,
+                     'checked_at': patch['cost_checked_at'],
+                     'message': '已读取服务返回费用' if cost else '任务接口未返回费用；请到服务商账单核对，未知费用不计为零元'})
+
+
+class InferenceCostImportHandler(PrivateHandler):
+    async def post(self, project_id):
+        await owned(self.projects, project_id, self.owner, 'project')
+        try:
+            charges = log_charges(self.data().get('text'))
+        except ValueError as error:
+            raise tornado.web.HTTPError(400, reason=str(error))
+        async with self.jobs.connection() as conn:
+            rows = await (await conn.scan("SELECT * FROM entities WHERE body->>'kind'='generation' AND body->>'owner_id'=%s AND body->>'project_id'=%s AND body->>'provider'=%s", (self.owner, project_id, PROVIDER))).fetchall()
+        matched = 0
+        checked_at = int(time.time() * 1000)
+        for row in rows:
+            body = row['body']
+            model = BY_ID.get(body.get('model'))
+            if not model:
+                continue
+            identifier = body.get('remote_task_id') if body.get('type') == 'video' else body.get('remote_request_id')
+            cost = charges.get((identifier, model['remote_model']))
+            if cost:
+                await self.settings['inference_manager'].update(row['block_id'], cost=cost, cost_checked_at=checked_at)
+                matched += 1
+        self.finish({'matched': matched, 'charges': len(charges), 'message': f'已回填 {matched} 条生成记录费用；重复导入不会重复累计'})
 
 
 def public_url(value):
@@ -286,7 +382,7 @@ async def download(url, destination):
     for _ in range(5):
         public_url(url)
         parts = urlsplit(url)
-        addresses = await asyncio.get_running_loop().getaddrinfo(parts.hostname, parts.port or (443 if parts.scheme=='https' else 80), type=socket.SOCK_STREAM)
+        addresses = await asyncio.wait_for(asyncio.get_running_loop().getaddrinfo(parts.hostname, parts.port or (443 if parts.scheme=='https' else 80), type=socket.SOCK_STREAM), 15)
         if not addresses or any(not ipaddress.ip_address(item[4][0]).is_global for item in addresses):
             raise ValueError('生成文件地址不是公网地址')
         size = 0
@@ -299,7 +395,7 @@ async def download(url, destination):
                     if size > MAX_OUTPUT:
                         raise ValueError('生成文件超过 210 MB 本地保存上限')
                     stream.write(data)
-                response = await AsyncHTTPClient().fetch(HTTPRequest(url, request_timeout=300,
+                response = await AsyncHTTPClient().fetch(HTTPRequest(url, request_timeout=1800,
                     connect_timeout=20, follow_redirects=False, streaming_callback=chunk), raise_error=False)
             if response.code in (301,302,303,307,308):
                 url = urljoin(url, response.headers.get('Location',''))
@@ -313,26 +409,57 @@ async def download(url, destination):
     raise ValueError('生成文件重定向过多')
 
 
-async def download_memory(url):
+async def download_memory(url, progress=None):
     """Fetch provider output with the same public-host restrictions, without disk files."""
     for _ in range(5):
         public_url(url); parts = urlsplit(url)
-        addresses = await asyncio.get_running_loop().getaddrinfo(parts.hostname, parts.port or (443 if parts.scheme == 'https' else 80), type=socket.SOCK_STREAM)
+        addresses = await asyncio.wait_for(asyncio.get_running_loop().getaddrinfo(parts.hostname, parts.port or (443 if parts.scheme == 'https' else 80), type=socket.SOCK_STREAM), 15)
         if not addresses or any(not ipaddress.ip_address(item[4][0]).is_global for item in addresses):
             raise ValueError('生成文件地址不是公网地址')
-        chunks = []; size = 0
+        chunks = []; size = 0; pending = None; reported = 0
         def receive(data):
-            nonlocal size
+            nonlocal size, pending, reported
             size += len(data)
             if size > MAX_OUTPUT: raise ValueError('生成文件超过转存上限')
             chunks.append(data)
-        response = await AsyncHTTPClient().fetch(HTTPRequest(url, request_timeout=300, connect_timeout=20,
-            follow_redirects=False, streaming_callback=receive), raise_error=False)
+            if progress and (pending is None or pending.done()) and time.monotonic() - reported >= .5:
+                if pending is not None: pending.result()
+                pending = asyncio.create_task(progress(size))
+                reported = time.monotonic()
+        try:
+            response = await AsyncHTTPClient().fetch(HTTPRequest(url, request_timeout=1800, connect_timeout=20,
+                follow_redirects=False, streaming_callback=receive), raise_error=False)
+        finally:
+            if pending is not None: await pending
+        if progress: await progress(size)
         if response.code in (301, 302, 303, 307, 308):
             url = urljoin(url, response.headers.get('Location', '')); continue
         if response.code != 200 or not size: raise ValueError('生成文件读取失败')
         return b''.join(chunks)
     raise ValueError('生成文件重定向过多')
+
+
+def remote_progress(task):
+    """Keep only bounded progress counters; never persist arbitrary provider metadata."""
+    metadata = task.get('metadata') if isinstance(task.get('metadata'), dict) else {}
+    source = task.get('progress', metadata.get('progress'))
+    result = {'phase': 'remote', 'checked_at': int(time.time() * 1000)}
+    if isinstance(source, dict):
+        def number(*names):
+            for name in names:
+                value = source.get(name)
+                if isinstance(value, (int, float)) and not isinstance(value, bool) and 0 <= value <= 10**12:
+                    return value
+        completed, total = number('completed', 'current', 'value'), number('total', 'maximum')
+        if completed is not None and total and completed <= total:
+            result.update(value=completed, maximum=total)
+        percent = number('percent', 'percentage')
+        if 'maximum' not in result and percent is not None and percent <= 100:
+            result.update(value=percent, maximum=100)
+        stage = source.get('stage', source.get('phase'))
+        if stage in ('downloading', 'uploading', 'validating', 'preparing', 'processing', 'pending'):
+            result['stage'] = stage
+    return result
 
 
 class InferenceManager:
@@ -373,20 +500,39 @@ class InferenceManager:
         await asyncio.gather(*tasks, return_exceptions=True)
 
     async def store_outputs(self, job_id, body, outputs):
-        if self.config.get('cloud_mode'):
+        if body.get('output_storage') == 'cloud' or self.config.get('cloud_mode'):
             if not isinstance(outputs, list) or not 1 <= len(outputs) <= 15: raise ValueError('任务没有返回有效生成文件')
-            from backend.sync import upload_bytes
+            from backend.cloud_storage import store_generated, fetch_generated_video
             result = []
             for index, output in enumerate(outputs):
+                async def phase(stage, **counts):
+                    body['_output_phase'] = stage
+                    await self.update(job_id, remote_status=stage, error=None, progress={'phase': 'saving', 'maximum': len(outputs), 'item': index + 1, **counts})
+                if body['type'] == 'video' and not (isinstance(output, dict) and output.get('b64_json')):
+                    direct = await fetch_generated_video(self.config, self.pool, body, output.get('url') if isinstance(output, dict) else output, f'{job_id}-{index}', phase)
+                    if direct:
+                        result.append(direct)
+                        continue
+                await phase('reading_output')
                 if isinstance(output, dict) and output.get('b64_json'):
                     raw = base64.b64decode(output['b64_json'], validate=True)
                 else:
-                    raw = await download_memory(output.get('url') if isinstance(output, dict) else output)
+                    async def received(size):
+                        await phase('reading_output', bytes=size)
+                    raw = await download_memory(output.get('url') if isinstance(output, dict) else output, progress=received)
                 if not raw or len(raw) > MAX_OUTPUT: raise ValueError('生成文件大小异常')
                 mime = 'video/mp4' if body['type'] == 'video' else 'image/png' if raw.startswith(b'\x89PNG') else 'image/jpeg'
-                uploaded = await upload_bytes({}, raw, mime, f'{job_id}-{index}', transport=self.config['storage_transport'])
+                if body.get('storage_profile_id'):
+                    body['_output_phase'] = 'uploading_output'
+                    uploaded = await store_generated(self.config, self.pool, body, raw, mime, f'{job_id}-{index}', phase)
+                else:
+                    # Older online jobs predate pinned storage profiles.
+                    from backend.sync import upload_bytes
+                    await phase('uploading_output')
+                    uploaded = await upload_bytes({}, raw, mime, f'{job_id}-{index}', transport=self.config['storage_transport'])
                 result.append({'remote_url': uploaded['url'], 'mime': mime, 'sha256': uploaded['sha256'], 'size': len(raw)})
             return result
+        await self.update(job_id, remote_status='downloading', error=None, progress={'phase': 'saving'})
         directory = self.config['data_dir'] / 'generated'
         directory.mkdir(exist_ok=True)
         result = []
@@ -418,18 +564,33 @@ class InferenceManager:
         usage = dict(usage) if isinstance(usage,dict) else {}
         usage['tokens'] = usage.get('total_tokens',usage.get('output_tokens'))
         await self.update(job_id,status='completed',outputs=local,usage=usage,
-                          error=None,elapsed_ms=time.time_ns()//1_000_000-body['submitted_at'])
+                          error=None,pending_outputs=None,pending_usage=None,failure=None,progress={'phase':'completed'},elapsed_ms=time.time_ns()//1_000_000-body['submitted_at'])
 
     async def run(self, job_id, body, payload):
         try:
             key = load_key(self.config,body.get('credential_id','legacy'))
             if not key:
                 raise ProviderError('请先配置 service-inference API Key')
+            if self.config.get('cloud_mode') and not body.get('storage_profile_id'):
+                from backend.cloud_storage import load, active_id, fingerprint
+                storage = load(self.config); profile_id = active_id(storage)
+                profile = storage['profiles'].get(profile_id)
+                if profile:
+                    pinned = dict(output_storage='cloud', storage_profile_id=profile_id,
+                                  storage_profile_name=profile.get('name') or profile.get('provider', '云存储'),
+                                  storage_profile_fingerprint=fingerprint(profile))
+                    body.update(pinned)
+                    await self.update(job_id, **pinned)
             model = BY_ID[body['model']]
             if payload is not None:
                 async with self.slots:
                     await self.update(job_id,status='running')
                     response = await api(key, '/v1/images/generations' if body['type']=='image' else '/'+model['api_version']+'/video/generate',payload)
+                cost = reported_cost(response)
+                if cost:
+                    await self.update(job_id, cost=cost, cost_checked_at=int(time.time() * 1000))
+                if response.get('_request_id'):
+                    await self.update(job_id, remote_request_id=response['_request_id'])
                 if body['type']=='image':
                     await self.complete(job_id,body,response.get('data'),response.get('usage'))
                     return
@@ -438,30 +599,53 @@ class InferenceManager:
                 if not isinstance(remote_id,str) or not re.fullmatch(r'[a-zA-Z0-9_-]{1,200}',remote_id):
                     raise ProviderError('提交响应未返回任务 ID；请在服务控制台确认，勿重复提交')
                 body['remote_task_id']=remote_id
-                await self.update(job_id,remote_task_id=remote_id,status='queued')
+                await self.update(job_id,remote_task_id=remote_id,status='queued',remote_status=task.get('status','pending'),progress=remote_progress(task))
             interval = self.poll_intervals[model['api_version']]
+            retries = 0
             while True:
+                status = ''; operation = 'query'
                 try:
-                    response = await api(key,'/'+model['api_version']+'/video/tasks/'+quote(body['remote_task_id'],safe=''))
-                    task = response.get('task')
+                    if body.get('pending_outputs'):
+                        task = {'status':'completed','outputs':body['pending_outputs'],'usage':body.get('pending_usage')}
+                    else:
+                        response = await api(key,'/'+model['api_version']+'/video/tasks/'+quote(body['remote_task_id'],safe=''))
+                        task = response.get('task')
                     if not isinstance(task,dict):
                         raise ProviderError('任务查询响应不完整，稍后重试')
+                    cost = reported_cost(task if body.get('pending_outputs') else response)
+                    if cost:
+                        await self.update(job_id, cost=cost, cost_checked_at=int(time.time() * 1000))
                     status=task.get('status','')
                     if task.get('error') or status in ('failed','cancelled','canceled'):
                         await self.update(job_id,status='failed',error='云端任务失败，请在 service-inference 控制台查看任务 '+body['remote_task_id'],remote_status=status)
                         return
                     if status=='completed':
+                        operation = 'saving'
+                        if not body.get('pending_outputs') and isinstance(task.get('outputs'), list):
+                            body['pending_outputs'] = [o.get('url') if isinstance(o,dict) else o for o in task['outputs']]
+                            body['pending_usage'] = task.get('usage') or task.get('metadata',{}).get('usage')
+                            await self.update(job_id, pending_outputs=body['pending_outputs'], pending_usage=body['pending_usage'])
                         await self.update(job_id,status='running',remote_status='downloading')
                         await self.complete(job_id,body,task.get('outputs'),task.get('usage') or task.get('metadata',{}).get('usage'))
                         return
-                    await self.update(job_id,status='queued' if status in ('pending','preparing') else 'running',remote_status=status,error=None)
-                except (ProviderError,HTTPClientError,OSError,ValueError) as error:
+                    await self.update(job_id,status='queued' if status in ('pending','preparing') else 'running',remote_status=status,error=None,progress=remote_progress(task))
+                except (ProviderError,HTTPClientError,OSError,ValueError,StorageError,tornado.web.HTTPError) as error:
                     if isinstance(error, ProviderError) and error.code in (401,403,404):
                         await self.update(job_id,status='failed',error=str(error)+'；远端任务不会被取消，请在控制台核对任务 '+body['remote_task_id'])
                         return
                     # Retry reads/downloads only; never retry a billed submission.
-                    await self.update(job_id,error='暂时无法查询或保存云端结果，将自动重试；不会重新提交生成')
-                await asyncio.sleep(interval)
+                    retries += 1
+                    stage = body.get('_output_phase', 'downloading') if operation == 'saving' else 'query'
+                    label = {'query':'查询云端任务', 'downloading':'保存结果到本机', 'reading_output':'读取生成结果',
+                             'uploading_output':'上传结果到云存储', 'fetching_output':'云存储抓取生成结果', 'verifying_output':'校验云存储结果'}.get(stage, '保存结果')
+                    detail = str(error) if isinstance(error, (StorageError, ProviderError)) else ('HTTP '+str(error.code) if isinstance(error, HTTPClientError) else '网络连接或文件处理异常')
+                    if isinstance(error, ValueError) and str(error) in ('生成文件读取失败', '生成文件下载失败', '生成文件超过转存上限', '生成文件地址不是公网地址', '生成文件重定向过多', '任务没有返回有效生成文件'):
+                        detail = str(error)
+                    if isinstance(error, HTTPClientError) and error.code == 599: detail = '网络连接失败或读取超时'
+                    if isinstance(error, tornado.web.HTTPError): detail = '云存储请求失败（HTTP '+str(error.status_code)+'）'
+                    await self.update(job_id,error=f'{label}失败：{detail}；将自动重试（第{retries}次），不会重新提交生成',
+                                      failure={'stage':stage,'attempt':retries,'at':int(time.time()*1000),'code':getattr(error,'code',None)})
+                await asyncio.sleep(min(interval, 2) if status == 'preparing' else interval)
         except asyncio.CancelledError:
             raise
         except Exception as error:
@@ -484,27 +668,37 @@ async def submit(handler, project_id, data):
         raise tornado.web.HTTPError(400,reason=str(error))
     manager=handler.settings['inference_manager']
     async with manager.lock:
-        credentials=load_keys(handler.settings['config']);credential=key_profile(credentials)
-        if handler.settings['config'].get('cloud_mode'):
-            from backend.cloud_storage import load, active_id, access_domain
-            storage = load(handler.settings['config'])
-            if not storage['profiles'].get(active_id(storage)):
+        credentials=load_keys(handler.settings['config']);credential=key_profile(credentials,data.get('credential_id') or None)
+        from backend.cloud_storage import load, active_id, access_domain, fingerprint
+        config = handler.settings['config']
+        destination = 'cloud' if config.get('cloud_mode') else data.get('output_storage', 'local')
+        if destination not in ('local', 'cloud'):
+            raise tornado.web.HTTPError(400, reason='结果保存位置不正确')
+        storage_fields = {'output_storage': destination}
+        if destination == 'cloud':
+            storage = load(config); profile_id = active_id(storage)
+            profile = storage['profiles'].get(profile_id)
+            if not profile:
                 raise tornado.web.HTTPError(400, reason='请先保存并启用云存储，用于保存生成结果')
-            if not access_domain(storage['profiles'][active_id(storage)]).startswith('https://'):
-                raise tornado.web.HTTPError(400, reason='服务器版云存储访问域名必须使用 HTTPS')
+            if not access_domain(profile).startswith('https://'):
+                raise tornado.web.HTTPError(400, reason='生成结果云存储访问域名必须使用 HTTPS')
+            storage_fields.update(storage_profile_id=profile_id, storage_profile_name=profile.get('name') or profile.get('provider', '云存储'),
+                                  storage_profile_fingerprint=fingerprint(profile))
+        if credential and credential['id'] not in enabled_ids(credentials):
+            raise tornado.web.HTTPError(400,reason='所选生成 AK 未启用，请在设置中勾选启用或在卡片选择其他 AK')
         if not credential:
             raise tornado.web.HTTPError(400,reason='请先在 service-inference 设置中保存 API Key')
         if credential.get('models') is None:
             try:await refresh_profile(credential);save_keys(handler.settings['config'],credentials)
             except ProviderError as error:raise tornado.web.HTTPError(502,reason=str(error))
-        if model['remote_model'] not in {m['id'] for m in credential['models']}:raise tornado.web.HTTPError(403,reason='当前 Key 的模型列表不包含此模型，请切换 Key 或模型')
+        if model['remote_model'] not in {m['id'] for m in credential['models']}:raise tornado.web.HTTPError(403,reason='所选 AK 的模型列表不包含此模型，请在卡片选择其他 AK 或模型')
         # Explicit allowlist keeps credentials and arbitrary client fields out of history.
         fields=('prompt','size','resolution','ratio','duration','generate_audio','image_urls','video_urls','audio_urls','first_frame','last_frame','output_format','optimize_mode','watermark','max_images')
         params={k:data[k] for k in fields if k in data}
         params.update({k:payload[k] for k in ('size','resolution','ratio','duration','generate_audio') if k in payload})
         body=dict(provider=PROVIDER,kind='generation',credential_owner=getattr(handler,'user',{'user_id':handler.owner})['user_id'],created_by=getattr(handler,'user',{'user_id':handler.owner}),credential_id=credential['id'],credential_name=credential['name'],owner_id=handler.owner,project_id=project_id,card_id=card['id'],
                   type=card['type'],model=model['id'],mode=data['mode'],params=params,refs=[],ref_info={},
-                  status='submitting',outputs=[],usage={'tokens':None},submitted_at=time.time_ns()//1_000_000)
+                  status='submitting',outputs=[],usage={'tokens':None},submitted_at=time.time_ns()//1_000_000, **storage_fields)
         async with handler.jobs.connection() as conn:
             inserted=await (await conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s) ON CONFLICT DO NOTHING RETURNING block_id',(job_id,Jsonb(body)), block_id=job_id)).fetchone()
         if inserted:

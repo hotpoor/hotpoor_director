@@ -358,7 +358,7 @@ async def upload_resources(handler, project_id, target):
             await conn.execute('UPDATE entities SET body=body || %s WHERE block_id=%s', (Jsonb({'cloud_versions': versions}), identifier), block_id=identifier)
 
 
-async def upload_bytes(target, raw, mime, name, transport=None):
+async def upload_bytes(target, raw, mime, name, transport=None, progress=None):
     request = transport or (lambda path, body: remote(target, path, body))
     grant = await request('/api/storage/uploads', {'name': name, 'mime': mime, 'size': len(raw),
                          'md5': hashlib.md5(raw).hexdigest()})
@@ -378,7 +378,18 @@ async def upload_bytes(target, raw, mime, name, transport=None):
                 chunks.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{key}"\r\n\r\n{value}\r\n'.encode())
             chunks += [f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="upload"\r\nContent-Type: {mime}\r\n\r\n'.encode(), raw, f'\r\n--{boundary}--\r\n'.encode()]
             content = b''.join(chunks); headers['Content-Type'] = 'multipart/form-data; boundary=' + boundary
-        response = await AsyncHTTPClient().fetch(HTTPRequest(upload['url'], method=upload['method'], body=content,
+        async def produce(write):
+            last = 0
+            for start in range(0, len(content), 256 * 1024):
+                chunk = content[start:start + 256 * 1024]
+                await write(chunk)
+                sent = start + len(chunk)
+                if time.monotonic() - last >= .5 or sent == len(content):
+                    await progress(sent, len(content))
+                    last = time.monotonic()
+        headers['Content-Length'] = str(len(content))
+        response = await AsyncHTTPClient().fetch(HTTPRequest(upload['url'], method=upload['method'],
+            body=None if progress else content, body_producer=produce if progress else None,
             headers=headers, follow_redirects=False, request_timeout=1800), raise_error=False)
         if not 200 <= response.code < 300 and not (grant['provider'] == 'qiniu' and response.code == 614):
             raise HTTPError(502, reason='素材上传未完成；本地副本保留，请重试')

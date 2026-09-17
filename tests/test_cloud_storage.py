@@ -198,3 +198,57 @@ def test_confirmation_uses_original_profile_after_same_provider_switch(tmp_path)
     with patch.object(s,'owned',AsyncMock(return_value={'body':body})),patch.object(s,'verify_object') as verify,patch.object(s,'verify_public',AsyncMock(side_effect=s.StorageError('fixture stop'))):
         with pytest.raises(HTTPError):asyncio.run(s.UploadConfirmHandler.post(h,'upload'))
         verify.assert_called_once_with(first,'file.png',16,'image/png')
+
+
+def test_generated_output_uses_pinned_profile_and_verifies_before_completion(tmp_path):
+    from contextlib import asynccontextmanager
+    class Pool:
+        def __init__(self): self.rows={}
+        @asynccontextmanager
+        async def connection(self): yield self
+        async def execute(self,sql,args,**routing):
+            if sql.startswith('INSERT'): self.rows.setdefault(args[0],{'body':args[1].obj})
+            if sql.startswith('UPDATE'): self.rows[args[1]]['body'].update(args[0].obj)
+            return SimpleNamespace(fetchone=AsyncMock(return_value=self.rows.get(args[0] if not sql.startswith('UPDATE') else args[1])))
+    config={'data_dir':tmp_path};original=profile('aliyun');other=profile('qiniu')
+    s.save(config,{'active_profile_id':'other','profiles':{'chosen':original,'other':other}})
+    job={'storage_profile_id':'chosen','storage_profile_fingerprint':s.fingerprint(original),'owner_id':'owner','project_id':'a'*32}
+    pool=Pool();phases=[];uploaded=[]
+    async def phase(stage,**counts):phases.append((stage,counts))
+    async def fetch(request,**kwargs):
+        async def write(chunk):uploaded.append(chunk)
+        await request.body_producer(write)
+        return SimpleNamespace(code=200)
+    with patch('backend.sync.AsyncHTTPClient',return_value=SimpleNamespace(fetch=fetch)), \
+         patch.object(s,'verify_object') as verify,patch.object(s,'verify_public',AsyncMock(return_value=None)):
+        result=asyncio.run(s.store_generated(config,pool,job,b'video','video/mp4','video.mp4',phase))
+        second=asyncio.run(s.store_generated(config,pool,job,b'video','video/mp4','video.mp4',phase))
+    assert result['url']==second['url'] and b''.join(uploaded)==b'video'
+    assert result['provider']=='aliyun' and len(pool.rows)==1
+    assert next(iter(pool.rows.values()))['body']['status']=='completed'
+    assert [p[0] for p in phases]==['uploading_output','uploading_output','verifying_output']
+    assert phases[1][1]=={'bytes':5,'total_bytes':5}
+    verify.assert_called_once()
+    original['bucket_name']='changed-bucket'
+    s.save(config,{'active_profile_id':'other','profiles':{'chosen':original,'other':other}})
+    with pytest.raises(s.StorageError):asyncio.run(s.store_generated(config,pool,job,b'video','video/mp4','video.mp4',phase))
+
+
+def test_qiniu_fetches_video_directly_and_reuses_finished_fetch_on_retry(tmp_path):
+    from test_inference import Pool
+    p=profile();config={'data_dir':tmp_path}
+    s.save(config,{'active_profile_id':'q','profiles':{'q':p}})
+    job=dict(storage_profile_id='q',storage_profile_fingerprint=s.fingerprint(p),owner_id='owner',project_id='a'*32)
+    metadata={'fsize':1234,'mimeType':'video/mp4'}
+    manager=SimpleNamespace(stat=Mock(side_effect=[(None,SimpleNamespace(status_code=612)),(metadata,SimpleNamespace(status_code=200))]),
+                            fetch=Mock(return_value=(metadata,SimpleNamespace(status_code=200))))
+    pool=Pool();phase=AsyncMock()
+    with patch.object(s,'qiniu_manager',return_value=manager),patch.object(s,'verify_object'),patch.object(s,'verify_public',AsyncMock(side_effect=[s.StorageError('verification unavailable'),None])):
+        with pytest.raises(s.StorageError):asyncio.run(s.fetch_generated_video(config,pool,job,'https://provider.example/out.mp4','job-0',phase))
+        assert not pool.rows
+        result=asyncio.run(s.fetch_generated_video(config,pool,job,'https://provider.example/out.mp4','job-0',phase))
+    assert manager.fetch.call_count==1
+    assert result['transfer']=='remote_fetch' and result['size']==1234
+    assert 'sha256' not in result  # Never invent a checksum for server-side copies.
+    assert len(pool.rows)==1 and not (tmp_path/'generated').exists()
+    assert [call.args[0] for call in phase.await_args_list]==['fetching_output','verifying_output']*2

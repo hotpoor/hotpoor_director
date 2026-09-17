@@ -282,3 +282,86 @@ def test_unlisted_model_rejected_before_paid_submission(tmp_path):
     with patch('backend.inference.owned',AsyncMock(return_value=project)),pytest.raises(HTTPError) as error:
         asyncio.run(submit(h,'p',{'model':IMAGE,'mode':'text','prompt':'scene','card_id':'b'*32,'request_id':'a'*32}))
     assert error.value.status_code==403;manager.launch.assert_not_called()
+
+
+def test_preparation_progress_is_returned_incrementally_and_sanitized(tmp_path):
+    config={'data_dir':tmp_path};save_key(config,KEY)
+    body=job(remote_task_id='known');pool=Pool({'a':{'body':body}});manager=InferenceManager(config,pool)
+    responses=[{'task':{'status':'preparing','progress':{'completed':n,'total':5,'stage':'validating','secret':KEY}}} for n in (1,3,5)]
+    responses.append({'task':{'status':'completed','outputs':['https://cdn.example/out.mp4']}})
+    async def downloaded(url,path):path.write_bytes(b'video')
+    with patch('backend.inference.api',AsyncMock(side_effect=responses)) as request, patch('backend.inference.download',downloaded), patch('backend.inference.asyncio.sleep',AsyncMock()):
+        asyncio.run(manager.run('a',body,None))
+    stages=[p['progress']['value'] for p in pool.patches if p.get('progress',{}).get('phase')=='remote']
+    assert stages==[1,3,5]
+    assert KEY not in str(pool.patches)
+    assert all(len(call.args)==2 for call in request.await_args_list)
+
+
+def test_cloud_submission_pins_profile_without_credentials(tmp_path):
+    from backend import cloud_storage as storage
+    from test_cloud_storage import profile
+    config={'data_dir':tmp_path};save_key(config,KEY)
+    p=profile();storage.save(config,{'active_profile_id':'selected','profiles':{'selected':p}})
+    pool=Pool();manager=SimpleNamespace(lock=asyncio.Lock(),launch=Mock())
+    h=SimpleNamespace(projects=None,jobs=pool,owner='owner',settings={'config':config,'inference_manager':manager},finish=Mock())
+    async def fetch(pool_arg,uid,owner,kind):
+        if kind=='project':return {'body':{'canvas':{'cards':[{'id':'b'*32,'type':'video'}]}}}
+        return pool.rows[uid]
+    with patch('backend.inference.owned',fetch),patch('backend.inference.discover_models',AsyncMock(return_value=[{'id':BY_ID[VIDEO]['remote_model']}])):
+        asyncio.run(submit(h,'c'*32,{'request_id':'a'*32,'card_id':'b'*32,'model':VIDEO,'mode':'text','prompt':'film','output_storage':'cloud'}))
+    saved=pool.rows['a'*32]['body']
+    assert saved['output_storage']=='cloud' and saved['storage_profile_id']=='selected'
+    assert saved['storage_profile_fingerprint']==storage.fingerprint(p)
+    assert p['access_key_secret'] not in str(saved)
+
+
+@pytest.mark.parametrize('cloud_mode',[False,True])
+def test_cloud_storage_outputs_never_fall_back_to_disk(tmp_path,cloud_mode):
+    body=job(IMAGE,output_storage='cloud',storage_profile_id='p',storage_profile_fingerprint='fingerprint')
+    pool=Pool({'a':{'body':body}});manager=InferenceManager({'data_dir':tmp_path,'cloud_mode':cloud_mode},pool)
+    async def store(config,pool,job,raw,mime,name,phase):
+        assert raw==PNG
+        await phase('uploading_output',bytes=len(raw),total_bytes=len(raw))
+        await phase('verifying_output')
+        return {'url':'https://cdn.example/saved.png','sha256':'digest'}
+    with patch('backend.cloud_storage.store_generated',store):
+        asyncio.run(manager.complete('a',body,[{'b64_json':base64.b64encode(PNG).decode()}],{}))
+    assert pool.rows['a']['body']['outputs'][0]['remote_url']=='https://cdn.example/saved.png'
+    assert not (tmp_path/'generated').exists()
+    assert [p['remote_status'] for p in pool.patches if 'remote_status' in p]==['reading_output','uploading_output','verifying_output']
+
+
+def test_transfer_failure_retries_save_without_resubmitting_generation(tmp_path):
+    config={'data_dir':tmp_path};save_key(config,KEY)
+    body=job(output_storage='cloud',storage_profile_id='p',remote_task_id='known')
+    pool=Pool({'a':{'body':body}});manager=InferenceManager(config,pool)
+    from backend.cloud_storage import StorageError
+    with patch('backend.inference.api',AsyncMock(return_value={'task':{'status':'completed','outputs':['https://cdn.example/out.mp4']}})) as request, \
+         patch('backend.inference.download_memory',AsyncMock(return_value=b'video')), \
+         patch('backend.cloud_storage.fetch_generated_video',AsyncMock(return_value=None)), \
+         patch('backend.cloud_storage.store_generated',AsyncMock(side_effect=[StorageError('verification failed'),{'url':'https://cdn.example/saved.mp4','sha256':'digest'}])), \
+         patch('backend.inference.asyncio.sleep',AsyncMock()):
+        asyncio.run(manager.run('a',body,None))
+    assert pool.rows['a']['body']['status']=='completed'
+    assert request.await_count==1 and all(len(c.args)==2 for c in request.await_args_list)
+    assert not (tmp_path/'generated').exists()
+
+
+@pytest.mark.parametrize('selected,expected', [('second','second'), ('missing',None), ('first',None)])
+def test_card_submission_uses_selected_ak_without_default_fallback(tmp_path,selected,expected):
+    from backend.inference import save_keys
+    config={'data_dir':tmp_path}
+    save_keys(config,{'active_key_id':'first','enabled_key_ids':['second'],'keys':[{'id':key,'name':key,'api_key':KEY+key,'models':[{'id':BY_ID[IMAGE]['remote_model']}]} for key in ('first','second')]})
+    pool=Pool();manager=SimpleNamespace(lock=asyncio.Lock(),launch=Mock())
+    h=SimpleNamespace(projects=None,jobs=pool,owner='owner',settings={'config':config,'inference_manager':manager},finish=Mock())
+    async def fetch(pool_arg,uid,owner,kind):
+        if kind=='project':return {'body':{'canvas':{'cards':[{'id':'b'*32,'type':'image'}]}}}
+        return pool.rows[uid]
+    data={'request_id':'a'*32,'card_id':'b'*32,'model':IMAGE,'mode':'text','prompt':'image','credential_id':selected}
+    with patch('backend.inference.owned',fetch):
+        if expected:asyncio.run(submit(h,'p',data))
+        else:
+            with pytest.raises(HTTPError):asyncio.run(submit(h,'p',data))
+    if expected:assert pool.rows['a'*32]['body']['credential_id']==expected
+    else:manager.launch.assert_not_called()

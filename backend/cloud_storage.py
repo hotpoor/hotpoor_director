@@ -368,3 +368,91 @@ class CloudImageHandler(PrivateHandler):
         self.set_header('Content-Type',body['mime'])
         self.set_header('Content-Length',len(raw))
         self.finish(raw)
+
+
+async def store_generated(config, pool, job, raw, mime, name, phase):
+    """Persist generated media to the job's original profile, on desktop and online."""
+    profile_id = job['storage_profile_id']
+    profile = load(config)['profiles'].get(profile_id)
+    if not profile or fingerprint(profile) != job['storage_profile_fingerprint']:
+        raise StorageError('生成结果所用云存储配置已更改或删除，请恢复原配置后重试')
+    owner = job.get('credential_owner', job['owner_id'])
+    project_id = job['project_id']
+    digest = hashlib.md5(raw).hexdigest()
+    key = object_key(profile, owner, digest, mime, project_id)
+    upload_id = hashlib.sha256(json.dumps([owner, project_id, fingerprint(profile), key, mime, len(raw)]).encode()).hexdigest()[:32]
+    url = access_domain(profile) + '/' + quote(key, safe='/')
+    body = dict(kind='cloud_upload', owner_id=owner, profile_id=profile_id, provider=profile['provider'],
+                profile_fingerprint=fingerprint(profile), key=key, url=url, mime=mime, size=len(raw),
+                name=name, md5=digest, project_id=project_id, status='pending', expires_at=int(time.time())+TTL)
+
+    async def transport(path, data):
+        if path == '/api/storage/uploads':
+            async with pool.connection() as conn:
+                existing = await (await conn.execute('SELECT body FROM entities WHERE block_id=%s', (upload_id,), block_id=upload_id)).fetchone()
+            if existing and existing['body'].get('status') == 'completed':
+                return {'reused': True, 'asset': upload_result(upload_id, existing['body'])}
+            grant = await asyncio.to_thread(sign_upload, profile, key, mime, len(raw))
+            async with pool.connection() as conn:
+                await conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s) ON CONFLICT (block_id) DO NOTHING',
+                                   (upload_id, Jsonb(body)), block_id=upload_id)
+            await phase('uploading_output')
+            return {'upload_id': upload_id, 'provider': profile['provider'], 'upload': grant}
+        if path != '/api/storage/uploads/' + upload_id + '/confirm':
+            raise StorageError('未知转存步骤')
+        await phase('verifying_output')
+        await asyncio.to_thread(verify_object, profile, key, len(raw), mime)
+        body['url'] = await verify_public(url, len(raw)) or url
+        async with pool.connection() as conn:
+            await conn.execute('UPDATE entities SET body=body || %s WHERE block_id=%s',
+                               (Jsonb({'status': 'completed', 'url': body['url']}), upload_id), block_id=upload_id)
+        return upload_result(upload_id, body)
+
+    from backend.sync import upload_bytes
+    async def progress(sent, total):
+        await phase('uploading_output', bytes=sent, total_bytes=total)
+    return await upload_bytes({}, raw, mime, name, transport=transport, progress=progress)
+
+
+async def fetch_generated_video(config, pool, job, url, name, phase):
+    """Let Qiniu fetch large videos directly; other providers use streamed transfer."""
+    profile_id = job.get('storage_profile_id')
+    if not profile_id: return None
+    profile = load(config)['profiles'].get(profile_id)
+    if not profile or fingerprint(profile) != job['storage_profile_fingerprint']:
+        raise StorageError('生成结果所用云存储配置已更改或删除，请恢复原配置后重试')
+    if profile['provider'] != 'qiniu': return None
+    from backend.inference import public_url
+    public_url(url)
+    owner = job.get('credential_owner', job['owner_id'])
+    key = object_key(profile, owner, name, 'video/mp4', job['project_id'])
+    await phase('fetching_output')
+    def fetch():
+        manager = qiniu_manager(profile)
+        existing, info = manager.stat(profile['bucket_name'], key)
+        if info.status_code == 200: return existing
+        result, info = manager.fetch(url, profile['bucket_name'], key)
+        if info.status_code != 200 or not isinstance(result, dict): return None
+        return result
+    try:
+        result = await asyncio.to_thread(fetch)
+    except Exception:
+        # A timed-out fetch can still finish at the provider. The stable key is
+        # checked before another fetch on retry; never resubmit generation.
+        return None
+    if not result: return None
+    size = result.get('fsize')
+    if not isinstance(size, int) or not 1 <= size <= 210 * 1024 * 1024:
+        raise StorageError('云存储抓取的生成视频大小异常')
+    await phase('verifying_output')
+    await asyncio.to_thread(verify_object, profile, key, size, 'video/mp4')
+    public = access_domain(profile) + '/' + quote(key, safe='/')
+    public = await verify_public(public, size) or public
+    upload_id = hashlib.sha256(json.dumps([owner, fingerprint(profile), key]).encode()).hexdigest()[:32]
+    body = dict(kind='cloud_upload', owner_id=owner, project_id=job['project_id'], profile_id=profile_id,
+                provider='qiniu', profile_fingerprint=fingerprint(profile), key=key, url=public,
+                name=name, mime='video/mp4', size=size, status='completed', transfer='remote_fetch')
+    async with pool.connection() as conn:
+        await conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s) ON CONFLICT (block_id) DO NOTHING',
+                           (upload_id, Jsonb(body)), block_id=upload_id)
+    return {'remote_url': public, 'mime':'video/mp4', 'size':size, 'storage':'cloud', 'transfer':'remote_fetch'}

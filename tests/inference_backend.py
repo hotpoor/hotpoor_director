@@ -9,7 +9,7 @@ import sys
 
 sys.path.insert(0,str(Path(__file__).resolve().parent.parent))
 from backend.config import load_config
-from backend import inference
+from backend import inference, management
 from backend.__main__ import main
 
 config=load_config()
@@ -22,6 +22,14 @@ if not (config['data_dir']/'postgres').exists():
 fake_key='fake-ui-key-not-a-real-credential'
 calls={}
 async def fake_api(key,path,data=None):
+    if path.startswith('/manage/'):
+        if key not in ('sk-mgmt-v1-ui-main-management-key', 'sk-mgmt-v1-ui-other-management-key'):
+            raise inference.ProviderError('管理 AK 无效',401)
+        if path=='/manage/whoami':return {'organizationId':'org-main' if 'main' in key else 'org-other'}
+        if path.startswith('/manage/cost/summary?'):return {'totalCostUsd':1.25,'unpricedCount':0,'from':'2026-09-01','to':'2026-09-17'}
+        if path.startswith('/manage/cost/breakdown?'):return {'breakdown':[{'model':'video-fixture','totalCostUsd':1.25}]}
+        if path.startswith('/manage/cost/by-key?'):return {'rows':[{'apiKeyId':'generator-fixture','totalCostUsd':1.25}],'approximate':True}
+        raise AssertionError('Unexpected management mock route')
     if key not in (fake_key,'second-ui-key-not-real'):raise inference.ProviderError('API Key 无效',401)
     if path=='/v1/models':
         return {'data':[{'id':m['remote_model'],'type':m['type']} for m in inference.BY_ID.values() if key==fake_key or m['type']=='video']}
@@ -47,11 +55,33 @@ async def fake_download(url,path):
             for packet in stream.encode(frame):container.mux(packet)
         for packet in stream.encode():container.mux(packet)
 
+async def fake_download_memory(url, progress=None):
+    import tempfile
+    with tempfile.TemporaryDirectory(dir=config['data_dir']) as directory:
+        path=Path(directory)/'fixture.mp4'
+        await fake_download(url,path)
+        raw=path.read_bytes()
+        if progress: await progress(len(raw))
+        return raw
+
+# Exercise real cloud-save signing, persistence, and progress without external uploads.
+from backend import sync
+class FakeStorageClient:
+    async def fetch(self, request, **kwargs):
+        from types import SimpleNamespace
+        async def write(chunk): pass
+        if request.body_producer: await request.body_producer(write)
+        return SimpleNamespace(code=200)
+sync.AsyncHTTPClient=FakeStorageClient
+inference.download_memory=fake_download_memory
 inference.api=fake_api
+management.api=fake_api
 inference.download=fake_download
 inference.InferenceManager.poll_intervals={'v1':.05,'v2':.05}
 # Cloud-storage smoke tests exercise real signing; external object services are simulated.
 from backend import cloud_storage
+from types import SimpleNamespace
+cloud_storage.qiniu_manager=lambda profile:SimpleNamespace(stat=lambda *args:(None,SimpleNamespace(status_code=612)),fetch=lambda *args:(None,SimpleNamespace(status_code=599)))
 cloud_storage.probe=lambda profile:None
 cloud_storage.verify_object=lambda *args:None
 async def fake_public(*args):pass
