@@ -539,3 +539,8 @@ LTX 安装跟进：用户开通访问后，官方权重 HEAD 请求返回 200；
 ## 2026-09-17：公开分享访客只读
 
 公开分享链接支持未登录直接读取关联项目、历史、素材与已有评论；每次请求校验链接有效期与撤销状态，禁止跨项目资源访问及所有访客写入。登录后的成员权限保持不变。访客初始化使用外部脚本以符合 CSP，媒体地址附带分享凭证。全量 238 项测试通过，最终初始化调整后 10 项网关测试通过；候选与正式 HTTPS 各 54 项检查通过。最终浏览器连接不可用，未完成修复后的浏览器视觉复验。生产镜像 0.11.11-director-public-view、端口 8628，保留 8627 worker；回滚配置 /home/ubuntu/director-public-view-20260917/nginx-before-public-view.conf。
+## 2026-09-16 · Windows 本机升级与 UUID 分片迁移验证
+
+- 安装新版云存储 Python 依赖，pip check 通过。旧工作台及 PostgreSQL 停止后，在忽略的 .local 升级备份目录创建完整冷备份并逐文件 SHA256 校验，再运行数据库初始化与分片迁移。
+- 迁移前后逐条比较实体 UUID、JSONB、创建和更新时间，以及账号与密码哈希；全部一致，素材文件保留，UUID 分片归属和 prepared transactions 配置验证通过。源码 Electron 和本机 ComfyUI 已启动，工作台页面、新界面资源及 ComfyUI system_stats 正常。
+- 完整回归首次结果为 192 passed、8 skipped、1 failed；唯一失败为 Windows 不支持 POSIX 0600 stat 权限语义。修正测试为在实际配置目录保护流程下验证 Windows ACL，允许当前用户与系统/管理员/所有者权限，拒绝其他主体；POSIX 保持 0600 检查。修正后云存储专项 32 passed。8 项伴随云端环境集成测试跳过，本次未调用付费模型或执行真实云上传。
