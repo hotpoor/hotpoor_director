@@ -70,6 +70,8 @@ async def run(args):
             server.stop()
             await server.close_all_connections()
         if app:
+            from backend.dialogue import close_dialogues
+            await close_dialogues(app)
             await app.settings['inference_manager'].close()
             await app.settings['progress_tracker'].close()
         if pool:

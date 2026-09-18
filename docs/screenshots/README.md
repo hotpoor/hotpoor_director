@@ -50,3 +50,7 @@ Windows 对应入口为 `node_modules/.bin/electron.cmd`。两个脚本各自创
 ## 自定义确认遮罩
 
 `dialog-confirmation.png` 由 `electron scripts/smoke-card-removal.cjs` 在隔离数据库采集（2026-09-15，基于 `2e26ad1` 的本次弹窗改动），展示卡片移除确认。该脚本验证取消、确认后保存与项目切换保护；`electron scripts/smoke-dialogs.cjs` 另外验证嵌套弹窗层级、Esc、焦点、输入、排队及桌面离线错误界面。
+
+- `timeline.png`：2026-09-18，`scripts/smoke-timeline.cjs` 在独立测试数据库中的真实 Electron 截图。展示双视频重叠、金色开始线/红色播放线与绝对字幕；绿色画面为程序生成的 6 秒测试视频。覆盖实际拖动、磁吸、裁剪、缩放横滚与保存重开，无生产账号或生成费用。
+
+- `timeline-pin-quad.png`：2026-09-18，真实 Electron 独立测试项目，展示多轴重叠错层与 PIN 四宫格、声音选择。四路均使用 6 秒程序生成测试视频，非生产媒体；复现脚本 `scripts/smoke-timeline.cjs`。

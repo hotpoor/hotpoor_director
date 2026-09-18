@@ -55,6 +55,8 @@ def validate_project(data):
         if not isinstance(card, dict) or not isinstance(card.get('id'), str) or not ID.fullmatch(card['id']) or card['id'] in seen:
             raise ValueError('卡片 UUID 不正确或重复')
         seen.add(card['id'])
+        if not isinstance(card.get('title', ''), str) or len(card.get('title', '')) > 160:
+            raise ValueError('卡片名称最多 160 个字符')
         if card.get('type') not in ('image', 'video', 'asset', 'chat') or card.get('mode') not in (('chat',) if card.get('type') == 'chat' else ('media',) if card.get('type') == 'asset' else ('text', 'image', 'reference','edit','series')):
             raise ValueError('卡片模式不正确')
         if card['type'] == 'chat' and (not isinstance(card.get('chat_id'), str) or not ID.fullmatch(card['chat_id'])):
@@ -102,6 +104,8 @@ def validate_project(data):
         if not isinstance(source, str) or not isinstance(target, str) or source not in seen or target not in seen or source == target or (source, target) in pairs:
             raise ValueError('连接线必须连接当前画布的两张不同卡片且不能重复')
         edge_ids.add(edge['id']); pairs.add((source, target))
+    from backend.timeline import validate_timelines
+    validate_timelines(canvas)
     if len(json.dumps(canvas)) > 2_000_000:
         raise ValueError('画布数据过大')
     return {k: data.get(k, '') for k in ('title', 'subtitle', 'description')} | {'covers': covers, 'canvas': canvas}
@@ -201,6 +205,12 @@ async def save_project(handler, project_id=None):
             if cloud:card.update(storage='cloud',url=asset['body']['url'],provider=asset['body']['provider'])
             else:
                 for key in ('storage','url','provider'):card.pop(key,None)
+    from backend.comments import attachment
+    from backend.timeline import timelines
+    for clip in (clip for sequence in timelines(body['canvas']) for clip in sequence['clips']):
+        clip['media'] = await attachment(handler, clip['media'], project_id)
+        if not clip['media']['mime'].startswith('video/'):
+            raise tornado.web.HTTPError(400, reason='时间轴仅接受视频素材')
     body.update(kind='project', owner_id=handler.owner)
     creating = project_id is None
     project_id = project_id or uuid.uuid4().hex
@@ -211,6 +221,8 @@ async def save_project(handler, project_id=None):
                 raise tornado.web.HTTPError(404)
             if data.get('revision') != row['body'].get('revision', 1):
                 raise tornado.web.HTTPError(409, reason='此项目已在其他窗口更新，请导出草稿后重新打开')
+            from backend.editing import check_locks
+            await check_locks(conn, handler, project_id, row['body'], body)
             body['revision'] = row['body'].get('revision', 1) + 1
             row = await (await conn.execute('UPDATE entities SET body=%s WHERE block_id=%s RETURNING *', (Jsonb(body), project_id), block_id=project_id)).fetchone()
         else:
@@ -333,6 +345,10 @@ class AssetHandler(PrivateHandler):
 
 
 def workspace_routes():
+    from backend.dialogue_files import DialogueUploadHandler, DialogueFileHandler
+    from backend.dialogue import DialogueModelsHandler, DialoguesHandler, DialogueHandler
+    from backend.editing import handler_class
+    EditingHandler = handler_class()
     from backend.management import ManagementSettingsHandler, ManagementTestHandler, ManagementReportHandler
     from backend.comments import CreateChatHandler, ChatHandler, ChatMessagesHandler, ChatMaterialsHandler
     from backend.comfy_settings import ComfySettingsHandler, ComfyTestHandler
@@ -340,6 +356,11 @@ def workspace_routes():
     from backend.cloud_storage import StorageSettingsHandler, StorageTestHandler, UploadGrantHandler, UploadConfirmHandler, CloudImageHandler
     from backend.generation import ModelsHandler, GenerateHandler, HistoryHandler, OutputHandler, CancelGenerationHandler, QueueOrderHandler
     return [
+        (r'/api/dialogue/conversations/([0-9a-f]{32})/files', DialogueUploadHandler),
+        (r'/api/dialogue/files/([0-9a-f]{32})', DialogueFileHandler),
+        (r'/api/dialogue/models', DialogueModelsHandler),
+        (r'/api/dialogue/conversations', DialoguesHandler),
+        (r'/api/dialogue/conversations/([0-9a-f]{32})', DialogueHandler),
         (r'/api/projects/([0-9a-f]{32})/chats', CreateChatHandler),
         (r'/api/chats/([0-9a-f]{32})', ChatHandler),
         (r'/api/chats/([0-9a-f]{32})/messages', ChatMessagesHandler),
@@ -355,6 +376,7 @@ def workspace_routes():
         (r'/api/settings/service-inference/management/test', ManagementTestHandler),
         (r'/api/service-inference/management/report', ManagementReportHandler),
         (r'/api/settings/comfyui', ComfySettingsHandler), (r'/api/settings/comfyui/test', ComfyTestHandler),
+        (r'/api/projects/([0-9a-f]{32})/editing', EditingHandler),
         (r'/api/projects', ProjectsHandler), (r'/api/projects/([0-9a-f]{32})', ProjectHandler),
         (r'/api/assets/cloud', CloudAssetHandler), (r'/api/assets', UploadHandler), (r'/api/assets/([0-9a-f]{32})', AssetHandler),
         (r'/api/generations/([0-9a-f]{32})/cancel', CancelGenerationHandler),

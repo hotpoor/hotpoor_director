@@ -2,7 +2,7 @@
   'use strict';
   const dialog=document.querySelector('#inference-dialog');
   const section=document.createElement('section');section.id='management-settings';
-  section.innerHTML='<h2>管理 AK · 费用与用量查询</h2><p class="mode-note">每个生成 AK 绑定一个管理 AK；多个生成 AK 可共用。管理 AK 支持多个配置，多选启用用于组织汇总，同一组织只计一次。费用范围为整个组织，按生成 Key 分摊的费用为近似值。</p><form id="management-form"><div id="management-key-list"></div><button type="button" id="new-management-key" class="quiet">＋ 添加管理 AK</button><label>管理 AK 名称<input name="name" maxlength="80" required placeholder="例如 主组织 / 视频业务"></label><label>管理 AK<input name="api_key" type="password" autocomplete="off" spellcheck="false" maxlength="4096" placeholder="sk-mgmt-v1-…；编辑时留空保留密钥"></label><div class="comfy-actions"><button type="button" class="quiet" id="delete-management-key">删除此管理 AK</button><button type="button" class="quiet" id="test-management-key">验证管理 AK</button><button type="submit">保存并启用管理 AK</button></div><p id="management-status" role="status" aria-live="polite"></p></form><div class="management-report-filters"><label>查询范围<select id="management-period"><option value="all" selected>全部历史</option><option value="24h">24 小时</option><option value="7d">7 天</option><option value="14d">14 天</option><option value="30d">30 天</option><option value="90d">90 天</option></select></label><label>开始日期（UTC）<input type="date" id="management-from"></label><label>结束日期（UTC）<input type="date" id="management-to"></label></div><button type="button" class="quiet" id="query-management-report">查询启用管理 AK 的组织费用</button><p class="comfy-help">管理凭据独立保存于隐藏文件，不回显。保存与验证只读查询组织身份，不触发生成。本管理 API 文档未提供单条请求费用查询。</p><div id="management-report" aria-live="polite"></div>';
+  section.innerHTML='<h2>管理 AK · 费用与用量查询</h2><p class="mode-note">每个生成 AK 绑定一个管理 AK；多个生成 AK 可共用。管理 AK 支持多个配置，多选启用用于组织汇总，同一组织只计一次。费用范围为整个组织，按生成 Key 分摊的费用为近似值。</p><form id="management-form"><div id="management-key-list"></div><button type="button" id="new-management-key" class="quiet">＋ 添加管理 AK</button><label>管理 AK 名称<input name="name" maxlength="80" required placeholder="例如 主组织 / 视频业务"></label><label>管理 AK<input name="api_key" type="password" autocomplete="off" spellcheck="false" maxlength="4096" placeholder="sk-mgmt-v1-…；编辑时留空保留密钥"></label><div class="comfy-actions"><button type="button" class="quiet" id="delete-management-key">删除此管理 AK</button><button type="button" class="quiet" id="test-management-key">验证管理 AK</button><button type="submit">保存并启用管理 AK</button></div><p id="management-status" role="status" aria-live="polite"></p></form><div class="management-report-filters"><label>查询范围<select id="management-period"><option value="all" selected>全部历史</option><option value="24h">24 小时</option><option value="7d">7 天</option><option value="14d">14 天</option><option value="30d">30 天</option><option value="90d">90 天</option></select></label><label>开始日期（UTC）<input type="date" id="management-from"></label><label>结束日期（UTC）<input type="date" id="management-to"></label></div><button type="button" class="quiet" id="query-management-report">查询启用管理 AK 的组织费用</button><p class="comfy-help">管理凭据独立保存于隐藏文件，点击显示或复制 AK。保存与验证只读查询组织身份，不触发生成。本管理 API 文档未提供单条请求费用查询。</p><div id="management-report" aria-live="polite"></div>';
   dialog.append(section);
   const form=section.querySelector('form'),status=document.querySelector('#management-status'),key=form.elements.api_key;
   const editor=document.createElement('div');editor.className='ak-inline-editor';editor.hidden=true;
@@ -10,6 +10,33 @@
   let node=newButton.nextSibling;
   while(node){const next=node.nextSibling;if(node!==status)editor.append(node);node=next;}
   form.append(editor);
+  const reveal=document.createElement('button'),copy=document.createElement('button');
+  reveal.type=copy.type='button';reveal.className=copy.className='quiet';
+  reveal.textContent='显示 AK';copy.textContent='复制 AK';key.after(reveal,copy);
+  let keyRequest=0;
+  function hideKey(){keyRequest++;key.type='password';key.value='';reveal.textContent='显示 AK';}
+  async function readKey(){
+    if(key.value.trim())return key.value.trim();
+    if(!editing)throw Error('请先输入或保存 AK');
+    const id=editing,token=keyRequest;
+    const result=await request('/api/settings/service-inference/management',{action:'reveal',id});
+    if(token!==keyRequest||id!==editing||!dialog.open)throw Error('AK 展示已取消');
+    return result.api_key;
+  }
+  reveal.onclick=async()=>{
+    if(key.type==='text'){keyRequest++;key.type='password';reveal.textContent='显示 AK';return;}
+    reveal.disabled=true;
+    try{key.value=await readKey();key.type='text';reveal.textContent='隐藏 AK';}catch(e){status.textContent=e.message;}
+    finally{reveal.disabled=false;}
+  };
+  copy.onclick=async()=>{
+    copy.disabled=true;
+    try{await navigator.clipboard.writeText(await readKey());status.textContent='AK 已复制';}
+    catch(e){status.textContent=e.message;}
+    finally{copy.disabled=false;}
+  };
+  dialog.addEventListener('close',hideKey);
+
   function placeEditor(id,open=true){
     editor.hidden=!open;
     const button=[...form.querySelectorAll('[data-edit-management]')].find(b=>b.dataset.editManagement===id);
@@ -19,12 +46,12 @@
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   let config={keys:[]},editing='',busy=false;
   async function request(path,body){const r=await fetch(path,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json','X-XSRFToken':decodeURIComponent(document.cookie.split('; ').find(x=>x.startsWith('_xsrf='))?.slice(6)||'')},body:body===undefined?undefined:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw Error(d.error||'请求失败');return d;}
-  function edit(id,open=true){editing=id||'';const p=config.keys.find(p=>p.id===editing);form.elements.name.value=p?.name||'';key.value='';document.querySelector('#delete-management-key').disabled=!p;placeEditor(editing,open);}
+  function edit(id,open=true){editing=id||'';const p=config.keys.find(p=>p.id===editing);form.elements.name.value=p?.name||'';hideKey();document.querySelector('#delete-management-key').disabled=!p;placeEditor(editing,open);}
   function render(){form.append(editor);document.querySelector('#management-key-list').innerHTML=config.keys.map(p=>`<div class="ak-config-item"><div class="inference-key-row"><label><input type="checkbox" name="active_management" value="${esc(p.id)}" ${(config.enabled_key_ids||[]).includes(p.id)?'checked':''}>${esc(p.name)}</label><small>${esc(p.organization_id)}</small><button type="button" class="quiet" data-edit-management="${esc(p.id)}" aria-expanded="false">展开编辑</button></div></div>`).join('')||'<p>尚未配置管理 AK</p>';}
   function updated(){window.dispatchEvent(new CustomEvent('director-management-updated',{detail:config}));document.querySelector('#management-report').replaceChildren();}
   async function load(){if(busy)return;status.textContent='读取管理 AK…';try{config=await request('/api/settings/service-inference/management');render();edit(config.active_key_id,!config.keys.length);status.textContent=config.configured?'已配置独立管理 AK':'请添加管理 AK，再在生成 AK 中选择绑定';updated();}catch(e){status.textContent=e.message;}}
   document.querySelector('#open-inference-settings').addEventListener('click',load);
-  dialog.addEventListener('close',()=>{key.value='';});
+  dialog.addEventListener('close',()=>{hideKey();});
   document.querySelector('#new-management-key').onclick=()=>{edit('');status.textContent='填写名称与管理 AK，保存后可绑定生成 AK';key.focus();};
   async function submit(action='save',id=editing,enabled){if(busy)return;busy=true;const controls=[...form.querySelectorAll('input,button')];controls.forEach(c=>c.disabled=true);status.textContent='查询并更新管理配置…';try{const data={action,id,name:form.elements.name.value,api_key:key.value.trim()};if(action==='test'){const r=await request('/api/settings/service-inference/management/test',data);status.textContent='验证通过 · 组织 '+r.organization_id+'（未保存）';}else{config=await request('/api/settings/service-inference/management',action==='save'?data:{action,id,enabled});const wasOpen=!editor.hidden,previous=editing;render();edit(action==='save'?config.active_key_id:previous,action==='save'||(action!=='delete'&&wasOpen));updated();status.textContent='管理配置已保存 · 已启用 '+(config.keys.filter(p=>(config.enabled_key_ids||[]).includes(p.id)).map(p=>p.name).join('、')||'无');}}catch(e){render();status.textContent=e.message;}finally{busy=false;controls.forEach(c=>c.disabled=false);document.querySelector('#delete-management-key').disabled=!editing;}}
   form.onsubmit=e=>{e.preventDefault();submit();};

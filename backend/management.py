@@ -48,6 +48,13 @@ class ManagementSettingsHandler(PrivateHandler):
         config = self.settings['config']; data = self.data()
         async with self.settings['inference_manager'].lock:
             value = load(config); value['enabled_key_ids'] = enabled_ids(value); action = data.get('action', 'save')
+            if action == 'reveal':
+                profile = key_profile(value, data.get('id', '')) if data.get('id') else None
+                if not profile:
+                    raise tornado.web.HTTPError(404, reason='AK 配置不存在')
+                self.set_header('Cache-Control', 'no-store')
+                self.finish({'api_key': profile['api_key']})
+                return
             profile = key_profile(value, data.get('id', ''))
             if action in ('select', 'delete', 'enable') and not profile:
                 raise tornado.web.HTTPError(404, reason='管理 AK 配置不存在')

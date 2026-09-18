@@ -11,7 +11,7 @@ ID = re.compile(r'^[0-9a-f]{32}$')
 KINDS = {'project', 'asset', 'cloud_upload', 'generation', 'chat', 'chat_pack'}
 PRIVATE = {'credential_owner', 'created_by', 'imported', 'owner_id', 'filename', 'comfy_url', 'prompt_id', 'provider_task_id', 'key_id',
            'remote_task_id', 'profile_id', 'profile_fingerprint', 'key', 'expires_at', 'cloud_versions', 'revision'}
-IDENTITIES = {'id', 'block_id', 'project_id', 'card_id', 'asset_id', 'chat_id', 'job_id',
+IDENTITIES = {'id', 'block_id', 'project_id', 'card_id', 'clip_id', 'asset_id', 'chat_id', 'job_id',
               'pack_id', 'prev_block_id', 'next_block_id', 'first_pack_id', 'last_pack_id',
               'head_id', 'tail_id', 'prev_id', 'next_id', 'head_block_id', 'tail_block_id', 'source', 'target', 'selected', 'request_id'}
 IDENTITY_LISTS = {'covers', 'refs', 'pins', 'hiddenJobs', 'asset_ids', 'job_ids'}
@@ -121,6 +121,10 @@ def validate(snapshot):
     # Reference integrity: card/edge/message IDs are inline, entity refs are external.
     inline = {c['id'] for c in records[root]['canvas']['cards']}
     inline.update(e['id'] for e in records[root]['canvas'].get('connections', []))
+    from backend.timeline import timelines
+    for timeline in timelines(records[root]['canvas']):
+        if 'id' in timeline: inline.add(timeline['id'])
+        inline.update(e['id'] for e in timeline['clips'] + timeline['subtitles'])
     for body in records.values():
         if body['kind'] == 'chat_pack':
             inline.update(m['id'] for m in body.get('messages', []) if isinstance(m, dict) and isinstance(m.get('id'), str))
@@ -149,7 +153,10 @@ def diff(before, after, path=''):
     if before == after:
         return []
     if isinstance(before, list) and isinstance(after, list) and all(isinstance(x, dict) and 'id' in x for x in before + after):
-        return diff({x['id']: x for x in before}, {x['id']: x for x in after}, path)
+        changes = diff({x['id']: x for x in before}, {x['id']: x for x in after}, path)
+        if path.endswith('/clips') and [x['id'] for x in before] != [x['id'] for x in after]:
+            changes.append({'path': path + '/order', 'operation': 'replace', 'before': [x['id'] for x in before], 'after': [x['id'] for x in after]})
+        return changes
     if isinstance(before, dict) and isinstance(after, dict):
         result = []
         for key in sorted(before.keys() | after.keys()):

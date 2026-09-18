@@ -1,0 +1,10 @@
+const assert=require('node:assert/strict'),{merge}=require('../backend/web/live-merge.js');
+assert(require('../backend/web/live-merge.js').same({a:1,b:{c:2}},{b:{c:2},a:1}));
+const base={revision:1,canvas:{cards:[{id:'a',title:'A'},{id:'b',title:'B'}],viewport:{x:0}}};
+const local=structuredClone(base),remote=structuredClone(base);
+local.canvas.cards[0].title='local';remote.canvas.cards[1].title='remote';remote.revision=2;
+assert.deepEqual(merge(base,local,remote).canvas.cards,[{id:'a',title:'local'},{id:'b',title:'remote'}]);
+remote.canvas.cards[0].title='collision';assert.throws(()=>merge(base,local,remote));
+remote.canvas.cards.shift();assert.throws(()=>merge(base,local,remote));
+remote.canvas.cards=[...base.canvas.cards,{id:'c',title:'new'}];assert.equal(merge(base,local,remote).canvas.cards.length,3);
+console.log('Three-way merge: independent edits, conflicts, deletion conflicts and additions passed');
