@@ -1,10 +1,11 @@
-const {app, BrowserWindow, nativeTheme, ipcMain, shell, dialog} = require('electron');
+const {app, BrowserWindow, nativeTheme, ipcMain, shell, dialog, safeStorage} = require('electron');
 const {spawn} = require('node:child_process');
 const path = require('node:path');
 const readline = require('node:readline');
 const {randomBytes} = require('node:crypto');
 const fs = require('node:fs');
 const {showFailure} = require('./failure.cjs');
+const {createVault,resolveCredentials}=require('./credentials.cjs');
 
 let backend;
 let closing = false;
@@ -21,6 +22,7 @@ else app.whenReady().then(async () => {
   const dataDirectory = process.env.DIRECTOR_DATA_DIR || (development &&
     (fs.existsSync(path.join(localDirectory, 'config.json')) || !fs.existsSync(path.join(savedDirectory, 'config.json')))
     ? localDirectory : savedDirectory);
+  const vault=createVault(dataDirectory,safeStorage);
   const agentPermissionsPath=path.join(dataDirectory,'agent-permissions.json');
   const defaultAgentFolder=fs.existsSync(path.join(app.getPath('home'),'Sites'))?path.join(app.getPath('home'),'Sites'):root;
   const readAgentFolders=()=>{try{const value=JSON.parse(fs.readFileSync(agentPermissionsPath,'utf8'));return [...new Set(value.folders.filter(item=>typeof item==='string'&&path.isAbsolute(item)&&fs.existsSync(item)&&fs.statSync(item).isDirectory()).map(item=>fs.realpathSync(item)))];}catch{return [fs.realpathSync(defaultAgentFolder)];}};
@@ -70,17 +72,24 @@ else app.whenReady().then(async () => {
       const expanded=cwdValue==='~'||cwdValue.startsWith('~/')?path.join(app.getPath('home'),cwdValue.slice(2)):cwdValue;
       const candidate=path.isAbsolute(expanded)?expanded:path.resolve(folders[0],expanded),cwd=fs.existsSync(candidate)?fs.realpathSync(candidate):candidate;
       if(!fs.existsSync(cwd)||!fs.statSync(cwd).isDirectory()||!folders.some(folder=>{const relative=path.relative(folder,cwd);return relative===''||!relative.startsWith('..')&&!path.isAbsolute(relative);}))throw Error('工作目录不在允许执行的文件夹内');
+      const resolved=resolveCredentials(argv,vault);
+      if(resolved.names.length){const decision=await dialog.showMessageBox(window,{type:'question',title:'允许使用凭据',message:'此命令申请使用：'+resolved.names.join('、'),detail:'工作目录：'+cwd+'\n命令：'+JSON.stringify(argv)+'\n密码将注入命令环境变量，命令本身可以读取该密码。',buttons:['取消','允许本次使用'],defaultId:0,cancelId:0});if(decision.response!==1)throw Error('已取消凭据使用');}
       const startedAt=Date.now();
       return await new Promise(resolve=>{
         let stdout='',stderr='',finished=false,timedOut=false,truncated=false;
-        const child=spawn(argv[0],argv.slice(1),{cwd,windowsHide:true,shell:false,stdio:['ignore','pipe','pipe'],env:{...process.env,TERM:'dumb',NO_COLOR:'1'}});
+        const child=spawn(resolved.argv[0],resolved.argv.slice(1),{cwd,windowsHide:true,shell:false,stdio:['ignore','pipe','pipe'],env:{...process.env,...resolved.env,TERM:'dumb',NO_COLOR:'1'}});
         const append=(name,data)=>{const value=data.toString('utf8'),limit=1024*1024;let current=name==='stdout'?stdout:stderr;if(current.length<limit)current+=value.slice(0,limit-current.length);if(value.length>limit-current.length)truncated=true;if(name==='stdout')stdout=current;else stderr=current;};
         child.stdout.on('data',data=>append('stdout',data));child.stderr.on('data',data=>append('stderr',data));
         const timer=setTimeout(()=>{timedOut=true;child.kill('SIGTERM');setTimeout(()=>{if(!finished)child.kill('SIGKILL');},2000).unref();},120000);
-        const done=(code,signal,error)=>{if(finished)return;finished=true;clearTimeout(timer);resolve({exit_code:Number.isInteger(code)?code:null,signal:signal||null,stdout,stderr,error:error?.message||null,timed_out:timedOut,truncated,duration_ms:Date.now()-startedAt,cwd});};
+        const done=(code,signal,error)=>{if(finished)return;finished=true;clearTimeout(timer);resolve({exit_code:Number.isInteger(code)?code:null,signal:signal||null,stdout:resolved.redact(stdout),stderr:resolved.redact(stderr),error:error?resolved.redact(error.message):null,timed_out:timedOut,truncated,duration_ms:Date.now()-startedAt,cwd});};
         child.once('error',error=>done(null,null,error));child.once('close',(code,signal)=>done(code,signal));
       });
     });
+    for(const [channel,handler] of Object.entries({
+      'director:credentials-list':()=>vault.list(),
+      'director:credentials-save':value=>vault.save(value?.name,value?.secret),
+      'director:credentials-remove':value=>vault.remove(value)
+    }))ipcMain.handle(channel,(event,value)=>{if(event.sender!==window.webContents||event.senderFrame?.url!==origin+'/')throw Error('Invalid sender');return handler(value);});
     ipcMain.handle('director:agent-folders',event=>{if(event.sender!==window.webContents||event.senderFrame?.url!==origin+'/')throw Error('Invalid sender');return readAgentFolders();});
     ipcMain.handle('director:add-agent-folder',async event=>{if(event.sender!==window.webContents||event.senderFrame?.url!==origin+'/')throw Error('Invalid sender');const result=await dialog.showOpenDialog(window,{title:'选择允许代理执行命令的文件夹',properties:['openDirectory','createDirectory']});if(result.canceled||!result.filePaths[0])return readAgentFolders();const folders=[...new Set([...readAgentFolders(),fs.realpathSync(result.filePaths[0])])];writeAgentFolders(folders);return folders;});
     ipcMain.handle('director:remove-agent-folder',(event,value)=>{if(event.sender!==window.webContents||event.senderFrame?.url!==origin+'/')throw Error('Invalid sender');if(typeof value!=='string')throw Error('Invalid folder');const target=fs.existsSync(value)?fs.realpathSync(value):value,folders=readAgentFolders().filter(folder=>folder!==target);writeAgentFolders(folders);return folders;});

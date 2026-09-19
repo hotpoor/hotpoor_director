@@ -672,3 +672,7 @@ AK 与模型改为可搜索 datalist。每次成功持久化请求同时保存 `
 验证：280 项 Python 测试通过；真实 Electron 对话回归通过；真实 service-inference 工具申请与结果续接通过。
 
 上线 `xialiwei-api:0.17.2-director-agent-folders` / 8661；候选与正式 HTTPS 各 107 项检查通过，保留旧 8660 worker。回滚 `/home/ubuntu/director-agent-folders-20260919/nginx-before-agent-folders.conf`。
+
+## 2026-09-19 · 本机凭据管理
+
+新增凭据侧栏，按名称添加、覆盖更新、删除密码。Electron safeStorage 使用操作系统安全存储保护加密密钥，密码密文写入本机0600文件；不提供解密读取IPC。代理请求只携带凭据名称，run_command 支持 env NAME={{credential:name}} 前缀，由主进程消费并注入环境变量；使用前显示原生命令及凭据确认，结果对原样密码脱敏。此能力不构成对任意命令的沙箱隔离。测试覆盖持久化、更新删除、变量注入及脱敏，并完成真实 Electron OS 加密往返验证。

@@ -1,6 +1,7 @@
 """Private durable text conversations using each account's inference credentials."""
 import asyncio
 import json
+import re
 import time
 import uuid
 
@@ -32,7 +33,7 @@ def command_tool(allowed_paths=None):
                 'parameters': {'type': 'object', 'additionalProperties': False,
                                'properties': {'argv': {'type': 'array', 'minItems': 1, 'maxItems': 128,
                                                        'items': {'type': 'string'},
-                                                       'description': 'Executable followed by arguments. Do not use a shell string.'},
+                                                       'description': 'Executable followed by arguments. To use a named credential, prefix argv with env and NAME={{credential:saved_name}}; the local executor injects its value into that environment variable after approval. Never print credentials or use them in arguments. Do not use a shell string.'},
                                               'cwd': {'type': 'string', 'description': 'Absolute working directory inside an allowed folder.'},
                                               'reason': {'type': 'string', 'description': 'Short user-facing reason for running this command.'}},
                                'required': ['argv', 'cwd', 'reason']}, 'strict': True}
@@ -482,6 +483,12 @@ class DialogueHandler(PrivateHandler):
             messages = history(context_turns)
             attachments = [public_file(await file_for(conn, file_id, self.owner, conversation_id)) for file_id in file_ids]
             messages.append({'role': 'user', 'content': question, 'attachments': attachments})
+            if agent:
+                names = data.get('credential_names', [])
+                if not isinstance(names, list) or len(names) > 100 or any(not isinstance(n, str) or not re.fullmatch(r'[A-Za-z][A-Za-z0-9_-]{0,63}', n) for n in names):
+                    raise HTTPError(400, reason='凭据名称列表不正确')
+                if names:
+                    messages.insert(0, {'role': 'system', 'content': 'Available local credential names (values never provided): '+', '.join(names)+'. Use env NAME={{credential:saved_name}} as the run_command argv prefix only when needed. Never expose or print secret values.'})
             raw_messages = messages
             messages = await prepare_messages(conn, messages, self.settings['config'], self.owner, conversation_id, path)
             submission = submission_stats(raw_messages, messages, model, path, agent, folders)
