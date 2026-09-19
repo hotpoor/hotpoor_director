@@ -174,6 +174,9 @@
     details.ontoggle=()=>{if(details.open)openDirectories.add(key);else openDirectories.delete(key);localStorage.setItem('dialogue-open-directories',JSON.stringify([...openDirectories]));};details.append(summary,list);return details;
   }
   const toolExecutions=new Map();
+  function commandDuration(ms){const seconds=Math.max(0,Math.floor(ms/1000));return Math.floor(seconds/86400)+' 天 '+Math.floor(seconds/3600)%24+' 时 '+Math.floor(seconds/60)%60+' 分 '+seconds%60+' 秒（'+seconds+' 秒）';}
+  function updateCommandTimers(){for(const node of dialog.querySelectorAll('[data-command-started]'))node.textContent='已执行 '+commandDuration(Date.now()-Number(node.dataset.commandStarted));}
+  setInterval(updateCommandTimers,1000);
   function toolView(turn,call){
     const conversation=current,executionKey=conversation+":"+call.id,execution=toolExecutions.get(executionKey);
     const card=document.createElement('section');card.className='dialogue-tool-call';
@@ -181,6 +184,10 @@
     const reason=document.createElement('p');reason.textContent=call.reason;
     const command=document.createElement('code');command.textContent=call.argv.map(value=>/^[\w@%+=:,./-]+$/.test(value)?value:JSON.stringify(value)).join(' ');
     const cwd=document.createElement('small');cwd.textContent='工作目录：'+call.cwd;
+    const elapsed=document.createElement('small');elapsed.className='dialogue-command-elapsed';
+    const duration=call.result?.duration_ms??execution?.output?.duration_ms;
+    if(Number.isFinite(duration)){elapsed.textContent='执行耗时 '+commandDuration(duration);card.append(elapsed);}
+    else if(execution?.startedAt){elapsed.dataset.commandStarted=String(execution.startedAt);elapsed.textContent='已执行 '+commandDuration(Date.now()-execution.startedAt);card.append(elapsed);}
     card.append(heading,reason,command,cwd);
     if(call.result){const output=document.createElement('pre');output.className='dialogue-tool-output';output.textContent=[call.result.stdout,call.result.stderr,call.result.error].filter(Boolean).join('\n')||'(没有输出)';card.append(output);}
     if(call.status==='approval_required'){
@@ -200,10 +207,11 @@
       approve.onclick=async()=>{
         const existing=toolExecutions.get(executionKey);
         if(existing){if(existing.error)await submit(existing.output);return;}
-        toolExecutions.set(executionKey,{phase:'执行中…'});refresh();
+        toolExecutions.set(executionKey,{phase:'执行中…',startedAt:Date.now()});refresh();
         let output;
         try{output={approved:true,...await window.directorDesktop.runCommand({argv:call.argv,cwd:call.cwd})};}
         catch(e){output={approved:true,error:e.message,exit_code:null};}
+        if(!Number.isFinite(output.duration_ms))output.duration_ms=Date.now()-toolExecutions.get(executionKey).startedAt;
         await submit(output);
       };
       actions.append(reject,approve);card.append(actions);
