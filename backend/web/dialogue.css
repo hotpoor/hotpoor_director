@@ -122,3 +122,9 @@
 @media(max-width:760px){#dialogue-info:not(.dialogue-info-editing){grid-template-columns:minmax(180px,1fr) 170px auto;min-width:420px}}
 .dialogue-answer.dialogue-answer-collapsed{width:min(100%,520px);width:min(100%,var(--dialogue-card-width,520px));height:var(--dialogue-card-height,240px);min-width:min(100%,var(--dialogue-card-min-width,520px));min-height:var(--dialogue-card-min-height,240px);max-width:100%;max-height:min(80vh,900px);resize:both}
 #dialogue-info.dialogue-info-editing{min-height:92px}
+.dialogue-answer.dialogue-answer-collapsed{overflow-x:hidden;border:1px solid #595959;box-shadow:inset 0 0 0 1px #202020}
+.dialogue-table-scroll{display:block;width:100%;max-width:100%;overflow-x:auto;overflow-y:hidden;overscroll-behavior-inline:contain;scrollbar-width:thin}
+.dialogue-answer .dialogue-table-scroll table{display:table;width:max-content;min-width:100%;margin:10px 0;border-collapse:collapse}
+.dialogue-context:not([open]){width:fit-content;min-width:280px;max-width:100%;box-sizing:border-box}
+.dialogue-context[open]{width:100%;max-width:100%;box-sizing:border-box}
+#dialogue-mode .dialogue-answer-font-button{font-size:11px;font-weight:700;letter-spacing:-1px;line-height:1}

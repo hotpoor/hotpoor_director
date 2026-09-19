@@ -5,7 +5,7 @@
   document.querySelector('#studio').append(dialog);
   const $=selector=>dialog.querySelector(selector),key=$('#dialogue-key'),model=$('#dialogue-model'),status=$('#dialogue-status'),question=$('#dialogue-question');
   let inventory={keys:[]},categories=[],showArchived=false,currentBody=null,metadataTimer=null,current='',turns=[],older=null,timer=null,generation=0,busy=false,pending=false,requestId='',requestQuestion='',draftFiles=[];
-  const collapsed=new Set(),contextExpanded=new Set(),contextCache=new Map();
+  const storedSet=name=>{try{return new Set(JSON.parse(localStorage.getItem(name)||'[]'));}catch{return new Set();}},collapsed=storedSet('dialogue-collapsed-answers'),contextExpanded=new Set(),contextCache=new Map();
   const makeId=()=>crypto.randomUUID().replaceAll('-','');
   async function api(path,body){
     const response=await fetch('/api/dialogue/'+path,{method:body===undefined?'GET':'POST',headers:{...(body instanceof FormData?{}:{'Content-Type':'application/json'}),'X-XSRFToken':decodeURIComponent(document.cookie.split('; ').find(x=>x.startsWith('_xsrf='))?.slice(6)||'')},body:body===undefined?undefined:body instanceof FormData?body:JSON.stringify(body)});
@@ -45,9 +45,15 @@
   $('#dialogue-font').oninput=font;font();
   $('#dialogue-card-width').value=localStorage.getItem('dialogue-card-width')||'520';$('#dialogue-card-height').value=localStorage.getItem('dialogue-card-height')||'240';
   const cardSizes=()=>{try{return JSON.parse(localStorage.getItem('dialogue-card-sizes')||'{}');}catch{return {};}};
+  const answerFonts=()=>{try{return JSON.parse(localStorage.getItem('dialogue-answer-fonts')||'{}');}catch{return {};}};
+  const turnKey=turnId=>current+':'+turnId;
+  const saveCollapsed=()=>localStorage.setItem('dialogue-collapsed-answers',JSON.stringify([...collapsed]));
   function cardSize(turnId){const saved=cardSizes()[current+':'+turnId];return saved||{width:Number($('#dialogue-card-width').value),height:Number($('#dialogue-card-height').value)};}
   function applyCardSize(response,turnId){const size=cardSize(turnId);response.style.setProperty('--dialogue-card-min-width',$('#dialogue-card-width').value+'px');response.style.setProperty('--dialogue-card-min-height',$('#dialogue-card-height').value+'px');response.style.width=size.width+'px';response.style.height=size.height+'px';}
-  function saveCardSize(response,turnId){if(!response.classList.contains('dialogue-answer-collapsed'))return;const sizes=cardSizes(),rect=response.getBoundingClientRect();sizes[current+':'+turnId]={width:Math.round(rect.width),height:Math.round(rect.height)};localStorage.setItem('dialogue-card-sizes',JSON.stringify(sizes));}
+  function clearCardSize(response){response.style.width='';response.style.height='';}
+  function saveCardSize(response,turnId,notify=false){if(!response.classList.contains('dialogue-answer-collapsed'))return;const sizes=cardSizes(),rect=response.getBoundingClientRect();sizes[current+':'+turnId]={width:Math.round(rect.width),height:Math.round(rect.height)};localStorage.setItem('dialogue-card-sizes',JSON.stringify(sizes));if(notify)status.textContent='折叠尺寸已保存';}
+  function applyAnswerFont(response,turnId){const level=answerFonts()[turnKey(turnId)];response.style.fontSize=Number.isInteger(level)?fontSizes[level]+'px':'';}
+  function cycleAnswerFont(response,turnId,button){const fonts=answerFonts(),key=turnKey(turnId),currentLevel=Number.isInteger(fonts[key])?fonts[key]:Number($('#dialogue-font').value),level=(currentLevel+1)%fontSizes.length;fonts[key]=level;localStorage.setItem('dialogue-answer-fonts',JSON.stringify(fonts));applyAnswerFont(response,turnId);button.title='调整此回答字号（当前：'+fontLabels[level]+'）';button.setAttribute('aria-label',button.title);status.textContent='此回答字号已保存：'+fontLabels[level];}
   $('#dialogue-toggle-preferences').onclick=()=>{const panel=$('#dialogue-preferences-panel'),expanded=panel.hidden;panel.hidden=!expanded;$('#dialogue-toggle-preferences').setAttribute('aria-expanded',String(expanded));$('#dialogue-toggle-preferences').textContent=expanded?'收起设置':'对话设置';};
   $('#dialogue-save-options').onclick=async()=>{
     if(busy||pending)return;busy=true;controls();
@@ -161,17 +167,19 @@
       if(turn.status==='completed'){
         response.innerHTML=DOMPurify.sanitize(marked.parse(turn.answer));
         for(const link of response.querySelectorAll('a')){link.target='_blank';link.rel='noopener noreferrer';}
+        for(const table of [...response.querySelectorAll('table')]){const scroll=document.createElement('div');scroll.className='dialogue-table-scroll';table.before(scroll);scroll.append(table);}
       }else response.textContent=turn.status==='running'?'模型正在回答…':turn.error||'回答中断';
       article.append(q);
       if(turn.attachments?.length){const files=document.createElement('div');files.className='dialogue-turn-files';for(const file of turn.attachments)files.append(fileView(file));article.append(files);}
       response.id='dialogue-answer-'+turn.id;
-      response.classList.toggle('dialogue-answer-collapsed',collapsed.has(turn.id));applyCardSize(response,turn.id);response.addEventListener('pointerup',()=>saveCardSize(response,turn.id));
+      const collapseKey=turnKey(turn.id);response.classList.toggle('dialogue-answer-collapsed',collapsed.has(collapseKey));if(collapsed.has(collapseKey))applyCardSize(response,turn.id);else clearCardSize(response);applyAnswerFont(response,turn.id);let resizeSaveTimer=null;response.addEventListener('pointerup',()=>saveCardSize(response,turn.id,true));new ResizeObserver(()=>{if(!response.classList.contains('dialogue-answer-collapsed'))return;clearTimeout(resizeSaveTimer);resizeSaveTimer=setTimeout(()=>saveCardSize(response,turn.id,true),250);}).observe(response);
       article.append(meta,response);
       if(turn.submission)article.append(contextView(turn));
       if(turn.status==='completed'){
         const actions=document.createElement('div');actions.className='dialogue-turn-actions';
         const toggle=document.createElement('button');toggle.type='button';toggle.className='quiet dialogue-toggle-answer';toggle.setAttribute('aria-controls',response.id);
-        const update=()=>{const folded=response.classList.contains('dialogue-answer-collapsed');toggle.textContent=folded?'展开':'折叠';toggle.setAttribute('aria-expanded',String(!folded));};update();toggle.onclick=()=>{const folded=response.classList.toggle('dialogue-answer-collapsed');if(folded)collapsed.add(turn.id);else collapsed.delete(turn.id);update();};actions.append(toggle);
+        const update=()=>{const folded=response.classList.contains('dialogue-answer-collapsed');toggle.textContent=folded?'展开':'折叠';toggle.setAttribute('aria-expanded',String(!folded));};update();toggle.onclick=()=>{const folded=response.classList.toggle('dialogue-answer-collapsed');if(folded){collapsed.add(collapseKey);applyCardSize(response,turn.id);}else{collapsed.delete(collapseKey);clearCardSize(response);}saveCollapsed();update();};actions.append(toggle);
+        const fontButton=document.createElement('button');fontButton.type='button';fontButton.className='quiet dialogue-icon-button dialogue-answer-font-button';const savedLevel=answerFonts()[collapseKey];fontButton.title='调整此回答字号（当前：'+fontLabels[Number.isInteger(savedLevel)?savedLevel:Number($('#dialogue-font').value)]+'）';fontButton.setAttribute('aria-label',fontButton.title);fontButton.textContent='Aa';fontButton.onclick=()=>cycleAnswerFont(response,turn.id,fontButton);actions.append(fontButton);
         const copy=document.createElement('button');copy.type='button';copy.className='quiet dialogue-icon-button';copy.title='复制回答';copy.setAttribute('aria-label','复制回答');copy.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8h11v11H8z"></path><path d="M5 16H4V4h12v1"></path></svg>';copy.onclick=async()=>{try{await navigator.clipboard.writeText(turn.answer);status.textContent='回答已复制';}catch{status.textContent='复制失败，请选择回答文本复制';}};actions.append(copy);article.append(actions);
         if(turn.usage){const usage=document.createElement('small');usage.className='dialogue-usage';usage.textContent='用量：'+JSON.stringify(turn.usage);article.append(usage);}
       }
