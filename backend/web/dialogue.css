@@ -16,3 +16,35 @@
 
 .dialogue-turn-files{align-items:flex-start}#dialogue-mode .dialogue-preferences label{display:grid;margin:0;gap:4px}#dialogue-mode .dialogue-preferences input{width:85px}.dialogue-answer[hidden]{display:none}
 .dialogue-context{margin:10px 0 12px;border:1px solid #383838;border-radius:8px;background:#101010}.dialogue-context>summary{cursor:pointer;padding:10px 12px;color:#b9cce0;font-size:12px;line-height:1.5;overflow-wrap:anywhere}.dialogue-context-content{display:grid;gap:10px;padding:0 12px 12px;color:#aaa;font-size:12px}.dialogue-context-content>p{margin:0}.dialogue-context-turn{display:grid;gap:7px;border-top:1px solid #333;padding-top:10px}.dialogue-context-turn strong{color:#ccc;font-size:11px}.dialogue-context-question,.dialogue-context-answer{white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;overflow:auto;padding:9px 10px;border-radius:6px;background:#181818;line-height:1.6}.dialogue-context-question{border-left:3px solid #6684a3}.dialogue-context-answer{border-left:3px solid #777}
+
+/* Full-viewport conversation workspace; transcript owns all remaining height. */
+#dialogue-mode{inset:0;margin:0;width:100vw;height:100dvh;max-width:100vw;max-height:100dvh;box-sizing:border-box;border-radius:0}
+#dialogue-mode .dialogue-heading{min-height:72px;padding:12px 22px}
+#dialogue-mode .dialogue-heading h2{font-size:19px;margin-top:4px}
+#dialogue-mode .dialogue-main{overflow:hidden;padding:12px 20px}
+#dialogue-mode .dialogue-controls,#dialogue-mode .dialogue-preferences{flex:none;margin-top:0}
+#dialogue-mode .dialogue-note{flex:none;margin:7px 0;font-size:11px}
+#dialogue-mode #dialogue-transcript{min-height:0;padding-top:6px}
+#dialogue-mode #dialogue-status{flex:none;margin:4px 0;min-height:17px}
+#dialogue-mode #dialogue-compose{flex:none;padding-top:7px}
+#dialogue-mode #dialogue-question{min-height:54px;max-height:130px}
+#dialogue-mode .dialogue-attachment-tools{margin-top:5px}
+#dialogue-mode .dialogue-send-row{margin-top:5px}
+@media(max-width:760px){
+  #dialogue-mode{width:100vw;height:100dvh;max-width:100vw;max-height:100dvh}
+  #dialogue-mode .dialogue-heading{min-height:58px;padding:8px 10px}
+  #dialogue-mode .dialogue-heading h2{font-size:15px;margin:1px 0 0}
+  #dialogue-mode .dialogue-heading>button{padding:7px 9px}
+  #dialogue-mode .dialogue-sidebar{padding:5px 8px;max-height:58px;min-height:0}
+  #dialogue-mode .dialogue-sidebar>button,#dialogue-mode #dialogue-list button{padding:7px 9px}
+  #dialogue-mode .dialogue-main{padding:8px;overflow:hidden}
+  #dialogue-mode .dialogue-controls,#dialogue-mode .dialogue-preferences{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;align-items:end;padding-bottom:3px;scrollbar-width:thin}
+  #dialogue-mode .dialogue-controls>*{flex:0 0 auto}
+  #dialogue-mode .dialogue-controls label{min-width:125px}
+  #dialogue-mode .dialogue-controls label:nth-child(2){min-width:170px}
+  #dialogue-mode .dialogue-preferences label{flex:0 0 auto}
+  #dialogue-mode .dialogue-note{display:none}
+  #dialogue-mode #dialogue-question{min-height:48px;max-height:92px}
+  #dialogue-mode .dialogue-attachment-tools{flex-wrap:nowrap}
+  #dialogue-mode .dialogue-attachment-tools small{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+}

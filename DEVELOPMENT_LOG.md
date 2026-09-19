@@ -627,3 +627,9 @@ LTX 安装跟进：用户开通访问后，官方权重 HEAD 请求返回 200；
 每轮记录固化 `context_ids` 与提交统计：历史轮数、消息数、文本字符、附件数量 / 原文件字节以及发送给 service-inference 的 JSON 请求体 UTF-8 字节数（包含图片 / PDF 的传输编码）。回答下方显示摘要，按需读取同账号同对话的链式记录包并展开当次实际携带的历史问题、回答和附件名称；当前问题不重复计入历史列表。后续修改上下文轮次不会改变旧请求记录，旧问答无统计字段时保持兼容。
 
 验证：276 项 Python 测试通过；真实 Electron / 隔离 PostgreSQL 验证摘要、展开内容、当前问题排除及跨分包读取。候选与正式 HTTPS 各 100 项检查通过，四个生产文件 SHA-256 与本地一致。发布 `xialiwei-api:0.15.3-director-context` / 8639，保留 8638 worker；回滚 `/home/ubuntu/director-context-20260919/nginx-before-context.conf`。本地客户端已重启。
+
+## 2026-09-19 · 对话全屏阅读布局
+
+对话窗口改为占满 `100vw × 100dvh`，去除四周留白和圆角；标题、状态和输入区压缩，聊天记录使用 flex 占据全部剩余高度。窄屏下对话 / 模型 / 接口与阅读配置改为单行横向滚动，侧栏缩至 58px，帮助说明隐藏，避免设置和输入框挤占回答阅读区。
+
+真实 Electron 验证桌面记录区不低于 300px、640×860 窄屏不低于 220px，窗口边界与视口一致且无横向溢出；候选和正式 HTTPS 各 100 项检查通过。发布 `xialiwei-api:0.15.4-director-fullscreen` / 8640，保留 8639 worker，回滚 `/home/ubuntu/director-fullscreen-20260919/nginx-before-fullscreen.conf`。

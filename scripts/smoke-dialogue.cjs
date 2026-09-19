@@ -19,6 +19,8 @@ app.whenReady().then(async()=>{
   await js(`window.testApi=async(path,body,expected=200)=>{const r=await fetch(path,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json','X-XSRFToken':decodeURIComponent(document.cookie.split('; ').find(x=>x.startsWith('_xsrf=')).slice(6))},body:body===undefined?undefined:JSON.stringify(body)});const d=await r.json();if(r.status!==expected)throw Error(r.status+' '+JSON.stringify(d));return d;};void 0`);
   await js(`(async()=>{await testApi('/api/setup',{login:'dialogue-ui',password:'dialogue-password-123'});await testApi('/api/login',{login:'dialogue-ui',password:'dialogue-password-123'});await directorStudio.enter(await testApi('/api/me'));document.querySelector('#open-dialogue').click();})()`);
   await wait("document.querySelector('#dialogue-model').value==='gpt-6-astra'");
+  if(!await js("(()=>{const r=document.querySelector('#dialogue-mode').getBoundingClientRect();return r.width>=innerWidth-1&&r.height>=innerHeight-1&&r.left===0&&r.top===0})()"))throw Error('Dialogue is not full viewport');
+  if(!await js("document.querySelector('#dialogue-transcript').clientHeight>=300"))throw Error('Desktop transcript too short');
   if(await js("[...document.querySelector('#dialogue-model').options].some(o=>o.value==='fixture-image')"))throw Error('Image advertised for dialogue');
   await js("document.querySelector('#dialogue-question').value='帮我构思一段开场';document.querySelector('#dialogue-compose').requestSubmit();");
   await wait("document.querySelector('.dialogue-answer')?.textContent.includes('模型 gpt-6-astra')");
@@ -95,6 +97,7 @@ app.whenReady().then(async()=>{
   fs.writeFileSync(path.join(directory,'dialogue-files.png'),(await win.webContents.capturePage()).toPNG());
   win.setContentSize(640,860);await new Promise(r=>setTimeout(r,250));
   if(await js("document.querySelector('#dialogue-mode').scrollWidth>document.querySelector('#dialogue-mode').clientWidth"))throw Error('Mobile overflow');
+  if(!await js("(()=>{const d=document.querySelector('#dialogue-mode').getBoundingClientRect(),t=document.querySelector('#dialogue-transcript');return d.width>=innerWidth-1&&d.height>=innerHeight-1&&t.clientHeight>=220})()"))throw Error('Mobile full-screen transcript too short');
   fs.writeFileSync(path.join(directory,'dialogue-narrow.png'),(await win.webContents.capturePage()).toPNG());
   console.log('Dialogue UI verified: model switch/context, safe markdown, UUID sharding, linked packs, deduplication, provider failure, interruption recovery, history reopen, narrow layout. Artifacts:',directory);
  }catch(e){failed=true;console.error(e);if(win){console.error(await win.webContents.executeJavaScript("document.querySelector('#dialogue-status')?.textContent"));fs.writeFileSync(path.join(directory,'failure.png'),(await win.webContents.capturePage()).toPNG());}}
