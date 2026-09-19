@@ -1,6 +1,6 @@
 ---
 name: hotpoor-director
-description: 部署、运行和维护 Hotpoor Director 导演工作台，解释 Electron、Tornado、PostgreSQL、ComfyUI、service-inference 和云存储的协作方式。适用于本仓库的源码启动、本地与云端生成配置、素材直传、多云端双向版本同步及故障排查。
+description: 部署、运行和维护 Hotpoor Director 导演工作台，解释 Electron、Tornado、PostgreSQL、ComfyUI、service-inference 和云存储的协作方式。适用于本仓库的源码启动、本地与云端生成配置、素材直传、多云端双向版本同步、对话与本机代理执行，以及 Antigravity 模型调用和费用排查。
 ---
 
 # Hotpoor Director 部署与工作原理
@@ -9,7 +9,23 @@ description: 部署、运行和维护 Hotpoor Director 导演工作台，解释 
 
 ## 介绍工作台时的重点
 
-以 [README 的 8 个特色](README.md#8-个特色) 为主线：多图 PIN / 多视频联动对比、评论中的指定时间段播放、资源引用连线、随模型变化的创作 Tab、本地与云端模型混用、多套云存储配置、无限画布，以及复用原图的独立标注。图片标注只增加评论中的坐标和笔迹数据，不新增云端图片对象；视频选段只保存时间边界，不生成裁剪副本。
+以 [README 的画布特色](README.md#画布的-8-个特色) 为主线：多图 PIN / 多视频联动对比、评论中的指定时间段播放、资源引用连线、随模型变化的创作 Tab、本地与云端模型混用、多套云存储配置、无限画布，以及复用原图的独立标注。图片标注只增加评论中的坐标和笔迹数据，不新增云端图片对象；视频选段只保存时间边界，不生成裁剪副本。
+
+## 对话与本机代理
+
+用户要使用或维护对话时，先读 [README 对话与代理模式](README.md#对话与代理模式)。实现入口为 `backend/dialogue.py`、`backend/web/dialogue.js`、`desktop/main.cjs`、`desktop/preload.cjs`；对话附件由 `backend/dialogue_files.py` 处理。
+
+- 普通对话不发送 function tools；代理仅在 Electron 本地执行桥可用时开启，使用 Responses。模型发现按已启用 AK 返回可用语言模型，不把模型列表当作服务容量保证。
+- 对话/记录包/附件各自按 UUID 求余存储，记录包链式连接。`context_turns` 控制模型携带历史，`pack_size` 控制记录包容量，每轮仍立即保存。历史包括已完成、失败与中断轮次；已有命令结果随续问提供，长输出有截断标记。
+- 标题、描述与分类自动保存。单条字号、折叠、目录展开及卡片尺寸使用本机 localStorage，不能声称跨设备同步。对话没有加入项目分享或云同步。
+- 「本次提交」为初次请求摘要，不是代理所有续接请求或整轮费用总计。费用与 usage 的区别见下文 Antigravity 说明。
+- 新代理轮次保存 `agent_context`（含服务返回的加密 reasoning 项），连同 `function_call_output` 续接；限制并行工具调用。不要恢复为只依赖 `previous_response_id` 的方案，上游可能返回响应 ID 不存在。旧记录没有完整上下文时仍可能续接失败；不能通过重跑已经成功的本地命令补救。
+- 命令每次由用户核对确认；真实运行在 Electron 主进程，`shell:false`，输出经 IPC 实时回传。网页端不提供服务器执行。cwd 白名单仅限定工作目录，不是文件系统沙箱，不能声称限制了命令访问范围。
+- 停止在 macOS/Linux 对进程组发送 SIGINT，3 秒后未退出则 SIGKILL；Windows 当前只终止直接子进程，不能承诺进程树与 Ctrl+C 等效。命令超时 120 秒，输出流有容量上限。停止不是可恢复暂停。
+- 本机凭据由 `desktop/credentials.cjs` 管理：safeStorage 加密密文文件，不提供解密读取 IPC。`env NAME={{credential:saved_name}}` 由主进程解析为环境变量，每次使用需原生确认。模型只获取名称，stdout/stderr 在离开主进程前处理原样密码及跨分段脱敏；不保证对编码、变形或主动外传保密。不要读取或打印密码文件，也不要把此功能当作 sudo 或 macOS 隐私授权。
+- 执行失败保留输出，不自动重跑；回传失败仅重试回传结果。参数校验按 argv/cwd/reason 报具体字段，不能把格式或长度错误描述为已确认的危险命令。旧错误没有保存被拒绝响应时，不推测具体失败字段。
+
+相关验证：`python -m pytest -q tests/test_dialogue.py`；`node scripts/test-agent-ui.cjs`、`node scripts/test-command-output.cjs`、`node scripts/test-command-stop.cjs`、`node scripts/test-dialogue-controls.cjs`。`electron scripts/capture-dialogue-readme.cjs` 在隔离数据中更新文档截图，模型与执行桥为演示桩，不接触真实凭据或执行命令。截图来源必须如实标注。
 
 ## 首次部署：Windows x64
 
@@ -145,6 +161,8 @@ flowchart LR
 | 数据目录 `config.json` | 数据库连接凭据、cookie secret；初次运行自动生成。`config.example.json` 仅展示结构，不可把示例占位值当成真实密码。 |
 | 数据目录 `.comfyui.json` | Host / Port，本机隐藏连接配置；不与账号配置混写。 |
 | 数据目录 `.service-inference.json` | 多 API Key、当前启用项及模型发现信息；不回显凭据，不提交到 Git。 |
+| 数据目录 `credentials.encrypted.json` | 本机命令凭据密文；由系统安全存储保护，不能当作可跨机器直接解密的备份。 |
+| 数据目录 `agent-permissions.json` | 允许执行的工作目录列表，仅校验 cwd。 |
 | 数据目录 `.cloud-storage.json` | 云存储多套配置、长期密钥及启用状态；不回显凭据，不提交到 Git。 |
 | 数据目录 `generated/` | 下载到本机的云端生成图片和视频；备份项目时一并保留。 |
 | 云存储 Bucket | 直传素材原文件；数据库保存引用与元信息，备份本机目录不包含这些远端对象。 |
@@ -171,6 +189,8 @@ Git clone 只获得代码、Logo/图标、建表脚本和示例配置，不获�
 | 云端任务重开后异常 | 原 Key、绑定的远端任务 ID、控制台受理状态及本机 `generated/` 文件；不要重复提交未确认的任务。 |
 | 云存储验证通过但上传失败 | Bucket 的 CORS、上传权限、地域和 Endpoint；空间验证不执行真实上传。 |
 | 文件已上传但确认失败 | 原配置 ID 和指纹、公网域名、对象大小与访问权限；优先重试确认。 |
+| 对话命令结束但无回答 | 区分本地退出码、结果回传与模型续接；检查字段级错误，保留输出，不重跑命令。 |
+| 对话切换或编辑被锁住 | 检查 busy 控件恢复；保存结束应统一恢复列表、标题、分类和归档。 |
 | 队列不能排序 | `director_queue` 扩展是否在目标服务安装并加载；排序冲突时刷新真实队列，不删除后重新提交。 |
 
 代码改动按影响范围验证。`npm test` 使用隔离测试数据验证后端；`node_modules/.bin/electron.cmd scripts/smoke-comfy-settings.cjs` 可验证连接配置界面。云端与存储后端测试见 `tests/test_inference.py`、`tests/test_cloud_storage.py`；`scripts/smoke-inference.cjs` 使用隔离数据和模拟响应验证云端生成界面。其他测试入口见 `scripts/smoke-*.cjs`、`scripts/smoke-*.py`。实际 GPU 生成测试会消耗资源，只在用户授权且队列空闲时运行。不要把测试数据目录换成用户正在使用的数据目录。

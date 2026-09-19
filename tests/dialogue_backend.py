@@ -1,4 +1,5 @@
 """Real isolated database, deterministic provider replies; no paid API calls."""
+import os
 import asyncio
 import json
 from pathlib import Path
@@ -31,6 +32,38 @@ async def fake_api(key, path, data=None):
         return {'data': [{'id': 'gpt-6-astra' if key == 'fixture-first' else 'fixture-chat', 'type': 'llm'},
                          {'id': 'fixture-image', 'type': 'image'}]}
     assert path in ('/v1/responses', '/v1/chat/completions')
+    if os.environ.get('DIRECTOR_README_SCENES') == '1':
+        if data.get('tools'):
+            return {'id': 'readme-response', 'status': 'completed', 'output': [
+                {'type': 'function_call', 'name': 'run_command', 'call_id': 'readme-call',
+                 'arguments': json.dumps({'argv': ['python3', 'summarize.py'], 'cwd': '/demo/project',
+                                          'reason': '整理项目中的 Markdown 文档并汇总目录。截图使用模拟输出，不执行真实命令。'})}],
+                    'usage': {'input_tokens': 120, 'output_tokens': 60}}
+        text = """## 从问题到可追溯的研究资料
+
+先明确研究范围，再整理来源，最后输出带出处的结论。对话与文件保存在当前账号下，可以随时回来继续。
+
+### 资料整理流程
+
+| 阶段 | 操作 | 留下的记录 |
+| --- | --- | --- |
+| 收集 | 添加文件、粘贴图片或提供问题 | 原始附件与提问 |
+| 分析 | 选择 AK 与可用语言模型 | Markdown 回答、用量与上下文 |
+| 复核 | 展开目录，定位关键结论 | 来源、疑问与后续问题 |
+
+### 阅读与追踪
+
+- 点击左侧标题目录，跳转到对应段落。
+- 使用 **Aa** 调整单条回答字号；折叠后可以拖动卡片大小。
+- 展开「本次提交」查看历史轮次、消息数量与请求大小。
+
+### 下一步
+
+补充需要比较的资料，再让模型继续分析。这是一份演示回答，不代表真实模型生成效果。
+"""
+        return {'status': 'completed', 'output': [{'type': 'message', 'role': 'assistant',
+                'content': [{'type': 'output_text', 'text': text}]}],
+                'usage': {'input_tokens': 386, 'output_tokens': 524}}
     assert not {'tools', 'reasoning_effort', 'reasoning'} & data.keys()
     assert data['model'] == ('gpt-6-astra' if key == 'fixture-first' else 'fixture-chat')
     messages = data['input' if path == '/v1/responses' else 'messages']

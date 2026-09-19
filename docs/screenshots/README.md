@@ -1,6 +1,6 @@
 # README 截图来源
 
-采集日期：2026-09-15。界面代码版本：[685e857](https://github.com/hotpoor/hotpoor_director/commit/685e857)；截图脚本与 README 在本次提交中一起更新。
+画布截图采集日期：2026-09-15；新增对话截图：2026-09-19。界面代码版本：[685e857](https://github.com/hotpoor/hotpoor_director/commit/685e857)；截图脚本与 README 在本次提交中一起更新。
 
 7 张截图覆盖 README 的 8 个特色，并展示 service-inference 多 Key 管理。截图来自当前源码在 macOS Electron 中的实际渲染，由 `webContents.capturePage()` 直接保存为 PNG，保留原始分辨率，未做图像后期合成。脚本在测试项目中配置卡片、连线和视口，实际点击模式、固定结果、播放视频并绘制标注。
 
@@ -54,3 +54,16 @@ Windows 对应入口为 `node_modules/.bin/electron.cmd`。两个脚本各自创
 - `timeline.png`：2026-09-18，`scripts/smoke-timeline.cjs` 在独立测试数据库中的真实 Electron 截图。展示双视频重叠、金色开始线/红色播放线与绝对字幕；绿色画面为程序生成的 6 秒测试视频。覆盖实际拖动、磁吸、裁剪、缩放横滚与保存重开，无生产账号或生成费用。
 
 - `timeline-pin-quad.png`：2026-09-18，真实 Electron 独立测试项目，展示多轴重叠错层与 PIN 四宫格、声音选择。四路均使用 6 秒程序生成测试视频，非生产媒体；复现脚本 `scripts/smoke-timeline.cjs`。
+
+## 对话与代理截图（2026-09-19）
+
+基于 `a2f36f4` 界面源码，运行 `node_modules/.bin/electron scripts/capture-dialogue-readme.cjs` 生成：
+
+| 文件 | 内容 |
+| --- | --- |
+| `dialogue-overview.png` | 分类、自动保存标题、Markdown 目录和表格 |
+| `dialogue-settings.png` | 字号、历史轮次、记录包容量及卡片尺寸设置浮窗 |
+| `dialogue-agent-approval.png` | 执行前命令、目录、原因与确认按钮 |
+| `dialogue-agent-output.png` | 执行中输出、耗时与停止按钮 |
+
+独立测试数据库使用 `tests/dialogue_backend.py` 的 `DIRECTOR_README_SCENES=1` 演示响应；`scripts/readme-preload.cjs` 模拟命令输出和凭据名称。截图为真实 Electron 页面直接采集的 PNG，没有图像合成。演示脚本不执行所展示的命令，不调用付费模型，不访问实际凭据和私人对话。它不验证真实命令中断；真实 SIGINT 与流输出行为分别由 `test-command-stop.cjs` 和 `test-command-output.cjs` 验证。截图脚本退出时关闭自己的测试后端，不影响正在使用的客户端。

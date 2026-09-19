@@ -96,6 +96,55 @@
       "height": 1954,
       "bytes": 138909,
       "sha256": "62211de976935acbb566097f922ac78aefebeab78873d7c5f800fcd5ae5ff660"
+    },
+    {
+      "file": "dialogue-overview.png",
+      "source_script": "scripts/capture-dialogue-readme.cjs",
+      "source_output": "dialogue-overview.png",
+      "captured_on": "2026-09-19",
+      "ui_commit": "a2f36f4",
+      "environment": "macOS Electron; isolated PostgreSQL; simulated model and command output; no personal data",
+      "width": 3000,
+      "height": 1938,
+      "bytes": 330461,
+      "sha256": "ec6bdea1cd0385f4190c046d8ffda54b6938be6743b7bea35a7743d19f655a3d"
+    },
+    {
+      "file": "dialogue-settings.png",
+      "source_script": "scripts/capture-dialogue-readme.cjs",
+      "source_output": "dialogue-settings.png",
+      "captured_on": "2026-09-19",
+      "ui_commit": "a2f36f4",
+      "environment": "macOS Electron; isolated PostgreSQL; simulated model and command output; no personal data",
+      "width": 3000,
+      "height": 1938,
+      "bytes": 337283,
+      "sha256": "621114078c5269c9a1c346330be6e415185e383fdf9595da3fe39731ce81a589"
+    },
+    {
+      "file": "dialogue-agent-approval.png",
+      "source_script": "scripts/capture-dialogue-readme.cjs",
+      "source_output": "dialogue-agent-approval.png",
+      "captured_on": "2026-09-19",
+      "ui_commit": "a2f36f4",
+      "environment": "macOS Electron; isolated PostgreSQL; simulated model and command output; no personal data",
+      "width": 3000,
+      "height": 1938,
+      "bytes": 276485,
+      "sha256": "2592a1aa1923ad6719aa2229b20f108e4beba5b5e34d4921895f98e2c8238979"
+    },
+    {
+      "file": "dialogue-agent-output.png",
+      "source_script": "scripts/capture-dialogue-readme.cjs",
+      "source_output": "dialogue-agent-output.png",
+      "captured_on": "2026-09-19",
+      "ui_commit": "a2f36f4",
+      "environment": "macOS Electron; isolated PostgreSQL; simulated model and command output; no personal data",
+      "width": 3000,
+      "height": 1938,
+      "bytes": 278411,
+      "sha256": "be967a851b0f109c621cf21eeb70747dd316b0d5e5c3727f8c297c8d72fac1ef"
     }
-  ]
+  ],
+  "last_updated": "2026-09-19"
 }
