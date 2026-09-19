@@ -7,7 +7,7 @@ const scope={authorizationState:{active:false},autoCountdowns:new Map(),autoCanc
 vm.createContext(scope);vm.runInContext(source.slice(source.indexOf('  const toolExecutions='),source.indexOf('  function render(){'))+'\nthis.view=toolView;',scope);
 (async()=>{for(const [ms,expected] of [[0,'0 秒'],[37000,'37 秒'],[60000,'1 分 0 秒（60 秒）'],[3600000,'1 时 0 分 0 秒（3600 秒）']])assert.equal(vm.runInContext('commandDuration('+ms+')',scope),expected);assert.equal(vm.runInContext('commandDuration(90061000)',scope),'1 天 1 时 1 分 1 秒（90061 秒）');const call={id:'call',status:'approval_required',argv:['pwd'],cwd:'.',reason:'test'};
 const button=card=>card.children.at(-1).children.at(-1);
-scope.authorizationState={conversation:'conversation-a',active:true,expiresAt:999999};
+scope.authorizationState={conversation:'conversation-a',active:true,permanent:true};
 const automatic=scope.view({},call);assert.equal(button(automatic).textContent,'3 秒后自动执行');const deadline=scope.autoCountdowns.get('conversation-a:call').deadline;
 scope.view({},call);assert.equal(scope.autoCountdowns.get('conversation-a:call').deadline,deadline);
 automatic.children.at(-1).children[0].onclick();assert.equal(scope.autoCountdowns.size,0);assert.ok(scope.autoCancelled.has('conversation-a:call'));assert.equal(button(scope.view({},call)).textContent,'允许执行');

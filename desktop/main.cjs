@@ -71,7 +71,7 @@ else app.whenReady().then(async () => {
       if(event.sender!==window.webContents||event.senderFrame?.url!==origin+'/')throw Error('Invalid sender');
       authorization.status(value?.conversationId);
       if(value.enabled!==true)return authorization.revoke(value.conversationId);
-      const decision=await dialog.showMessageBox(window,{type:'warning',title:'完全访问 · 授权一个月',message:'允许此对话自动执行命令并使用现有凭据？',detail:'有效期30天。命令倒计时3秒后自动运行，可读写当前系统账号能访问的文件，并使用目前已保存的凭据。执行目录不是沙箱；系统权限仍由操作系统控制。可随时取消倒计时、停止命令或撤销授权。',buttons:['取消','授权30天'],defaultId:0,cancelId:0});
+      const decision=await dialog.showMessageBox(window,{type:'warning',title:'完全访问 · 永久授权',message:'允许此对话自动执行命令并使用现有凭据？',detail:'永久有效，直到手动撤销。命令倒计时3秒后自动运行，可读写当前系统账号能访问的文件，并使用目前已保存的凭据。执行目录不是沙箱；系统权限仍由操作系统控制。可随时取消倒计时、停止命令或撤销授权。',buttons:['取消','永久授权'],defaultId:0,cancelId:0});
       return decision.response===1?authorization.grant(value.conversationId,vault.list()):authorization.status(value.conversationId);
     });
     const activeCommands=new Map();
@@ -92,7 +92,7 @@ else app.whenReady().then(async () => {
       if(request.automatic&&!authorization.allows(request.conversationId))throw Error('自动执行授权已失效，请手动确认');
       const resolved=resolveCredentials(argv,vault);
       if(resolved.names.length&&!authorization.allows(request.conversationId,resolved.names)){const decision=await dialog.showMessageBox(window,{type:'question',title:'允许使用凭据',message:'此命令申请使用：'+resolved.names.join('、'),detail:'工作目录：'+cwd+'\n命令：'+JSON.stringify(argv)+'\n密码将注入命令环境变量，命令本身可以读取该密码。',buttons:['取消','允许本次使用'],defaultId:0,cancelId:0});if(decision.response!==1)throw Error('已取消凭据使用');}
-      if(request.automatic&&!authorization.allows(request.conversationId))throw Error('自动执行授权已撤销或到期');
+      if(request.automatic&&!authorization.allows(request.conversationId))throw Error('自动执行授权已撤销');
       const startedAt=Date.now();
       return await new Promise(resolve=>{
         let finished=false,timedOut=false,cancelled=false,publishTimer=null,killTimer=null;
