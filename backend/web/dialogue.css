@@ -128,3 +128,8 @@
 .dialogue-context:not([open]){width:fit-content;min-width:280px;max-width:100%;box-sizing:border-box}
 .dialogue-context[open]{width:100%;max-width:100%;box-sizing:border-box}
 #dialogue-mode .dialogue-answer-font-button{font-size:11px;font-weight:700;letter-spacing:-1px;line-height:1}
+.dialogue-turn-actions{position:relative}
+.dialogue-answer-font-popover{position:absolute;left:38px;bottom:34px;z-index:4;display:flex;align-items:center;gap:9px;width:230px;padding:9px 11px;border:1px solid #555;border-radius:8px;background:#1a1a1a;box-shadow:0 8px 24px #0008}
+.dialogue-answer-font-popover[hidden]{display:none}
+#dialogue-mode .dialogue-answer-font-popover input[type=range]{width:175px;padding:0;accent-color:#ddd}
+.dialogue-answer-font-popover output{min-width:28px;color:#ddd;font-size:11px;text-align:center}
