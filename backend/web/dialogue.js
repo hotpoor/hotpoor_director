@@ -174,7 +174,14 @@
     details.ontoggle=()=>{if(details.open)openDirectories.add(key);else openDirectories.delete(key);localStorage.setItem('dialogue-open-directories',JSON.stringify([...openDirectories]));};details.append(summary,list);return details;
   }
   const toolExecutions=new Map();
-  function commandDuration(ms){const seconds=Math.max(0,Math.floor(ms/1000));return Math.floor(seconds/86400)+' 天 '+Math.floor(seconds/3600)%24+' 时 '+Math.floor(seconds/60)%60+' 分 '+seconds%60+' 秒（'+seconds+' 秒）';}
+  function commandDuration(ms){
+    const seconds=Math.max(0,Math.floor(ms/1000)),parts=[];
+    if(seconds>=86400)parts.push(Math.floor(seconds/86400)+' 天');
+    if(seconds>=3600)parts.push(Math.floor(seconds/3600)%24+' 时');
+    if(seconds>=60)parts.push(Math.floor(seconds/60)%60+' 分');
+    parts.push(seconds%60+' 秒');
+    return parts.join(' ')+(seconds>=60?'（'+seconds+' 秒）':'');
+  }
   function updateCommandTimers(){for(const node of dialog.querySelectorAll('[data-command-started]'))node.textContent='已执行 '+commandDuration(Date.now()-Number(node.dataset.commandStarted));}
   setInterval(updateCommandTimers,1000);
   function toolView(turn,call){
