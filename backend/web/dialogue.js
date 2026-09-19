@@ -179,7 +179,7 @@
       if(turn.attachments?.length){const files=document.createElement('div');files.className='dialogue-turn-files';for(const file of turn.attachments)files.append(fileView(file));article.append(files);}
       response.id='dialogue-answer-'+turn.id;
       const collapseKey=turnKey(turn.id);response.classList.toggle('dialogue-answer-collapsed',collapsed.has(collapseKey));if(collapsed.has(collapseKey))applyCardSize(response,turn.id);else clearCardSize(response);applyAnswerFont(response,turn.id);let resizeSaveTimer=null;response.addEventListener('pointerup',()=>saveCardSize(response,turn.id,true));new ResizeObserver(()=>{if(!response.classList.contains('dialogue-answer-collapsed'))return;clearTimeout(resizeSaveTimer);resizeSaveTimer=setTimeout(()=>saveCardSize(response,turn.id,true),250);}).observe(response);
-      const directory=turn.status==='completed'?directoryView(response,turn.id):null;if(directory)response.prepend(directory);article.append(meta,response);
+      const directory=turn.status==='completed'?directoryView(response,turn.id):null;if(directory){const content=document.createElement('div');content.className='dialogue-answer-content';content.append(...response.childNodes);response.classList.add('dialogue-answer-with-directory');response.append(directory,content);}article.append(meta,response);
       if(turn.submission)article.append(contextView(turn));
       if(turn.status==='completed'){
         const actions=document.createElement('div');actions.className='dialogue-turn-actions';

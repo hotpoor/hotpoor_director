@@ -64,6 +64,31 @@ ComfyUI 是独立运行的推理服务。先在目标机器安装并启动兼容
 - 图片请求在后台同步执行；视频保存 `remote_task_id` 后轮询，重启继续查询已有 ID。提交超时或提交期间退出时先到服务控制台核对，不自动重发生成请求。当前工作台没有云任务取消或排序接口，不套用 ComfyUI 的取消操作。
 - 结果下载到有效数据目录 `generated/`，通过工作台鉴权接口提供预览和视频 Range 播放。`kind=generation` 记录按自身 `block_id` 求余存入实体分片；密钥保存在隐藏配置文件，不写入实体正文、画布或日志。用量字段保留服务端原值。
 
+### Antigravity 调用文本模型与查询费用
+
+当用户要求 Antigravity 使用 Hotpoor Director 已配置的 service-inference AK 调用不同大模型、列出可用模型或查询消耗时，使用 [service-inference-cli.py](scripts/service-inference-cli.py)。该工具从 Director 的有效数据目录读取已启用配置，只向子进程内存加载密钥，输出中不包含 AK。不要用 `cat`、日志或命令行参数暴露 `.service-inference.json` 和 `.service-inference-management.json` 的内容。
+
+先查看已启用的 Director AK，再列出所选 AK 当前实际可见的模型，最后使用返回的精确模型 ID。`--key` 可传 AK 名称或配置 ID；省略时使用当前选中的 AK。若服务返回 401/403，改选用户已配置的其他 AK或请用户在 Director 中修复配置，不尝试绕过权限：
+
+```bash
+python3 scripts/service-inference-cli.py profiles
+python3 scripts/service-inference-cli.py models
+python3 scripts/service-inference-cli.py --key "配置名称" models
+printf '%s' '用户问题' | python3 scripts/service-inference-cli.py chat --model gpt-6-astra
+python3 scripts/service-inference-cli.py chat --model claude-fable-5 --prompt '用户问题'
+```
+
+`gpt-6*` 默认使用 `/v1/responses`，其他模型默认使用 `/v1/chat/completions`；仅在模型兼容性明确时用 `--endpoint` 覆盖。每次调用只提交一次；超时或返回状态不确定时报告 request ID 并让用户到 service-inference 控制台核对，不自动重试可能产生费用的请求。
+
+文本调用结果包含回答、服务返回的 `usage` 和 request ID。查询服务商账单需要该生成 AK 已在 Director 中绑定并启用独立的管理 AK：
+
+```bash
+python3 scripts/service-inference-cli.py cost --period 24h
+python3 scripts/service-inference-cli.py balance
+```
+
+费用接口返回服务商记录的美元支出：`summary.totalCostUsd` 为周期总费用，`by_model` 为模型费用，`by_key` 为按生成 AK 估算的费用。`unpricedCount > 0` 表示费用不完整；`by_key` 是按模型与日期内 token 占比分摊的近似值。管理 API 不返回内部费率表，日报快照也可能延迟，因此不能用一次调用前后的差额冒充精确单次价格。只有推理响应本身明确返回单次 cost 时才称为该请求的精确费用；否则同时报告本次 `usage` 与管理 API 的周期费用，并说明归因范围。
+
 ## 云存储直传
 
 配置和排查时，先读 [README 的直传说明](README.md#云存储直传) 与 [同厂商多配置](README.md#云存储多配置列表)，实现入口为 [cloud_storage.py](backend/cloud_storage.py)。
