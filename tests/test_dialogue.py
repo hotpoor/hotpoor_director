@@ -79,6 +79,10 @@ def test_submission_stats_reports_exact_request_size_and_content_totals():
                       'attachment_bytes': 579,
                       'request_bytes': len(json.dumps(request_body('fixture-chat', prepared, '/v1/chat/completions'),
                                                       ensure_ascii=False, separators=(',', ':')).encode())}
+    agent = submission_stats(raw, prepared, 'gpt-6-astra', '/v1/responses', True)
+    assert agent['request_bytes'] == len(json.dumps(request_body('gpt-6-astra', prepared, '/v1/responses', True),
+                                                  ensure_ascii=False, separators=(',', ':')).encode())
+    assert agent['request_bytes'] > result['request_bytes']
 
 
 def test_dialogue_names_and_metadata_validation():

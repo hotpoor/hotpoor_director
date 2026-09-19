@@ -661,3 +661,4 @@ AK 与模型改为可搜索 datalist。每次成功持久化请求同时保存 `
 验证：279 项 Python 全量测试通过，新增 Responses 工具定义、函数参数校验与续接载荷单测；真实 Electron 对话回归通过，覆盖模型切换、上下文、附件、历史重开、Markdown、折叠目录和窄屏。测试模型为本地模拟，没有发起计费问答。
 
 已上线 `xialiwei-api:0.17.0-director-agent` / 8659；候选和正式 HTTPS 各 107 项检查通过，保留旧 8658 worker。回滚配置：`/home/ubuntu/director-agent-20260919/nginx-before-agent.conf`。
+代理模式的“本次提交”请求字节数包含 Responses 工具定义，保持与实际 JSON 载荷一致。修订发布 `xialiwei-api:0.17.1-director-agent-stats` / 8660；候选与正式 HTTPS 各 107 项检查通过，回滚 `/home/ubuntu/director-agent-stats-20260919/nginx-before-agent-stats.conf`。

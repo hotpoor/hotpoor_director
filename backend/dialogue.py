@@ -178,7 +178,7 @@ async def recent_history(conn, body, owner, conversation_id):
     return history(await recent_turns(conn, body, owner, conversation_id))
 
 
-def submission_stats(raw_messages, prepared_messages, model, path):
+def submission_stats(raw_messages, prepared_messages, model, path, agent=False):
     attachments = [file for message in raw_messages for file in message.get('attachments', [])]
     text_chars = 0
     for message in prepared_messages:
@@ -188,7 +188,7 @@ def submission_stats(raw_messages, prepared_messages, model, path):
         elif isinstance(content, list):
             text_chars += sum(len(part.get('text', '')) for part in content
                               if part.get('type') in ('text', 'input_text'))
-    payload = request_body(model, prepared_messages, path)
+    payload = request_body(model, prepared_messages, path, agent)
     return {'history_turns': max(0, (len(raw_messages) - 1) // 2), 'messages': len(prepared_messages),
             'text_chars': text_chars, 'attachments': len(attachments),
             'attachment_bytes': sum(file.get('size', 0) for file in attachments),
@@ -472,7 +472,7 @@ class DialogueHandler(PrivateHandler):
             messages.append({'role': 'user', 'content': question, 'attachments': attachments})
             raw_messages = messages
             messages = await prepare_messages(conn, messages, self.settings['config'], self.owner, conversation_id, path)
-            submission = submission_stats(raw_messages, messages, model, path)
+            submission = submission_stats(raw_messages, messages, model, path, agent)
             if sum(len(m['content']) for m in messages if isinstance(m['content'], str)) > MAX_CONTEXT:
                 raise HTTPError(400, reason='上下文超过 120000 字符，请减少历史轮次或新建对话')
             pack = await pack_for(conn, body['last_id'], self.owner, conversation_id) if body.get('last_id') else None
