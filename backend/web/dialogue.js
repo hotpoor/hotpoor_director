@@ -5,7 +5,7 @@
   document.querySelector('#studio').append(dialog);
   const $=selector=>dialog.querySelector(selector),key=$('#dialogue-key'),model=$('#dialogue-model'),status=$('#dialogue-status'),question=$('#dialogue-question');
   let inventory={keys:[]},categories=[],showArchived=false,currentBody=null,metadataTimer=null,current='',turns=[],older=null,timer=null,generation=0,busy=false,pending=false,requestId='',requestQuestion='',draftFiles=[];
-  const storedSet=name=>{try{return new Set(JSON.parse(localStorage.getItem(name)||'[]'));}catch{return new Set();}},collapsed=storedSet('dialogue-collapsed-answers'),contextExpanded=new Set(),contextCache=new Map();
+  const storedSet=name=>{try{return new Set(JSON.parse(localStorage.getItem(name)||'[]'));}catch{return new Set();}},collapsed=storedSet('dialogue-collapsed-answers'),openDirectories=storedSet('dialogue-open-directories'),contextExpanded=new Set(),contextCache=new Map();
   const makeId=()=>crypto.randomUUID().replaceAll('-','');
   async function api(path,body){
     const response=await fetch('/api/dialogue/'+path,{method:body===undefined?'GET':'POST',headers:{...(body instanceof FormData?{}:{'Content-Type':'application/json'}),'X-XSRFToken':decodeURIComponent(document.cookie.split('; ').find(x=>x.startsWith('_xsrf='))?.slice(6)||'')},body:body===undefined?undefined:body instanceof FormData?body:JSON.stringify(body)});
@@ -155,6 +155,12 @@
     };
     details.append(summary,panel);return details;
   }
+  function directoryView(response,turnId){
+    const headings=[...response.querySelectorAll('h1,h2,h3,h4,h5,h6')];if(!headings.length)return null;
+    const details=document.createElement('details'),summary=document.createElement('summary'),list=document.createElement('ol'),key=turnKey(turnId);details.className='dialogue-directory';details.open=openDirectories.has(key);summary.textContent='标题目录 · '+headings.length;
+    headings.forEach((heading,index)=>{heading.id='dialogue-heading-'+turnId+'-'+index;const item=document.createElement('li'),link=document.createElement('a');item.style.setProperty('--directory-depth',String(Number(heading.tagName.slice(1))-1));link.href='#'+heading.id;link.textContent=heading.textContent;link.onclick=event=>{event.preventDefault();heading.scrollIntoView({behavior:'smooth',block:'nearest'});};item.append(link);list.append(item);});
+    details.ontoggle=()=>{if(details.open)openDirectories.add(key);else openDirectories.delete(key);localStorage.setItem('dialogue-open-directories',JSON.stringify([...openDirectories]));};details.append(summary,list);return details;
+  }
   function render(){
     const transcript=$('#dialogue-transcript'),nearBottom=transcript.scrollHeight-transcript.scrollTop-transcript.clientHeight<100;
     transcript.replaceChildren();
@@ -173,7 +179,7 @@
       if(turn.attachments?.length){const files=document.createElement('div');files.className='dialogue-turn-files';for(const file of turn.attachments)files.append(fileView(file));article.append(files);}
       response.id='dialogue-answer-'+turn.id;
       const collapseKey=turnKey(turn.id);response.classList.toggle('dialogue-answer-collapsed',collapsed.has(collapseKey));if(collapsed.has(collapseKey))applyCardSize(response,turn.id);else clearCardSize(response);applyAnswerFont(response,turn.id);let resizeSaveTimer=null;response.addEventListener('pointerup',()=>saveCardSize(response,turn.id,true));new ResizeObserver(()=>{if(!response.classList.contains('dialogue-answer-collapsed'))return;clearTimeout(resizeSaveTimer);resizeSaveTimer=setTimeout(()=>saveCardSize(response,turn.id,true),250);}).observe(response);
-      article.append(meta,response);
+      const directory=turn.status==='completed'?directoryView(response,turn.id):null;article.append(meta);if(directory)article.append(directory);article.append(response);
       if(turn.submission)article.append(contextView(turn));
       if(turn.status==='completed'){
         const actions=document.createElement('div');actions.className='dialogue-turn-actions';

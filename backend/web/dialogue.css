@@ -133,3 +133,8 @@
 .dialogue-answer-font-popover[hidden]{display:none}
 #dialogue-mode .dialogue-answer-font-popover input[type=range]{width:175px;padding:0;accent-color:#ddd}
 .dialogue-answer-font-popover output{min-width:28px;color:#ddd;font-size:11px;text-align:center}
+.dialogue-directory{width:fit-content;min-width:180px;max-width:100%;margin:8px 0;border:1px solid #3f3f3f;border-radius:7px;background:#121212;color:#bbb;font-size:12px}
+.dialogue-directory>summary{cursor:pointer;padding:7px 10px;color:#b9cce0;white-space:nowrap}
+.dialogue-directory>ol{display:grid;gap:5px;max-width:min(720px,80vw);max-height:280px;margin:0;padding:2px 12px 10px;overflow:auto;list-style-position:inside}
+.dialogue-directory li{padding-left:calc(var(--directory-depth,0)*14px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dialogue-directory a{color:#ccc;text-decoration:none}.dialogue-directory a:hover{text-decoration:underline;color:#fff}
