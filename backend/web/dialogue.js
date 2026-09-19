@@ -5,7 +5,7 @@
   document.querySelector('#studio').append(dialog);
   const $=selector=>dialog.querySelector(selector),key=$('#dialogue-key'),model=$('#dialogue-model'),status=$('#dialogue-status'),question=$('#dialogue-question');
   let inventory={keys:[]},current='',turns=[],older=null,timer=null,generation=0,busy=false,pending=false,requestId='',requestQuestion='',draftFiles=[];
-  const collapsed=new Set();
+  const collapsed=new Set(),contextExpanded=new Set(),contextCache=new Map();
   const makeId=()=>crypto.randomUUID().replaceAll('-','');
   async function api(path,body){
     const response=await fetch('/api/dialogue/'+path,{method:body===undefined?'GET':'POST',headers:{...(body instanceof FormData?{}:{'Content-Type':'application/json'}),'X-XSRFToken':decodeURIComponent(document.cookie.split('; ').find(x=>x.startsWith('_xsrf='))?.slice(6)||'')},body:body===undefined?undefined:body instanceof FormData?body:JSON.stringify(body)});
@@ -78,6 +78,38 @@
     for(const item of result.conversations){const button=document.createElement('button');button.type='button';button.className='quiet';button.textContent=item.body.title;button.dataset.id=item.block_id;button.setAttribute('aria-current',String(item.block_id===current));button.onclick=()=>openConversation(item.block_id);button.disabled=busy;list.append(button);}
     if(!result.conversations.length){const p=document.createElement('p');p.textContent='从一个问题开始。';list.append(p);}
   }
+  function readableBytes(value){
+    if(value<1024)return value+' B';if(value<1024*1024)return (value/1024).toFixed(1)+' KB';return (value/1024/1024).toFixed(1)+' MB';
+  }
+  function fillContext(panel,result){
+    panel.replaceChildren();
+    if(!result.turns.length){const empty=document.createElement('p');empty.textContent='本次没有携带历史问答，只提交了当前问题。';panel.append(empty);return;}
+    for(const item of result.turns){
+      const section=document.createElement('section');section.className='dialogue-context-turn';
+      const heading=document.createElement('strong');heading.textContent=(item.model||'历史模型')+' · '+new Date(item.created_at).toLocaleString();
+      const q=document.createElement('div');q.className='dialogue-context-question';q.textContent='问题\n'+item.question;
+      const a=document.createElement('div');a.className='dialogue-context-answer';a.textContent='回答\n'+(item.answer||'');
+      section.append(heading,q,a);
+      if(item.attachments?.length){const files=document.createElement('small');files.textContent='附件：'+item.attachments.map(file=>file.name+'（'+readableBytes(file.size)+'）').join('、');section.append(files);}
+      panel.append(section);
+    }
+  }
+  function contextView(turn){
+    const details=document.createElement('details');details.className='dialogue-context';
+    const summary=document.createElement('summary'),info=turn.submission;
+    summary.textContent='本次提交：历史 '+info.history_turns+' 轮 · '+info.messages+' 条消息 · 文本 '+info.text_chars.toLocaleString()+' 字 · 请求 '+readableBytes(info.request_bytes)+(info.attachments?' · 附件 '+info.attachments+' 个 / '+readableBytes(info.attachment_bytes):'');
+    const panel=document.createElement('div');panel.className='dialogue-context-content';
+    const cacheKey=current+':'+turn.id;details.open=contextExpanded.has(cacheKey);
+    if(contextCache.has(cacheKey))fillContext(panel,contextCache.get(cacheKey));else panel.textContent='展开后加载本次实际使用的历史问答。';
+    details.ontoggle=async()=>{
+      if(details.open)contextExpanded.add(cacheKey);else contextExpanded.delete(cacheKey);
+      if(!details.open||contextCache.has(cacheKey))return;
+      panel.textContent='正在读取本次上下文…';const conversation=current,token=generation;
+      try{const result=await api('conversations/'+conversation+'?context='+turn.id);if(token!==generation||conversation!==current)return;contextCache.set(cacheKey,result);fillContext(panel,result);}
+      catch(e){panel.textContent=e.message;}
+    };
+    details.append(summary,panel);return details;
+  }
   function render(){
     const transcript=$('#dialogue-transcript'),nearBottom=transcript.scrollHeight-transcript.scrollTop-transcript.clientHeight<100;
     transcript.replaceChildren();
@@ -96,6 +128,7 @@
       response.id='dialogue-answer-'+turn.id;
       response.hidden=collapsed.has(turn.id);
       article.append(meta,response);
+      if(turn.submission)article.append(contextView(turn));
       if(turn.status==='completed'){
         const toggle=document.createElement('button');toggle.type='button';toggle.className='quiet dialogue-toggle-answer';toggle.setAttribute('aria-controls',response.id);
         const update=()=>{toggle.textContent=response.hidden?'展开回答':'收起回答';toggle.setAttribute('aria-expanded',String(!response.hidden));};update();toggle.onclick=()=>{response.hidden=!response.hidden;if(response.hidden)collapsed.add(turn.id);else collapsed.delete(turn.id);update();};article.append(toggle);

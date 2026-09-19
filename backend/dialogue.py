@@ -1,5 +1,6 @@
 """Private durable text conversations using each account's inference credentials."""
 import asyncio
+import json
 import time
 import uuid
 
@@ -88,7 +89,7 @@ async def pack_for(conn, pack_id, owner, conversation_id):
     return row
 
 
-async def recent_history(conn, body, owner, conversation_id):
+async def recent_turns(conn, body, owner, conversation_id):
     turns = []
     limit = body.get('context_turns', 20)
     if not limit:
@@ -98,7 +99,47 @@ async def recent_history(conn, body, owner, conversation_id):
         pack = await pack_for(conn, pack_id, owner, conversation_id)
         turns = [t for t in pack['body']['turns'] if t['status'] == 'completed'] + turns
         pack_id = pack['body'].get('prev_id')
-    return history(turns[-limit:])
+    return turns[-limit:]
+
+
+async def recent_history(conn, body, owner, conversation_id):
+    return history(await recent_turns(conn, body, owner, conversation_id))
+
+
+def submission_stats(raw_messages, prepared_messages, model, path):
+    attachments = [file for message in raw_messages for file in message.get('attachments', [])]
+    text_chars = 0
+    for message in prepared_messages:
+        content = message.get('content')
+        if isinstance(content, str):
+            text_chars += len(content)
+        elif isinstance(content, list):
+            text_chars += sum(len(part.get('text', '')) for part in content
+                              if part.get('type') in ('text', 'input_text'))
+    payload = request_body(model, prepared_messages, path)
+    return {'history_turns': max(0, (len(raw_messages) - 1) // 2), 'messages': len(prepared_messages),
+            'text_chars': text_chars, 'attachments': len(attachments),
+            'attachment_bytes': sum(file.get('size', 0) for file in attachments),
+            'request_bytes': len(json.dumps(payload, ensure_ascii=False, separators=(',', ':')).encode())}
+
+
+async def context_for(conn, row, owner, turn_id):
+    by_id = {}
+    target = None
+    pack_id = row['body'].get('last_id')
+    while pack_id:
+        pack = await pack_for(conn, pack_id, owner, row['block_id'])
+        for turn in pack['body']['turns']:
+            by_id[turn['id']] = turn
+            if turn['id'] == turn_id:
+                target = turn
+        pack_id = pack['body'].get('prev_id')
+    if not target:
+        raise HTTPError(404, reason='本次上下文不存在或无权访问')
+    return {'turn_id': turn_id, 'submission': target.get('submission'),
+            'turns': [{key: turn.get(key) for key in
+                       ('id', 'question', 'answer', 'model', 'key_name', 'created_at', 'attachments')}
+                      for item in target.get('context_ids', []) if (turn := by_id.get(item))]}
 
 
 async def view_row(conn, row, owner, cursor=None):
@@ -172,10 +213,16 @@ class DialogueHandler(PrivateHandler):
     async def get(self, conversation_id):
         tasks = self.application.settings.setdefault('dialogue_tasks', {})
         cursor = self.get_query_argument('cursor', None)
+        context_id = self.get_query_argument('context', None)
         if cursor is not None and not ID.fullmatch(cursor):
             raise HTTPError(400, reason='聊天记录包 ID 不正确')
+        if context_id is not None and not ID.fullmatch(context_id):
+            raise HTTPError(400, reason='上下文记录 ID 不正确')
         async with self.projects.connection() as conn:
             row = await row_for(conn, conversation_id, self.owner)
+            if context_id is not None:
+                self.finish(await context_for(conn, row, self.owner, context_id))
+                return
             result = await view_row(conn, row, self.owner, cursor)
         result['body']['interrupted'] = bool(row['body'].get('pending_id') and conversation_id not in tasks
                                           and int(time.time() * 1000) - row['body'].get('pending_started_at', 0) > PENDING_TIMEOUT_MS)
@@ -247,10 +294,13 @@ class DialogueHandler(PrivateHandler):
             if duplicates:
                 self.finish(await view_row(conn, row, self.owner))
                 return
-            messages = await recent_history(conn, body, self.owner, conversation_id)
+            context_turns = await recent_turns(conn, body, self.owner, conversation_id)
+            messages = history(context_turns)
             attachments = [public_file(await file_for(conn, file_id, self.owner, conversation_id)) for file_id in file_ids]
             messages.append({'role': 'user', 'content': question, 'attachments': attachments})
+            raw_messages = messages
             messages = await prepare_messages(conn, messages, self.settings['config'], self.owner, conversation_id, path)
+            submission = submission_stats(raw_messages, messages, model, path)
             if sum(len(m['content']) for m in messages if isinstance(m['content'], str)) > MAX_CONTEXT:
                 raise HTTPError(400, reason='上下文超过 120000 字符，请减少历史轮次或新建对话')
             pack = await pack_for(conn, body['last_id'], self.owner, conversation_id) if body.get('last_id') else None
@@ -265,7 +315,9 @@ class DialogueHandler(PrivateHandler):
                 body['last_id'] = pack_id
                 body['first_id'] = body.get('first_id') or pack_id
             turn = {'id': data['request_id'], 'question': question, 'model': model, 'credential_id': profile['id'],
-                    'key_name': profile['name'], 'attachments': attachments, 'protocol': path, 'status': 'running', 'created_at': int(time.time() * 1000)}
+                    'key_name': profile['name'], 'attachments': attachments,
+                    'context_ids': [item['id'] for item in context_turns], 'submission': submission,
+                    'protocol': path, 'status': 'running', 'created_at': int(time.time() * 1000)}
             pack['body']['turns'].append(turn)
             await store(conn, pack['block_id'], pack['body'])
             body['turn_count'] += 1

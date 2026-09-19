@@ -25,6 +25,10 @@ app.whenReady().then(async()=>{
   if(await js("Boolean(document.querySelector('#dialogue-transcript script'))"))throw Error('Unsafe HTML');
   await js("document.querySelector('#dialogue-key').value='second';document.querySelector('#dialogue-key').dispatchEvent(new Event('change'));document.querySelector('#dialogue-question').value='继续，换一个模型';document.querySelector('#dialogue-compose').requestSubmit();");
   await wait("[...document.querySelectorAll('.dialogue-answer')].some(n=>n.textContent.includes('模型 fixture-chat · 上下文 3'))");
+  if(!await js("[...document.querySelectorAll('.dialogue-context summary')].some(n=>n.textContent.includes('历史 1 轮')&&n.textContent.includes('3 条消息')&&n.textContent.includes('请求'))"))throw Error('Submission summary missing');
+  await js("[...document.querySelectorAll('.dialogue-context')].at(-1).open=true");
+  await wait("[...document.querySelectorAll('.dialogue-context-content')].at(-1).textContent.includes('帮我构思一段开场') && [...document.querySelectorAll('.dialogue-context-content')].at(-1).textContent.includes('回答：帮我构思一段开场')");
+  if(await js("[...document.querySelectorAll('.dialogue-context-content')].at(-1).textContent.includes('继续，换一个模型')"))throw Error('Current question leaked into history context');
   await js("window.conversationId=document.querySelector('#dialogue-list button').dataset.id;void 0;");
   await js(`(async()=>{window.first=(await testApi('/api/dialogue/conversations/'+conversationId)).body;await testApi('/api/dialogue/conversations/'+conversationId,{request_id:first.turns[0].id,question:first.turns[0].question,credential_id:'first',model:'gpt-6-astra'});if((await testApi('/api/dialogue/conversations/'+conversationId)).body.turn_count!==2)throw Error('Duplicate charged');await testApi('/api/dialogue/conversations/'+conversationId,{request_id:crypto.randomUUID().replaceAll('-',''),question:'wrong model',credential_id:'second',model:'gpt-6-astra'},400);})();`);
   // Fill and cross a record-pack boundary through real HTTP and the real UUID-routed DB.

@@ -47,3 +47,16 @@ def test_dialogue_options_boundaries_and_types():
     assert dialogue_options({'context_turns': 100, 'pack_size': 100}) == {'context_turns': 100, 'pack_size': 100}
     for values in [{'context_turns': -1}, {'context_turns': 101}, {'pack_size': 0}, {'pack_size': 101}, {'pack_size': True}, {'context_turns': '2'}, {'pack_size': 1.5}]:
         with pytest.raises(HTTPError): dialogue_options(values)
+
+
+def test_submission_stats_reports_exact_request_size_and_content_totals():
+    import json
+    from backend.dialogue import submission_stats, request_body
+    raw = [{'role': 'user', 'content': '旧问题'}, {'role': 'assistant', 'content': '旧回答'},
+           {'role': 'user', 'content': '新问题', 'attachments': [{'size': 123}, {'size': 456}]}]
+    prepared = [{'role': item['role'], 'content': item['content']} for item in raw]
+    result = submission_stats(raw, prepared, 'fixture-chat', '/v1/chat/completions')
+    assert result == {'history_turns': 1, 'messages': 3, 'text_chars': 9, 'attachments': 2,
+                      'attachment_bytes': 579,
+                      'request_bytes': len(json.dumps(request_body('fixture-chat', prepared, '/v1/chat/completions'),
+                                                      ensure_ascii=False, separators=(',', ':')).encode())}
