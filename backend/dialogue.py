@@ -25,23 +25,25 @@ def endpoint(model, protocol='auto'):
     return '/v1/responses' if protocol == 'responses' or protocol == 'auto' and model.startswith('gpt-6') else '/v1/chat/completions'
 
 
-COMMAND_TOOL = {'type': 'function', 'name': 'run_command',
-                'description': 'Run one executable in the current Hotpoor Director workspace after the user explicitly approves it.',
+def command_tool(allowed_paths=None):
+    folders = ', '.join(allowed_paths or []) or 'the folders approved in the Electron client'
+    return {'type': 'function', 'name': 'run_command',
+                'description': f'Run one executable after user approval. Allowed working folders: {folders}.',
                 'parameters': {'type': 'object', 'additionalProperties': False,
                                'properties': {'argv': {'type': 'array', 'minItems': 1, 'maxItems': 128,
                                                        'items': {'type': 'string'},
                                                        'description': 'Executable followed by arguments. Do not use a shell string.'},
-                                              'cwd': {'type': 'string', 'description': 'Relative directory inside the workspace, normally .'},
+                                              'cwd': {'type': 'string', 'description': 'Absolute working directory inside an allowed folder.'},
                                               'reason': {'type': 'string', 'description': 'Short user-facing reason for running this command.'}},
-                               'required': ['argv', 'reason']}, 'strict': True}
+                               'required': ['argv', 'cwd', 'reason']}, 'strict': True}
 
 
-def request_body(model, messages, path, agent=False, previous_response_id=None):
+def request_body(model, messages, path, agent=False, previous_response_id=None, allowed_paths=None):
     body = {'model': model, 'input' if path == '/v1/responses' else 'messages': messages, 'stream': False}
     if agent:
         if path != '/v1/responses':
             raise HTTPError(400, reason='代理模式需要使用 Responses 接口')
-        body.update(tools=[COMMAND_TOOL], tool_choice='auto')
+        body.update(tools=[command_tool(allowed_paths)], tool_choice='auto')
         if previous_response_id:
             body['previous_response_id'] = previous_response_id
     return body
@@ -105,6 +107,14 @@ def dialogue_options(data):
             raise HTTPError(400, reason=f'{label}需为 {low}–{high} 的整数')
         result[name] = value
     return result
+
+
+def allowed_paths(value):
+    if value is None:
+        return []
+    if not isinstance(value, list) or len(value) > 32 or any(not isinstance(item, str) or not item.startswith('/') or len(item) > 2048 for item in value):
+        raise HTTPError(400, reason='允许执行的目录列表不正确')
+    return list(dict.fromkeys(value))
 
 
 def category_name(value):
@@ -178,7 +188,7 @@ async def recent_history(conn, body, owner, conversation_id):
     return history(await recent_turns(conn, body, owner, conversation_id))
 
 
-def submission_stats(raw_messages, prepared_messages, model, path, agent=False):
+def submission_stats(raw_messages, prepared_messages, model, path, agent=False, folders=None):
     attachments = [file for message in raw_messages for file in message.get('attachments', [])]
     text_chars = 0
     for message in prepared_messages:
@@ -188,7 +198,7 @@ def submission_stats(raw_messages, prepared_messages, model, path, agent=False):
         elif isinstance(content, list):
             text_chars += sum(len(part.get('text', '')) for part in content
                               if part.get('type') in ('text', 'input_text'))
-    payload = request_body(model, prepared_messages, path, agent)
+    payload = request_body(model, prepared_messages, path, agent, allowed_paths=folders)
     return {'history_turns': max(0, (len(raw_messages) - 1) // 2), 'messages': len(prepared_messages),
             'text_chars': text_chars, 'attachments': len(attachments),
             'attachment_bytes': sum(file.get('size', 0) for file in attachments),
@@ -225,10 +235,10 @@ async def view_row(conn, row, owner, cursor=None):
 
 
 async def complete(pool, owner, conversation_id, pack_id, turn_id, key, model, messages, path, agent=False,
-                   previous_response_id=None):
+                   previous_response_id=None, folders=None):
     patch = {'status': 'completed'}
     try:
-        result = await inference.api(key, path, request_body(model, messages, path, agent, previous_response_id))
+        result = await inference.api(key, path, request_body(model, messages, path, agent, previous_response_id, folders))
         call = function_call(result) if agent else None
         if call:
             patch.update(status='awaiting_tool', tool_calls=[call], usage=result.get('usage'),
@@ -363,6 +373,7 @@ class DialogueHandler(PrivateHandler):
                 turn['status'] = 'running'
                 await store(conn, pack['block_id'], pack['body'])
                 key_id, model, path = turn['credential_id'], turn['model'], turn['protocol']
+                folders = turn.get('allowed_paths', [])
             async with self.settings['inference_manager'].lock:
                 key_config = inference.load_keys(self.settings['config'])
                 profile = inference.key_profile(key_config, key_id)
@@ -373,7 +384,7 @@ class DialogueHandler(PrivateHandler):
             messages = [{'type': 'function_call_output', 'call_id': call['call_id'], 'output': tool_output}]
             task = asyncio.create_task(complete(self.projects, self.owner, conversation_id, pack['block_id'],
                                                 turn['id'], key_value, model, messages, path, True,
-                                                previous_response_id))
+                                                previous_response_id, folders))
             tasks[conversation_id] = task
             def tool_done(finished):
                 if tasks.get(conversation_id) is finished:
@@ -449,6 +460,7 @@ class DialogueHandler(PrivateHandler):
             key = profile['api_key']
         path = endpoint(model, data.get('protocol', 'auto'))
         agent = data.get('mode', 'chat') == 'agent'
+        folders = allowed_paths(data.get('allowed_paths')) if agent else []
         if data.get('mode', 'chat') not in ('chat', 'agent'):
             raise HTTPError(400, reason='对话模式不正确')
         if agent and path != '/v1/responses':
@@ -472,7 +484,7 @@ class DialogueHandler(PrivateHandler):
             messages.append({'role': 'user', 'content': question, 'attachments': attachments})
             raw_messages = messages
             messages = await prepare_messages(conn, messages, self.settings['config'], self.owner, conversation_id, path)
-            submission = submission_stats(raw_messages, messages, model, path, agent)
+            submission = submission_stats(raw_messages, messages, model, path, agent, folders)
             if sum(len(m['content']) for m in messages if isinstance(m['content'], str)) > MAX_CONTEXT:
                 raise HTTPError(400, reason='上下文超过 120000 字符，请减少历史轮次或新建对话')
             pack = await pack_for(conn, body['last_id'], self.owner, conversation_id) if body.get('last_id') else None
@@ -489,7 +501,8 @@ class DialogueHandler(PrivateHandler):
             turn = {'id': data['request_id'], 'question': question, 'model': model, 'credential_id': profile['id'],
                     'key_name': profile['name'], 'attachments': attachments,
                     'context_ids': [item['id'] for item in context_turns], 'submission': submission,
-                    'protocol': path, 'mode': 'agent' if agent else 'chat', 'status': 'running', 'created_at': int(time.time() * 1000)}
+                    'protocol': path, 'mode': 'agent' if agent else 'chat', 'allowed_paths': folders,
+                    'status': 'running', 'created_at': int(time.time() * 1000)}
             pack['body']['turns'].append(turn)
             await store(conn, pack['block_id'], pack['body'])
             body['turn_count'] += 1
@@ -503,7 +516,7 @@ class DialogueHandler(PrivateHandler):
                 body['title'] = question[:60]
             row = await store(conn, conversation_id, body)
             result = await view_row(conn, row, self.owner)
-        task = asyncio.create_task(complete(self.projects, self.owner, conversation_id, pack['block_id'], turn['id'], key, model, messages, path, agent))
+        task = asyncio.create_task(complete(self.projects, self.owner, conversation_id, pack['block_id'], turn['id'], key, model, messages, path, agent, folders=folders))
         tasks[conversation_id] = task
         def done(finished):
             if tasks.get(conversation_id) is finished:

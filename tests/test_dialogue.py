@@ -21,8 +21,11 @@ def test_endpoint_and_payload_never_send_incompatible_tools():
 
 
 def test_agent_payload_uses_responses_function_tool():
-    body = request_body('gpt-6-astra', [{'role': 'user', 'content': 'run tests'}], '/v1/responses', True)
+    body = request_body('gpt-6-astra', [{'role': 'user', 'content': 'run tests'}], '/v1/responses', True,
+                        allowed_paths=['/Users/test/Sites', '/tmp/project'])
     assert body['tools'][0]['name'] == 'run_command'
+    assert set(body['tools'][0]['parameters']['required']) == {'argv', 'cwd', 'reason'}
+    assert '/Users/test/Sites' in body['tools'][0]['description']
     assert body['tool_choice'] == 'auto'
     continued = request_body('gpt-6-astra', [{'type': 'function_call_output', 'call_id': 'call_1', 'output': '{}'}],
                              '/v1/responses', True, 'resp_1')
@@ -66,6 +69,13 @@ def test_dialogue_options_boundaries_and_types():
     assert dialogue_options({'context_turns': 100, 'pack_size': 100}) == {'context_turns': 100, 'pack_size': 100}
     for values in [{'context_turns': -1}, {'context_turns': 101}, {'pack_size': 0}, {'pack_size': 101}, {'pack_size': True}, {'context_turns': '2'}, {'pack_size': 1.5}]:
         with pytest.raises(HTTPError): dialogue_options(values)
+
+
+def test_agent_allowed_paths_are_absolute_and_bounded():
+    from backend.dialogue import allowed_paths
+    assert allowed_paths(['/a', '/a', '/b']) == ['/a', '/b']
+    for value in ['bad', ['relative'], ['/x'] * 33, [1]]:
+        with pytest.raises(HTTPError): allowed_paths(value)
 
 
 def test_submission_stats_reports_exact_request_size_and_content_totals():

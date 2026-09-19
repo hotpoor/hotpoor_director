@@ -1,4 +1,4 @@
-const {app, BrowserWindow, nativeTheme, ipcMain, shell} = require('electron');
+const {app, BrowserWindow, nativeTheme, ipcMain, shell, dialog} = require('electron');
 const {spawn} = require('node:child_process');
 const path = require('node:path');
 const readline = require('node:readline');
@@ -21,6 +21,10 @@ else app.whenReady().then(async () => {
   const dataDirectory = process.env.DIRECTOR_DATA_DIR || (development &&
     (fs.existsSync(path.join(localDirectory, 'config.json')) || !fs.existsSync(path.join(savedDirectory, 'config.json')))
     ? localDirectory : savedDirectory);
+  const agentPermissionsPath=path.join(dataDirectory,'agent-permissions.json');
+  const defaultAgentFolder=fs.existsSync(path.join(app.getPath('home'),'Sites'))?path.join(app.getPath('home'),'Sites'):root;
+  const readAgentFolders=()=>{try{const value=JSON.parse(fs.readFileSync(agentPermissionsPath,'utf8'));return [...new Set(value.folders.filter(item=>typeof item==='string'&&path.isAbsolute(item)&&fs.existsSync(item)&&fs.statSync(item).isDirectory()).map(item=>fs.realpathSync(item)))];}catch{return [fs.realpathSync(defaultAgentFolder)];}};
+  const writeAgentFolders=folders=>{fs.mkdirSync(dataDirectory,{recursive:true});const temporary=agentPermissionsPath+'.tmp-'+process.pid;fs.writeFileSync(temporary,JSON.stringify({folders},null,2),{mode:0o600});fs.renameSync(temporary,agentPermissionsPath);};
   const bootstrapToken = randomBytes(32).toString('hex');
   const windows = process.platform === 'win32';
   const executable = app.isPackaged
@@ -61,9 +65,11 @@ else app.whenReady().then(async () => {
       if (event.sender !== window.webContents || event.senderFrame?.url !== origin + '/') throw Error('Invalid sender');
       const argv=request?.argv,cwdValue=request?.cwd||'.';
       if(!Array.isArray(argv)||!argv.length||argv.length>128||argv.some(value=>typeof value!=='string'||!value||value.length>8192))throw Error('命令参数不正确');
-      if(typeof cwdValue!=='string'||cwdValue.length>2048||path.isAbsolute(cwdValue))throw Error('工作目录必须是工作区内的相对路径');
-      const cwd=path.resolve(root,cwdValue),relative=path.relative(root,cwd);
-      if(relative.startsWith('..')||path.isAbsolute(relative)||!fs.existsSync(cwd)||!fs.statSync(cwd).isDirectory())throw Error('工作目录不在当前工作区内');
+      if(typeof cwdValue!=='string'||cwdValue.length>2048)throw Error('工作目录不正确');
+      const folders=readAgentFolders();if(!folders.length)throw Error('请先在对话设置中添加允许执行的文件夹');
+      const expanded=cwdValue==='~'||cwdValue.startsWith('~/')?path.join(app.getPath('home'),cwdValue.slice(2)):cwdValue;
+      const candidate=path.isAbsolute(expanded)?expanded:path.resolve(folders[0],expanded),cwd=fs.existsSync(candidate)?fs.realpathSync(candidate):candidate;
+      if(!fs.existsSync(cwd)||!fs.statSync(cwd).isDirectory()||!folders.some(folder=>{const relative=path.relative(folder,cwd);return relative===''||!relative.startsWith('..')&&!path.isAbsolute(relative);}))throw Error('工作目录不在允许执行的文件夹内');
       const startedAt=Date.now();
       return await new Promise(resolve=>{
         let stdout='',stderr='',finished=false,timedOut=false,truncated=false;
@@ -71,10 +77,13 @@ else app.whenReady().then(async () => {
         const append=(name,data)=>{const value=data.toString('utf8'),limit=1024*1024;let current=name==='stdout'?stdout:stderr;if(current.length<limit)current+=value.slice(0,limit-current.length);if(value.length>limit-current.length)truncated=true;if(name==='stdout')stdout=current;else stderr=current;};
         child.stdout.on('data',data=>append('stdout',data));child.stderr.on('data',data=>append('stderr',data));
         const timer=setTimeout(()=>{timedOut=true;child.kill('SIGTERM');setTimeout(()=>{if(!finished)child.kill('SIGKILL');},2000).unref();},120000);
-        const done=(code,signal,error)=>{if(finished)return;finished=true;clearTimeout(timer);resolve({exit_code:Number.isInteger(code)?code:null,signal:signal||null,stdout,stderr,error:error?.message||null,timed_out:timedOut,truncated,duration_ms:Date.now()-startedAt,cwd:relative||'.'});};
+        const done=(code,signal,error)=>{if(finished)return;finished=true;clearTimeout(timer);resolve({exit_code:Number.isInteger(code)?code:null,signal:signal||null,stdout,stderr,error:error?.message||null,timed_out:timedOut,truncated,duration_ms:Date.now()-startedAt,cwd});};
         child.once('error',error=>done(null,null,error));child.once('close',(code,signal)=>done(code,signal));
       });
     });
+    ipcMain.handle('director:agent-folders',event=>{if(event.sender!==window.webContents||event.senderFrame?.url!==origin+'/')throw Error('Invalid sender');return readAgentFolders();});
+    ipcMain.handle('director:add-agent-folder',async event=>{if(event.sender!==window.webContents||event.senderFrame?.url!==origin+'/')throw Error('Invalid sender');const result=await dialog.showOpenDialog(window,{title:'选择允许代理执行命令的文件夹',properties:['openDirectory','createDirectory']});if(result.canceled||!result.filePaths[0])return readAgentFolders();const folders=[...new Set([...readAgentFolders(),fs.realpathSync(result.filePaths[0])])];writeAgentFolders(folders);return folders;});
+    ipcMain.handle('director:remove-agent-folder',(event,value)=>{if(event.sender!==window.webContents||event.senderFrame?.url!==origin+'/')throw Error('Invalid sender');if(typeof value!=='string')throw Error('Invalid folder');const target=fs.existsSync(value)?fs.realpathSync(value):value,folders=readAgentFolders().filter(folder=>folder!==target);writeAgentFolders(folders);return folders;});
     window.webContents.setWindowOpenHandler(() => ({action:'deny'}));
     window.webContents.on('will-navigate', (event, url) => {if (new URL(url).origin !== origin) event.preventDefault();});
     await window.webContents.session.cookies.set({url:origin,name:'director_bootstrap',value:bootstrapToken,httpOnly:true,sameSite:'strict',path:'/'});

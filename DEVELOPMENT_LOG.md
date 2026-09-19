@@ -662,3 +662,13 @@ AK 与模型改为可搜索 datalist。每次成功持久化请求同时保存 `
 
 已上线 `xialiwei-api:0.17.0-director-agent` / 8659；候选和正式 HTTPS 各 107 项检查通过，保留旧 8658 worker。回滚配置：`/home/ubuntu/director-agent-20260919/nginx-before-agent.conf`。
 代理模式的“本次提交”请求字节数包含 Responses 工具定义，保持与实际 JSON 载荷一致。修订发布 `xialiwei-api:0.17.1-director-agent-stats` / 8660；候选与正式 HTTPS 各 107 项检查通过，回滚 `/home/ubuntu/director-agent-stats-20260919/nginx-before-agent-stats.conf`。
+
+## 2026-09-19 · 修复代理工具提交与执行目录侧栏
+
+定位首个代理请求 400：service-inference 的严格 function schema 要求 `required` 覆盖全部 properties，补入 `cwd` 后使用真实 `gpt-6-astra` 验证成功返回 `run_command`，并验证 `previous_response_id + function_call_output` 可继续生成最终回答。原失败轮未生成命令，也没有本地执行。
+
+对话控制栏新增“执行目录”右侧抽屉，通过系统目录选择器添加白名单，可查看及移除；权限写入本机 0600 配置。默认允许 `~/Sites`。模型请求携带当前白名单以生成绝对 cwd，Electron 对 cwd 的 realpath 再校验必须位于任一允许目录，阻止 `..` 或符号链接越界；每条命令仍需单独确认。
+
+验证：280 项 Python 测试通过；真实 Electron 对话回归通过；真实 service-inference 工具申请与结果续接通过。
+
+上线 `xialiwei-api:0.17.2-director-agent-folders` / 8661；候选与正式 HTTPS 各 107 项检查通过，保留旧 8660 worker。回滚 `/home/ubuntu/director-agent-folders-20260919/nginx-before-agent-folders.conf`。
