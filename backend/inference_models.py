@@ -12,6 +12,21 @@ for remote, name, sizes, limit in [
         sizes=sizes, ref_limit=limit, output_formats=['jpeg'] if remote.startswith('seedream-4-5') else ['jpeg','png'],
         optimize_modes=['standard','fast'] if 'pro' in remote else ['standard'],
         note='service-inference · 按张计费；参考图片使用公网 URL，支持多图编辑。'))
+# OpenAI Images API aliases and documented snapshots; availability still comes from each AK.
+for remote in [
+    'gpt-image-1', 'gpt-image-1-mini', 'gpt-image-1.5',
+    'gpt-image-2', 'gpt-image-2-2026-04-21',
+    'gpt-image-2.5-sunburst', 'gpt-image-2.5-sunburst-2026-09-08',
+    'gpt-image-2.5-flare', 'gpt-image-2.5-flare-2026-09-08',
+]:
+    sizes = ['auto', '1024x1024', '1536x1024', '1024x1536']
+    if remote.startswith('gpt-image-2'):
+        sizes += ['1536x864', '864x1536', '2560x1440', '1440x2560']
+    MODELS.append(dict(id='si:'+remote, remote_model=remote, name=remote+' · 云端', provider=PROVIDER,
+        type='image', image_api='openai', modes=['text','image','reference','edit'], sizes=sizes,
+        ref_limit=16, output_formats=['png','jpeg','webp'], optimize_modes=[],
+        qualities=['auto','low','medium','high'] + (['xhigh','max'] if remote.startswith('gpt-image-2.5-') else []),
+        note='service-inference · GPT 生图；支持文字生成、参考图编辑及多图融合，按实际调用计费。'))
 for family, label in [('doubao', '豆包'), ('dreamina', 'Dreamina')]:
     for suffix, name in [('2-0-260128-max', '2.0 Max'), ('2-0-fast-260128-max', '2.0 Fast Max'),
                          ('2-0-mini-260615-max', '2.0 Mini Max'), ('2-5-260628-max', '2.5 Max')]:

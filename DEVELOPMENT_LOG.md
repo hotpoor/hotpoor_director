@@ -725,3 +725,11 @@ SKILL 补入失败历史、无状态工具续接、命令停止平台差异、cw
 新增 `test-card-credentials.cjs` 和 `smoke-card-credentials.cjs`；后者使用隔离 PostgreSQL、模拟模型和真实编辑租约，验证删除默认 AK 后新建视频卡、云端模型选择、切换 AK、保存和重开。77 项推理/云端网关 Python 回归通过。未发起付费生成。旧通用 inference UI 脚本直接派发未取得租约的选择事件，在上传步骤中止；本次专项 UI 测试显式走真实租约流程并通过，未修改协作锁行为。
 
 发布 `xialiwei-api:0.18.1-director-card-keys` / **8663**；候选与正式 HTTPS 各 109 项检查通过，候选 64 文件 manifest 校验通过，切流前待处理对话为 0。生产 `studio.js` 经网关路径改写后与本地一致。保留 8662 worker，回滚 `/home/ubuntu/director-card-keys-20260919/nginx-before-card-keys.conf`。
+
+## 2026-09-20 · GPT 图片系列接入
+
+- 根据用户确认的 OpenAI API 兼容协议，注册 GPT Image 1 / 1 mini / 1.5 / 2 / 2.5 Sunburst / Flare 和官方列出的日期版本，按各 AK 模型列表提供选项。
+- 文生图走 generations，参考图/多图融合/编辑走 edits 的 JSON 图片 URL 输入。独立画质、背景、尺寸、张数与输出格式参数，不发送 Seedream 专用字段或 GPT 不支持的 response_format。
+- 参数随卡片保存，切换模型重置不兼容选项；WebP 在本地与云端保持正确 MIME。校验非法画质、张数、参考图数量、透明 JPEG，提交仍不自动重试。
+- 验证：348 项 Python 测试通过；隔离 Electron GPT 卡片验证通过（AK、Flare max、参数保存重开、切换模型）。使用模拟生成响应，未调用真实付费生成接口。
+- 发布：导出 64 文件同步 API 仓库，镜像 `xialiwei-api:0.19.0-director-gpt-images`；候选 8664 的 109 项 HTTP 检查通过后切换 Nginx，保留旧 8663 worker。当前本地 AK 的只读模型查询确认提供 GPT Image 2 / 2.5 Flare / 2.5 Sunburst。

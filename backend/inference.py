@@ -335,6 +335,20 @@ def payload_for(model, mode, data):
         if mode in ('image','edit','reference') and not images:
             raise ValueError('请填写至少一张公网参考图片 URL')
         if mode=='reference' and len(images)<2:raise ValueError('多图融合请提供至少两张参考图')
+        if model.get('image_api') == 'openai':
+            output_format = data.get('output_format', 'png')
+            quality = data.get('quality', 'auto')
+            background = data.get('background', 'auto')
+            count = data.get('n', 1)
+            if output_format not in model['output_formats']: raise ValueError('此模型不支持该输出格式')
+            if quality not in model['qualities']: raise ValueError('此模型不支持该画质')
+            if background not in ('auto', 'opaque', 'transparent'): raise ValueError('不支持的背景选项')
+            if background == 'transparent' and output_format == 'jpeg': raise ValueError('透明背景请选择 PNG 或 WebP')
+            if not isinstance(count, int) or isinstance(count, bool) or not 1 <= count <= 10:
+                raise ValueError('生成张数需为 1–10 的整数')
+            p.update(size=size, output_format=output_format, quality=quality, background=background, n=count)
+            if images: p['images'] = [{'image_url': url} for url in images]
+            return p
         output_format=data.get('output_format','jpeg');optimize=data.get('optimize_mode','standard');watermark=data.get('watermark',True)
         if output_format not in model['output_formats']:raise ValueError('此模型不支持该输出格式')
         if optimize not in model['optimize_modes']:raise ValueError('此模型不支持该提示词优化模式')
@@ -528,7 +542,7 @@ class InferenceManager:
                         await phase('reading_output', bytes=size)
                     raw = await download_memory(output.get('url') if isinstance(output, dict) else output, progress=received)
                 if not raw or len(raw) > MAX_OUTPUT: raise ValueError('生成文件大小异常')
-                mime = 'video/mp4' if body['type'] == 'video' else 'image/png' if raw.startswith(b'\x89PNG') else 'image/jpeg'
+                mime = 'video/mp4' if body['type'] == 'video' else 'image/png' if raw.startswith(b'\x89PNG') else 'image/webp' if raw.startswith(b'RIFF') and raw[8:12] == b'WEBP' else 'image/jpeg'
                 if body.get('storage_profile_id'):
                     body['_output_phase'] = 'uploading_output'
                     uploaded = await store_generated(self.config, self.pool, body, raw, mime, f'{job_id}-{index}', phase)
@@ -547,8 +561,8 @@ class InferenceManager:
             raise ValueError('任务没有返回有效生成文件')
         for index, output in enumerate(outputs):
             extension = 'mp4' if body['type']=='video' else 'jpg'
-            if isinstance(output,dict) and output.get('output_format')=='png':
-                extension = 'png'
+            if isinstance(output,dict) and output.get('output_format') in ('png', 'webp'):
+                extension = output['output_format']
             filename = f'{job_id}-{index}.{extension}'
             path = directory / filename
             if isinstance(output,dict) and output.get('b64_json'):
@@ -556,7 +570,10 @@ class InferenceManager:
                 if not raw or len(raw)>MAX_OUTPUT:
                     raise ValueError('生成图片大小异常')
                 if raw.startswith(b'\x89PNG'):
-                    extension='png'; filename=f'{job_id}-{index}.png'; path=directory/filename
+                    extension='png'
+                elif raw.startswith(b'RIFF') and raw[8:12] == b'WEBP':
+                    extension='webp'
+                filename=f'{job_id}-{index}.{extension}'; path=directory/filename
                 temporary=path.with_suffix('.part')
                 await asyncio.to_thread(temporary.write_bytes,raw)
                 os.replace(temporary,path)
@@ -592,7 +609,8 @@ class InferenceManager:
             if payload is not None:
                 async with self.slots:
                     await self.update(job_id,status='running')
-                    response = await api(key, '/v1/images/generations' if body['type']=='image' else '/'+model['api_version']+'/video/generate',payload)
+                    endpoint = ('/v1/images/edits' if model.get('image_api') == 'openai' and payload.get('images') else '/v1/images/generations') if body['type']=='image' else '/'+model['api_version']+'/video/generate'
+                    response = await api(key, endpoint, payload)
                 cost = reported_cost(response)
                 if cost:
                     await self.update(job_id, cost=cost, cost_checked_at=int(time.time() * 1000))
@@ -700,7 +718,7 @@ async def submit(handler, project_id, data):
             except ProviderError as error:raise tornado.web.HTTPError(502,reason=str(error))
         if model['remote_model'] not in {m['id'] for m in credential['models']}:raise tornado.web.HTTPError(403,reason='所选 AK 的模型列表不包含此模型，请在卡片选择其他 AK 或模型')
         # Explicit allowlist keeps credentials and arbitrary client fields out of history.
-        fields=('prompt','size','resolution','ratio','duration','generate_audio','image_urls','video_urls','audio_urls','first_frame','last_frame','output_format','optimize_mode','watermark','max_images')
+        fields=('prompt','size','resolution','ratio','duration','generate_audio','image_urls','video_urls','audio_urls','first_frame','last_frame','output_format','optimize_mode','watermark','max_images','quality','background','n')
         params={k:data[k] for k in fields if k in data}
         params.update({k:payload[k] for k in ('size','resolution','ratio','duration','generate_audio') if k in payload})
         body=dict(provider=PROVIDER,kind='generation',credential_owner=getattr(handler,'user',{'user_id':handler.owner})['user_id'],created_by=getattr(handler,'user',{'user_id':handler.owner}),credential_id=credential['id'],credential_name=credential['name'],owner_id=handler.owner,project_id=project_id,card_id=card['id'],

@@ -344,12 +344,15 @@ Logo 使用用户提供的透明原图，`scripts/prepare_brand.py` 可使用 Pi
 | 类型 | 模型 | 已接入的模式 |
 | --- | --- | --- |
 | 图片 | Seedream 5 Pro、5 Pro EP、5 Lite、4.5 | 文生图、单张或多张公网参考图编辑；按模型选择分辨率档位 |
+| 图片 | GPT Image 1、1 mini、1.5、2、2.5 Sunburst / Flare（含已登记日期版本） | 文生图、单图编辑、多图融合；画质、尺寸、背景、PNG / JPEG / WebP、1–10 张 |
 | 视频 | 豆包 / Dreamina Seedance 2.0 Max、Fast Max、Mini Max、2.5 Max | 文生视频、首尾帧、多元素参考；480p / 720p、画幅、4–15 秒和音频开关 |
 | 视频 | MiniMax H3 | 文生视频、公网参考图生视频；768P / 2K、4–15 秒与画幅 |
 
 参考素材填写公开可访问的 HTTP(S) 文件直链，每行一项；也可点击「选择文件直传」或把文件拖入对应字段，使用已配置的云存储自动获得公网 URL。上游素材库的「用作参考素材」同样使用客户端直传。云端不能直接访问 ComfyUI 内网 URL。Seedance 多元素参考按图片、视频、音频分别编号，提示词使用 `@Image1` / `@Video1`；首尾帧有独立字段。MiniMax 仅接入文档明确给出结构的图片参考。本版 Seedance 参考最多 12 项、视频/音频各 3 项，MiniMax 图片最多 5 项，为工作台输入上限，仍以服务端的模型校验为准。
 
-Seedream 使用同步图片接口（请求在后台执行），请在图片请求完成前保持应用开启。视频提交后保存远端任务 ID，Seedance 每 10 秒、MiniMax 每 15 秒查询一次；应用重启会继续查询已有 ID，不会重新发起生成。生成完成后自动保存图片/视频到数据目录 `generated/`，历史播放、图片预览、PIN 和视频提帧使用带登录验证的本地结果接口，视频支持 Range 拖动播放。每个结果限制 210 MB；返回的用量按服务商原值记录，未返回 token 时不虚构。
+GPT 图片接口按用户确认的 OpenAI 兼容协议接入：文字生成走 `/v1/images/generations`，参考图与编辑走 `/v1/images/edits` 的 JSON `images: [{image_url}]`。最多 16 张参考图；透明背景需 PNG 或 WebP；2.5 系列额外支持 xhigh / max 画质。模型仍按所选 AK 的 `/v1/models` 权限显示，修改后需重启本地客户端并刷新模型。协议依据 [OpenAI 图片生成](https://developers.openai.com/api/reference/resources/images/methods/generate) 与 [图片编辑](https://developers.openai.com/api/reference/resources/images/methods/edit)。
+
+GPT 与 Seedream 使用同步图片接口（请求在后台执行），请在图片请求完成前保持应用开启。视频提交后保存远端任务 ID，Seedance 每 10 秒、MiniMax 每 15 秒查询一次；应用重启会继续查询已有 ID，不会重新发起生成。生成完成后自动保存图片/视频到数据目录 `generated/`，历史播放、图片预览、PIN 和视频提帧使用带登录验证的本地结果接口，视频支持 Range 拖动播放。每个结果限制 210 MB；返回的用量按服务商原值记录，未返回 token 时不虚构。
 
 云端接口文档没有取消或排序操作，因此这类任务只能查看和定位，不显示可用的取消/排序按钮；ComfyUI 的任务操作保持原有行为。提交超时或应用在提交期间关闭时，不自动重试付费请求：请到服务控制台核对受理状态。视频查询或结果下载的暂时性错误会自动重试；鉴权失效、无权限或任务不存在时会停止查询并显示错误。图片结果保存失败需在服务控制台核对；本版未接入组图、流式响应或精确像素尺寸输入。
 

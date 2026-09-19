@@ -167,10 +167,10 @@
     const selectedModel = card.model || card.drafts[card.mode]?.model;
     const spec=state.models.find(m=>m.id===selectedModel);
     const standard = selectedModel === 'z-image';
-    const defaults = {max_images:4,output_format:'jpeg',optimize_mode:'standard',watermark:true,size:spec?.sizes?.[0] || '1K',resolution:spec?.resolutions?.[0] || '480p',ratio:'16:9',generate_audio:true,image_urls:'',video_urls:'',audio_urls:'',first_frame:'',last_frame:'',negative_prompt:'', cfg:standard?4:1, model:card.type === 'image' ? 'z-image-turbo':'minimax-h3', prompt:'', width:spec?.default_width || (card.type === 'image' ? 1024:832), height:spec?.default_height || (card.type === 'image' ? 1024:480), steps:spec?.default_steps || (standard?40:8), seed:-1, denoise:.65, duration:spec?.default_duration || 2, refs:[]};
+    const defaults = {max_images:4,n:1,quality:'auto',background:'auto',output_format:spec?.output_formats?.[0] || 'jpeg',optimize_mode:'standard',watermark:true,size:spec?.sizes?.[0] || '1K',resolution:spec?.resolutions?.[0] || '480p',ratio:'16:9',generate_audio:true,image_urls:'',video_urls:'',audio_urls:'',first_frame:'',last_frame:'',negative_prompt:'', cfg:standard?4:1, model:card.type === 'image' ? 'z-image-turbo':'minimax-h3', prompt:'', width:spec?.default_width || (card.type === 'image' ? 1024:832), height:spec?.default_height || (card.type === 'image' ? 1024:480), steps:spec?.default_steps || (standard?40:8), seed:-1, denoise:.65, duration:spec?.default_duration || 2, refs:[]};
     if(card.model && card.drafts[card.mode]?.model && card.drafts[card.mode].model!==card.model){
       card.drafts[card.mode].steps=defaults.steps;card.drafts[card.mode].cfg=defaults.cfg;
-      for(const k of ['width','height','duration','size','resolution','output_format','optimize_mode'])card.drafts[card.mode][k]=defaults[k];
+      for(const k of ['width','height','duration','size','resolution','output_format','optimize_mode','quality','background','n'])card.drafts[card.mode][k]=defaults[k];
       if(spec?.provider==='service-inference')card.drafts[card.mode].refs=[];
       card.drafts[card.mode].refs=card.drafts[card.mode].refs.filter(r=>(spec?.ref_types||['image']).includes(refKind(card.drafts[card.mode],r))).slice(0,spec?.ref_limit || (card.type==='video'?2:1));
     }
@@ -346,7 +346,7 @@
       else html+=refs('image_urls',`参考图片 URL · 最多 ${model.ref_limit} 张（依填写顺序编号）`);
       if(model.type==='video'&&card.mode==='reference')html+=refs('video_urls','参考视频 URL · 最多 3 段')+refs('audio_urls','参考音频 URL · 最多 3 段');
     }
-    if(model.type==='image'&&card.mode==='edit')html+='<p class="mode-note">上传已圈选、涂鸦标记的图片，在提示词中说明编辑位置；也可填写 &lt;point&gt; 或 &lt;bbox&gt; 坐标标签。此处使用已有标记图，尚无内置画笔。</p>';
+    if(model.type==='image'&&card.mode==='edit'&&model.image_api!=='openai')html+='<p class="mode-note">上传已圈选、涂鸦标记的图片，在提示词中说明编辑位置；也可填写 &lt;point&gt; 或 &lt;bbox&gt; 坐标标签。此处使用已有标记图，尚无内置画笔。</p>';
     if(model.type==='image'&&card.mode==='reference')html+='<p class="mode-note">至少两张参考图，提示词按上传顺序使用「图1」「图2」描述融合关系。</p>';
     if(model.type==='image'&&card.mode==='series')html+='<p class="mode-note">可不填参考图。模型根据提示词生成关联组图，实际张数可能少于上限；参考图 + 最多生成张数不能超过 15。</p>';
     html+='<div class="parameter-grid">';
@@ -354,7 +354,8 @@
       html+=select('size','图片分辨率',model.sizes)+select('output_format','输出格式',model.output_formats);
       if(model.optimize_modes.includes('fast'))html+=select('optimize_mode','提示词优化',model.optimize_modes);
       if(card.mode==='series')html+=`<label>最多生成张数<input data-field="max_images" type="number" min="1" max="15" step="1" value="${d.max_images}"></label>`;
-      html+=`<label class="cloud-checkbox"><input data-field="watermark" type="checkbox" ${d.watermark?'checked':''}>AI 生成水印</label>`;
+      if(model.image_api==='openai')html+=select('quality','画质',model.qualities)+select('background','背景',['auto','opaque','transparent'])+`<label>生成张数<input data-field="n" type="number" min="1" max="10" step="1" value="${d.n}"></label><p class="mode-note">透明背景请选择 PNG 或 WebP。</p>`;
+      else html+=`<label class="cloud-checkbox"><input data-field="watermark" type="checkbox" ${d.watermark?'checked':''}>AI 生成水印</label>`;
     }
     else{
       html+=select('resolution','视频分辨率',model.resolutions)+select('ratio','画面比例',['16:9','4:3','1:1','3:4','9:16','21:9',...(model.api_version==='v1'&&card.mode==='image'?['adaptive']:[])])+`<label>时长 / 秒<input data-field="duration" type="number" min="${model.min_duration||4}" max="${model.max_duration||15}" step="1" value="${d.duration}"></label>`;
@@ -636,7 +637,7 @@
   }
   $('#canvas-world').addEventListener('input',event=>{
     const el=event.target.closest('[data-card]');if(!el)return;const card=cardById(el.dataset.card);
-    if(event.target.dataset.field && event.target.dataset.field!=='model'){const key=event.target.dataset.field;draft(card)[key]=event.target.type==='checkbox'?event.target.checked:['model','prompt','negative_prompt','size','resolution','ratio','image_urls','video_urls','audio_urls','first_frame','last_frame','output_format','optimize_mode'].includes(key)?event.target.value:Number(event.target.value);changed();if(['width','height'].includes(key))updateSizeFeedback(card);}
+    if(event.target.dataset.field && event.target.dataset.field!=='model'){const key=event.target.dataset.field;draft(card)[key]=event.target.type==='checkbox'?event.target.checked:['model','prompt','negative_prompt','size','resolution','ratio','image_urls','video_urls','audio_urls','first_frame','last_frame','output_format','optimize_mode','quality','background'].includes(key)?event.target.value:Number(event.target.value);changed();if(['width','height'].includes(key))updateSizeFeedback(card);}
   });
   $('#canvas-world').addEventListener('change',async event=>{
     const el=event.target.closest('[data-card]');if(!el)return;const card=cardById(el.dataset.card);

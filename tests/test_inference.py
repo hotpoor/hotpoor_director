@@ -27,7 +27,10 @@ def test_all_documented_models_send_remote_ids_without_local_sampler_parameters(
     assert payload['model']==model['remote_model']
     assert not {'seed','steps','width','height','denoise'} & payload.keys()
     if model['type']=='image':
-        assert payload['response_format']=='b64_json'
+        if model.get('image_api') == 'openai':
+            assert 'response_format' not in payload
+        else:
+            assert payload['response_format']=='b64_json'
     else:
         assert payload['content']==[{'type':'text','text':'a film scene'}]
         assert payload['ratio']=='16:9'
@@ -365,3 +368,52 @@ def test_card_submission_uses_selected_ak_without_default_fallback(tmp_path,sele
             with pytest.raises(HTTPError):asyncio.run(submit(h,'p',data))
     if expected:assert pool.rows['a'*32]['body']['credential_id']==expected
     else:manager.launch.assert_not_called()
+
+GPT_MODELS = [m for m in BY_ID.values() if m.get('image_api') == 'openai']
+
+
+@pytest.mark.parametrize('model', GPT_MODELS, ids=lambda m: m['remote_model'])
+@pytest.mark.parametrize('mode', ['text', 'image', 'reference', 'edit'])
+def test_gpt_images_protocol_and_endpoint(model, mode, tmp_path):
+    data = dict(prompt='A scene', image_urls='https://cdn.example/a.png\nhttps://cdn.example/b.png',
+                quality='high', background='transparent', output_format='webp', n=2)
+    payload = payload_for(model, mode, data)
+    assert not {'response_format', 'watermark', 'optimize_prompt_options', 'image'} & payload.keys()
+    assert payload['quality'] == 'high' and payload['n'] == 2
+    if mode == 'text':
+        assert 'images' not in payload
+    else:
+        assert payload['images'] == [{'image_url': u} for u in data['image_urls'].splitlines()]
+    config = {'data_dir': tmp_path}; save_key(config, KEY)
+    body = job(model['id']); pool = Pool({'a': {'body': body}})
+    manager = InferenceManager(config, pool)
+    with patch('backend.inference.api', AsyncMock(return_value={'data': [{'b64_json': base64.b64encode(PNG).decode()}]})) as request:
+        asyncio.run(manager.run('a', body, payload))
+    request.assert_awaited_once_with(KEY, '/v1/images/generations' if mode == 'text' else '/v1/images/edits', payload)
+    assert pool.rows['a']['body']['status'] == 'completed'
+
+
+@pytest.mark.parametrize('data', [dict(n=True), dict(n=0), dict(n=11), dict(n=1.5),
+    dict(quality='xhigh'), dict(quality='standard'), dict(background='invalid'),
+    dict(background='transparent', output_format='jpeg'), dict(size='1K'), dict(output_format='gif')])
+def test_gpt_invalid_options_rejected_before_request(data):
+    with pytest.raises(ValueError):
+        payload_for(BY_ID['si:gpt-image-1'], 'text', dict(prompt='scene', **data))
+
+
+def test_gpt_flare_max_quality_and_reference_limits():
+    model = BY_ID['si:gpt-image-2.5-flare']
+    assert payload_for(model, 'text', dict(prompt='scene', quality='max'))['quality'] == 'max'
+    with pytest.raises(ValueError):
+        payload_for(model, 'edit', dict(prompt='scene', image_urls='\n'.join(['https://cdn.example/a.png'] * 17)))
+    with pytest.raises(ValueError):
+        payload_for(model, 'edit', dict(prompt='scene'))
+
+
+def test_webp_output_preserves_format_locally(tmp_path):
+    raw = b'RIFF\x00\x00\x00\x00WEBPtest'
+    body = job('si:gpt-image-2.5-flare'); pool = Pool({'a': {'body': body}})
+    result = asyncio.run(InferenceManager({'data_dir': tmp_path}, pool).store_outputs('a', body,
+        [{'b64_json': base64.b64encode(raw).decode()}]))
+    assert result == [{'filename': 'a-0.webp', 'mime': 'image/webp'}]
+    assert (tmp_path / 'generated/a-0.webp').read_bytes() == raw
