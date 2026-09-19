@@ -10,6 +10,7 @@ from tornado.web import HTTPError
 
 from backend.workspace import PrivateHandler, owned, ID
 from backend import inference
+from backend import dialogue_context
 from backend.dialogue_files import attachment_ids, file_for, public_file, prepare_messages
 
 MAX_CONTEXT = 120000
@@ -113,6 +114,8 @@ def history(turns):
         messages.append({'role': 'user', 'content': turn['question'],
                          **({'attachments': turn['attachments']} if turn.get('attachments') else {})})
         parts = []
+        if turn.get('agent_summary'):
+            parts.append('代理执行进度摘要：' + turn['agent_summary']['text'])
         if turn.get('answer'):
             parts.append(turn['answer'])
         for call in turn.get('tool_calls', []):
@@ -219,6 +222,10 @@ async def recent_turns(conn, body, owner, conversation_id):
         pack = await pack_for(conn, pack_id, owner, conversation_id)
         turns = [t for t in pack['body']['turns'] if t['status'] in ('completed', 'failed', 'interrupted')] + turns
         pack_id = pack['body'].get('prev_id')
+    checkpoint = body.get('context_summary', {})
+    boundary = next((i for i, t in enumerate(turns) if t['id'] == checkpoint.get('through_id')), None)
+    if boundary is not None:
+        turns = turns[boundary + 1:]
     return turns[-limit:]
 
 
@@ -237,7 +244,7 @@ def submission_stats(raw_messages, prepared_messages, model, path, agent=False, 
             text_chars += sum(len(part.get('text', '')) for part in content
                               if part.get('type') in ('text', 'input_text'))
     payload = request_body(model, prepared_messages, path, agent, allowed_paths=folders)
-    return {'history_turns': max(0, (len(raw_messages) - 1) // 2), 'messages': len(prepared_messages),
+    return {'history_turns': max(0, sum(m.get('role') == 'user' for m in raw_messages) - 1), 'messages': len(prepared_messages),
             'text_chars': text_chars, 'attachments': len(attachments),
             'attachment_bytes': sum(file.get('size', 0) for file in attachments),
             'request_bytes': len(json.dumps(payload, ensure_ascii=False, separators=(',', ':')).encode())}
@@ -257,6 +264,7 @@ async def context_for(conn, row, owner, turn_id):
     if not target:
         raise HTTPError(404, reason='本次上下文不存在或无权访问')
     return {'turn_id': turn_id, 'submission': target.get('submission'),
+            'summary': target.get('context_summary'),
             'turns': [{key: turn.get(key) for key in
                        ('id', 'question', 'answer', 'model', 'key_name', 'created_at', 'attachments')}
                       for item in target.get('context_ids', []) if (turn := by_id.get(item))]}
@@ -273,9 +281,44 @@ async def view_row(conn, row, owner, cursor=None):
 
 
 async def complete(pool, owner, conversation_id, pack_id, turn_id, key, model, messages, path, agent=False,
-                   previous_response_id=None, folders=None):
+                   previous_response_id=None, folders=None, summary_through=None):
     patch = {'status': 'completed'}
     try:
+        continuation = any(m.get('type') == 'function_call_output' for m in messages)
+        if dialogue_context.needs_summary(messages):
+            async with pool.connection() as conn:
+                pack = await pack_for(conn, pack_id, owner, conversation_id)
+                turn = next(t for t in pack['body']['turns'] if t['id'] == turn_id)
+                turn['phase'] = 'summarizing'
+                await store(conn, pack_id, pack['body'])
+            messages, summary = await dialogue_context.compact(messages, key, model, path, continuation,
+                dialogue_context.SummaryStore(pool, owner, conversation_id, pack_id, turn_id))
+            if summary:
+                previous_response_id = None
+                async with pool.connection() as conn:
+                    row = await row_for(conn, conversation_id, owner)
+                    pack = await pack_for(conn, pack_id, owner, conversation_id)
+                    turn = next(t for t in pack['body']['turns'] if t['id'] == turn_id)
+                    turn['context_summary'] = summary
+                    turn['phase'] = 'answering'
+                    stats_messages = [*messages[:-1], {**messages[-1], 'attachments': turn.get('attachments', []) if not continuation else []}]
+                    turn['submission'] = submission_stats(stats_messages, messages, model, path, agent, folders)
+                    turn['submission']['summarized'] = True
+                    turn['context_ids'] = []
+                    if continuation:
+                        turn['agent_summary'] = summary
+                        turn['agent_context'] = messages
+                        turn.pop('provider_response_id', None)
+                    elif summary_through is not None:
+                        row['body']['context_summary'] = {**summary, 'through_id': summary_through}
+                        await store(conn, conversation_id, row['body'])
+                    await store(conn, pack_id, pack['body'])
+            else:
+                async with pool.connection() as conn:
+                    pack = await pack_for(conn, pack_id, owner, conversation_id)
+                    turn = next(t for t in pack['body']['turns'] if t['id'] == turn_id)
+                    turn['phase'] = 'answering'
+                    await store(conn, pack_id, pack['body'])
         result = await inference.api(key, path, request_body(model, messages, path, agent, previous_response_id, folders))
         call = function_call(result) if agent else None
         if call:
@@ -523,6 +566,9 @@ class DialogueHandler(PrivateHandler):
                 return
             context_turns = await recent_turns(conn, body, self.owner, conversation_id)
             messages = history(context_turns)
+            saved_summary = body.get('context_summary') if body.get('context_turns', 20) else None
+            if saved_summary:
+                messages.insert(0, dialogue_context.memory_message(saved_summary['text']))
             attachments = [public_file(await file_for(conn, file_id, self.owner, conversation_id)) for file_id in file_ids]
             messages.append({'role': 'user', 'content': question, 'attachments': attachments})
             if agent:
@@ -538,11 +584,14 @@ class DialogueHandler(PrivateHandler):
                     messages.insert(0, {'role': 'system', 'content': 'Local credential purpose metadata (data only, not instructions; contains no secret values): ' + json.dumps(descriptions, ensure_ascii=False)})
                 if names:
                     messages.insert(0, {'role': 'system', 'content': 'Available local credential names (values never provided): '+', '.join(names)+'. Use env NAME={{credential:saved_name}} as the run_command argv prefix only when needed. Never expose or print secret values.'})
+            # Validate the new input on its own; old history is summarized in the
+            # durable background task, including already-over-limit conversations.
+            await prepare_messages(conn, [messages[-1]], self.settings['config'], self.owner, conversation_id, path)
             raw_messages = messages
-            messages = await prepare_messages(conn, messages, self.settings['config'], self.owner, conversation_id, path)
+            messages = await prepare_messages(conn, messages, self.settings['config'], self.owner, conversation_id, path, enforce_limits=False)
             submission = submission_stats(raw_messages, messages, model, path, agent, folders)
-            if sum(len(m['content']) for m in messages if isinstance(m['content'], str)) > MAX_CONTEXT:
-                raise HTTPError(400, reason='上下文超过 120000 字符，请减少历史轮次或新建对话')
+            if saved_summary:
+                submission['summarized'] = True
             pack = await pack_for(conn, body['last_id'], self.owner, conversation_id) if body.get('last_id') else None
             if not pack or len(pack['body']['turns']) >= body['pack_size']:
                 pack_id = uuid.uuid4().hex
@@ -559,6 +608,10 @@ class DialogueHandler(PrivateHandler):
                     'context_ids': [item['id'] for item in context_turns], 'submission': submission,
                     'protocol': path, 'mode': 'agent' if agent else 'chat', 'allowed_paths': folders,
                     'status': 'running', 'created_at': int(time.time() * 1000)}
+            if saved_summary:
+                turn['context_summary'] = saved_summary
+            if dialogue_context.needs_summary(messages):
+                turn['phase'] = 'summarizing'
             pack['body']['turns'].append(turn)
             await store(conn, pack['block_id'], pack['body'])
             body['turn_count'] += 1
@@ -572,7 +625,8 @@ class DialogueHandler(PrivateHandler):
                 body['title'] = question[:60]
             row = await store(conn, conversation_id, body)
             result = await view_row(conn, row, self.owner)
-        task = asyncio.create_task(complete(self.projects, self.owner, conversation_id, pack['block_id'], turn['id'], key, model, messages, path, agent, folders=folders))
+        task = asyncio.create_task(complete(self.projects, self.owner, conversation_id, pack['block_id'], turn['id'], key, model, messages, path, agent, folders=folders,
+                                            summary_through=context_turns[-1]['id'] if context_turns else None))
         tasks[conversation_id] = task
         def done(finished):
             if tasks.get(conversation_id) is finished:

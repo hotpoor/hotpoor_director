@@ -93,7 +93,7 @@ def pdf_part(name, uri, path):
     return {'type': 'input_file', 'filename': name, 'file_data': uri} if path == '/v1/responses' else {'type': 'file', 'file': {'filename': name, 'file_data': uri}}
 
 
-async def prepare_messages(conn, messages, config, owner, conversation_id, path):
+async def prepare_messages(conn, messages, config, owner, conversation_id, path, enforce_limits=True):
     output = []
     total_bytes = 0
     total_text = 0
@@ -104,8 +104,8 @@ async def prepare_messages(conn, messages, config, owner, conversation_id, path)
             row = await file_for(conn, ref['id'], owner, conversation_id)
             body = row['body']
             total_bytes += body['size']
-            if total_bytes > MAX_BYTES:
-                raise HTTPError(400, reason='最近 20 轮附件合计超过 20 MB，请新建对话')
+            if enforce_limits and total_bytes > MAX_BYTES:
+                raise HTTPError(400, reason='本次附件合计超过 20 MB，请减少附件')
             if body['format'] == 'text':
                 text += '\n\n【附件：' + body['name'] + '】\n' + body['text']
             else:
@@ -119,8 +119,8 @@ async def prepare_messages(conn, messages, config, owner, conversation_id, path)
                 uri = 'data:' + body['mime'] + ';base64,' + base64.b64encode(raw).decode('ascii')
                 parts.append(image_part(uri, path) if body['format'] == 'image' else pdf_part(body['name'], uri, path))
         total_text += len(text)
-        if total_text > 120000:
-            raise HTTPError(400, reason='最近 20 轮文字和附件内容超过 120000 字符，请拆分文件或新建对话')
+        if enforce_limits and total_text > 120000:
+            raise HTTPError(400, reason='本次问题和附件内容超过 120000 字符，请拆分文件')
         content = [{'type': 'input_text' if path == '/v1/responses' else 'text', 'text': text}, *parts] if parts else text
         output.append({'role': message['role'], 'content': content})
     return output
