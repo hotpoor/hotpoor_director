@@ -647,3 +647,9 @@ Markdown 回答表格使用折叠的 1px 细边框、表头底色及单元格留
 AK 与模型改为可搜索 datalist。每次成功持久化请求同时保存 `last_credential_id`、`last_model` 和 `last_protocol`，重开对话恢复仍存在且启用的选择；失效 AK / 模型清空并提示重新选择。新对话在本机沿用最近选择，首次使用选择第一个可用组合。
 
 验证：277 项 Python 全量测试、26 项对话相关测试通过；真实 Electron / 隔离 PostgreSQL验证两行资料、contenteditable、自动 / 手动资料持久化、分类搜索、AK / 模型搜索、重开恢复、附件与跨包历史、桌面和窄屏阅读高度。候选与正式 HTTPS 各 107 项检查通过。发布 `0.16.1-director-editor` / 8642 后以原子资料合并修订为 `0.16.2-director-metadata` / 8643；保留 8642 worker，回滚 `/home/ubuntu/director-metadata-20260919/nginx-before-metadata.conf`。
+
+## 2026-09-19 · 对话资料即时保存与折叠设置
+
+移除标题 / 描述右侧的“保存信息”按钮；contenteditable 输入停止 250ms 或失焦即自动保存，分类变更立即保存，右侧仅保留归档操作。回复字号、历史轮次、每包轮次及保存配置收进“对话设置”，默认折叠并通过按钮展开 / 收起，释放回答阅读空间；入口与 AK、模型、接口操作保持在同一行。
+
+真实 Electron 验证默认折叠、展开 / 收起、自动保存及侧栏标题 / 描述同步；候选与正式 HTTPS 各 107 项检查通过。先发布 `xialiwei-api:0.16.3-director-autosave` / 8644，再以同行设置修订为 `xialiwei-api:0.16.4-director-inline-settings` / 8645；保留 8644 worker，回滚 `/home/ubuntu/director-inline-settings-20260919/nginx-before-inline-settings.conf`。

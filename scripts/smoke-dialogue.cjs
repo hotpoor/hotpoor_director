@@ -21,12 +21,19 @@ app.whenReady().then(async()=>{
   await wait("document.querySelector('#dialogue-model').value==='gpt-6-astra'");
   if(!await js("(()=>{const r=document.querySelector('#dialogue-mode').getBoundingClientRect();return r.width>=innerWidth-1&&r.height>=innerHeight-1&&r.left===0&&r.top===0})()"))throw Error('Dialogue is not full viewport');
   if(!await js("document.querySelector('#dialogue-transcript').clientHeight>=300"))throw Error('Desktop transcript too short '+await js("document.querySelector('#dialogue-transcript').clientHeight"));
+  if(!await js("document.querySelector('#dialogue-preferences-panel').hidden&&document.querySelector('#dialogue-toggle-preferences').getAttribute('aria-expanded')==='false'"))throw Error('Dialogue preferences are not collapsed by default');
+  if(!await js("document.querySelector('#dialogue-toggle-preferences').parentElement.classList.contains('dialogue-controls')"))throw Error('Dialogue settings button is not in the controls row');
+  await js("document.querySelector('#dialogue-toggle-preferences').click()");
+  if(!await js("!document.querySelector('#dialogue-preferences-panel').hidden&&document.querySelector('#dialogue-toggle-preferences').getAttribute('aria-expanded')==='true'"))throw Error('Dialogue preferences did not expand');
+  await js("document.querySelector('#dialogue-toggle-preferences').click()");
+  if(!await js("document.querySelector('#dialogue-preferences-panel').hidden"))throw Error('Dialogue preferences did not collapse');
   if(await js("[...document.querySelector('#dialogue-model-options').options].some(o=>o.value==='fixture-image')"))throw Error('Image advertised for dialogue');
   await js("document.querySelector('#dialogue-question').value='帮我构思一段开场';document.querySelector('#dialogue-compose').requestSubmit();");
   await wait("document.querySelector('.dialogue-answer')?.textContent.includes('模型 gpt-6-astra')");
   if(await js("Boolean(document.querySelector('#dialogue-transcript script'))"))throw Error('Unsafe HTML');
   await js("document.querySelector('#dialogue-key').value='second';document.querySelector('#dialogue-key').dispatchEvent(new Event('change'));document.querySelector('#dialogue-question').value='继续，换一个模型';document.querySelector('#dialogue-compose').requestSubmit();");
   await wait("[...document.querySelectorAll('.dialogue-answer')].some(n=>n.textContent.includes('模型 fixture-chat · 上下文 3'))");
+  await wait("!document.querySelector('#dialogue-send').disabled");
   if(!await js("[...document.querySelectorAll('.dialogue-context summary')].some(n=>n.textContent.includes('历史 1 轮')&&n.textContent.includes('3 条消息')&&n.textContent.includes('请求'))"))throw Error('Submission summary missing');
   await js("[...document.querySelectorAll('.dialogue-context')].at(-1).open=true");
   await wait("[...document.querySelectorAll('.dialogue-context-content')].at(-1).textContent.includes('帮我构思一段开场') && [...document.querySelectorAll('.dialogue-context-content')].at(-1).textContent.includes('回答：帮我构思一段开场')");
@@ -35,9 +42,9 @@ app.whenReady().then(async()=>{
   await js("document.querySelector('#new-dialogue-category').click()");await wait("document.querySelector('.director-message-dialog input')");
   await js("(()=>{const d=document.querySelector('.director-message-dialog');d.querySelector('input').value='研究资料';d.querySelector('form').requestSubmit()})()");
   await wait("[...document.querySelectorAll('.dialogue-list-heading strong')].some(n=>n.textContent==='研究资料')");
-  await js("document.querySelector('#dialogue-info').open=true;document.querySelector('#dialogue-title').textContent='中苏比较研究';document.querySelector('#dialogue-description').textContent='比较制度与经济结构';document.querySelector('#dialogue-save-metadata').click()");
-  await wait("document.querySelector('#dialogue-status').textContent.includes('信息已保存') && [...document.querySelectorAll('.dialogue-list-item strong')].some(n=>n.textContent==='中苏比较研究')");
-  if(!await js("(()=>{const rows=document.querySelectorAll('.dialogue-info-row');return rows.length===2&&rows[1].getBoundingClientRect().top>rows[0].getBoundingClientRect().top&&document.querySelector('#dialogue-category').list.id==='dialogue-category-options'&&document.querySelector('#dialogue-title').contentEditable==='true'&&document.querySelector('#dialogue-description').contentEditable==='true'})()"))throw Error('Metadata is not a two-row searchable layout');
+  await js("document.querySelector('#dialogue-title').focus();document.querySelector('#dialogue-title').textContent='中苏比较研究';document.querySelector('#dialogue-title').dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:'究'}));document.querySelector('#dialogue-description').focus();document.querySelector('#dialogue-description').textContent='比较制度与经济结构';document.querySelector('#dialogue-description').dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:'构'}));document.querySelector('#dialogue-description').blur()");
+  for(let n=0;n<600;n++){if(await js("document.querySelector('#dialogue-status').textContent.includes('信息已自动保存') && [...document.querySelectorAll('.dialogue-list-item strong')].some(n=>n.textContent==='中苏比较研究')"))break;if(n===599)throw Error('Automatic metadata save timeout');await new Promise(r=>setTimeout(r,50));}
+  if(!await js("(()=>{const rows=document.querySelectorAll('.dialogue-info-row');return rows.length===2&&rows[1].getBoundingClientRect().top>rows[0].getBoundingClientRect().top&&document.querySelector('#dialogue-category').list.id==='dialogue-category-options'&&document.querySelector('#dialogue-title').contentEditable==='true'&&document.querySelector('#dialogue-description').contentEditable==='true'&&!document.querySelector('#dialogue-save-metadata')})()"))throw Error('Metadata is not a two-row searchable layout');
   if(!await js("[...document.querySelectorAll('.dialogue-list-item small')].some(n=>n.textContent==='比较制度与经济结构')"))throw Error('Description not shown');
   await js("document.querySelector('.dialogue-rename-category').click()");await wait("document.querySelector('.director-message-dialog input')");
   await js("(()=>{const d=document.querySelector('.director-message-dialog');d.querySelector('input').value='历史研究';d.querySelector('form').requestSubmit()})()");

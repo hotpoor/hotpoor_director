@@ -89,3 +89,7 @@
 .dialogue-inline-edit:empty::before{content:attr(data-placeholder);color:#666;pointer-events:none}.dialogue-inline-edit:focus{border-bottom-color:#6d8fb2;background:#171717}.dialogue-inline-edit[aria-disabled=true]{opacity:.6;cursor:not-allowed}
 @media(max-width:760px){#dialogue-mode .dialogue-heading{min-height:44px;padding:5px 9px}#dialogue-mode .dialogue-heading small{display:none}#dialogue-mode .dialogue-sidebar{max-height:54px;padding:4px 7px}}
 @media(max-width:760px){#dialogue-mode .dialogue-main{padding:7px}}
+.dialogue-info-row+.dialogue-info-row{grid-template-columns:minmax(220px,1fr) auto}
+@media(max-width:760px){.dialogue-info-row+.dialogue-info-row{grid-template-columns:minmax(250px,1fr) auto}}
+#dialogue-toggle-preferences{align-self:flex-end;margin-top:0}
+#dialogue-preferences-panel[hidden]{display:none}
