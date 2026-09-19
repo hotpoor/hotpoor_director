@@ -20,8 +20,8 @@ app.whenReady().then(async()=>{
   await js(`(async()=>{await testApi('/api/setup',{login:'dialogue-ui',password:'dialogue-password-123'});await testApi('/api/login',{login:'dialogue-ui',password:'dialogue-password-123'});await directorStudio.enter(await testApi('/api/me'));document.querySelector('#open-dialogue').click();})()`);
   await wait("document.querySelector('#dialogue-model').value==='gpt-6-astra'");
   if(!await js("(()=>{const r=document.querySelector('#dialogue-mode').getBoundingClientRect();return r.width>=innerWidth-1&&r.height>=innerHeight-1&&r.left===0&&r.top===0})()"))throw Error('Dialogue is not full viewport');
-  if(!await js("document.querySelector('#dialogue-transcript').clientHeight>=300"))throw Error('Desktop transcript too short');
-  if(await js("[...document.querySelector('#dialogue-model').options].some(o=>o.value==='fixture-image')"))throw Error('Image advertised for dialogue');
+  if(!await js("document.querySelector('#dialogue-transcript').clientHeight>=300"))throw Error('Desktop transcript too short '+await js("document.querySelector('#dialogue-transcript').clientHeight"));
+  if(await js("[...document.querySelector('#dialogue-model-options').options].some(o=>o.value==='fixture-image')"))throw Error('Image advertised for dialogue');
   await js("document.querySelector('#dialogue-question').value='帮我构思一段开场';document.querySelector('#dialogue-compose').requestSubmit();");
   await wait("document.querySelector('.dialogue-answer')?.textContent.includes('模型 gpt-6-astra')");
   if(await js("Boolean(document.querySelector('#dialogue-transcript script'))"))throw Error('Unsafe HTML');
@@ -35,8 +35,9 @@ app.whenReady().then(async()=>{
   await js("document.querySelector('#new-dialogue-category').click()");await wait("document.querySelector('.director-message-dialog input')");
   await js("(()=>{const d=document.querySelector('.director-message-dialog');d.querySelector('input').value='研究资料';d.querySelector('form').requestSubmit()})()");
   await wait("[...document.querySelectorAll('.dialogue-list-heading strong')].some(n=>n.textContent==='研究资料')");
-  await js("document.querySelector('#dialogue-info').open=true;document.querySelector('#dialogue-title').value='中苏比较研究';document.querySelector('#dialogue-description').value='比较制度与经济结构';document.querySelector('#dialogue-save-metadata').click()");
+  await js("document.querySelector('#dialogue-info').open=true;document.querySelector('#dialogue-title').textContent='中苏比较研究';document.querySelector('#dialogue-description').textContent='比较制度与经济结构';document.querySelector('#dialogue-save-metadata').click()");
   await wait("document.querySelector('#dialogue-status').textContent.includes('信息已保存') && [...document.querySelectorAll('.dialogue-list-item strong')].some(n=>n.textContent==='中苏比较研究')");
+  if(!await js("(()=>{const rows=document.querySelectorAll('.dialogue-info-row');return rows.length===2&&rows[1].getBoundingClientRect().top>rows[0].getBoundingClientRect().top&&document.querySelector('#dialogue-category').list.id==='dialogue-category-options'&&document.querySelector('#dialogue-title').contentEditable==='true'&&document.querySelector('#dialogue-description').contentEditable==='true'})()"))throw Error('Metadata is not a two-row searchable layout');
   if(!await js("[...document.querySelectorAll('.dialogue-list-item small')].some(n=>n.textContent==='比较制度与经济结构')"))throw Error('Description not shown');
   await js("document.querySelector('.dialogue-rename-category').click()");await wait("document.querySelector('.director-message-dialog input')");
   await js("(()=>{const d=document.querySelector('.director-message-dialog');d.querySelector('input').value='历史研究';d.querySelector('form').requestSubmit()})()");
@@ -50,10 +51,12 @@ app.whenReady().then(async()=>{
   await js(`(async()=>{window.first=(await testApi('/api/dialogue/conversations/'+conversationId)).body;await testApi('/api/dialogue/conversations/'+conversationId,{request_id:first.turns[0].id,question:first.turns[0].question,credential_id:'first',model:'gpt-6-astra'});if((await testApi('/api/dialogue/conversations/'+conversationId)).body.turn_count!==2)throw Error('Duplicate charged');await testApi('/api/dialogue/conversations/'+conversationId,{request_id:crypto.randomUUID().replaceAll('-',''),question:'wrong model',credential_id:'second',model:'gpt-6-astra'},400);})();`);
   // Fill and cross a record-pack boundary through real HTTP and the real UUID-routed DB.
   await js(`(async()=>{for(let n=0;n<25;n++){const id=crypto.randomUUID().replaceAll('-','');await testApi('/api/dialogue/conversations/'+conversationId,{request_id:id,question:'第 '+n+' 次追问',credential_id:'second',model:'fixture-chat'});for(let p=0;p<100;p++){const r=await testApi('/api/dialogue/conversations/'+conversationId);if(!r.body.pending_id)break;await new Promise(resolve=>setTimeout(resolve,20));}}const r=await testApi('/api/dialogue/conversations/'+conversationId);if(r.body.turn_count!==27||!r.body.prev_id||r.body.turns.length!==2)throw Error('Pack rollover failed');const old=await testApi('/api/dialogue/conversations/'+conversationId+'?cursor='+r.body.prev_id);if(old.body.turns.length!==25||old.body.next_id!==r.body.pack_id)throw Error('Linked traversal failed');window.lastPack=r.body.pack_id;})();`);
-  await js("document.querySelector('#close-dialogue').click();document.querySelector('#open-dialogue').click();");
+  await wait("!document.querySelector('#close-dialogue').disabled");await js("document.querySelector('#close-dialogue').click();document.querySelector('#open-dialogue').click();");
   await wait("document.querySelector('#dialogue-list .dialogue-list-item')");
   await js("document.querySelector('#dialogue-list .dialogue-list-item').click()");
   await wait("document.querySelectorAll('.dialogue-turn').length===2");
+  if(!await js("document.querySelector('#dialogue-key').dataset.id==='second'&&document.querySelector('#dialogue-key').value==='讨论 AK'&&document.querySelector('#dialogue-model').value==='fixture-chat'"))throw Error('Previous key/model not restored');
+  if(!await js("document.querySelector('#dialogue-key').list.id==='dialogue-key-options'&&document.querySelector('#dialogue-model').list.id==='dialogue-model-options'"))throw Error('Searchable key/model inputs missing');
   await js("document.querySelector('#dialogue-older').click()");
   await wait("document.querySelectorAll('.dialogue-turn').length===27");
   fs.writeFileSync(path.join(directory,'dialogue.png'),(await win.webContents.capturePage()).toPNG());
@@ -62,7 +65,7 @@ app.whenReady().then(async()=>{
   const verify=spawnSync(path.join(root,'.venv/bin/python'),['tests/verify_dialogue_store.py',directory,origin],{cwd:root,env:{...process.env,DIRECTOR_DATA_DIR:directory},encoding:'utf8'});
   if(verify.status!==0)throw Error(verify.stderr+' '+verify.stdout);
   console.log(verify.stdout.trim());
-  await js("document.querySelector('#close-dialogue').click();document.querySelector('#open-dialogue').click();");
+  await wait("!document.querySelector('#close-dialogue').disabled");await js("document.querySelector('#close-dialogue').click();document.querySelector('#open-dialogue').click();");
   await wait("document.querySelector('#dialogue-list .dialogue-list-item')");await js("document.querySelector('#dialogue-list .dialogue-list-item').click()");
   await wait("!document.querySelector('#dialogue-acknowledge').hidden");
   await js("document.querySelector('#dialogue-acknowledge').click()");
@@ -81,7 +84,7 @@ app.whenReady().then(async()=>{
   await wait("document.querySelector('#dialogue-transcript').textContent.includes('附件类型 input_text,input_image,input_file')");
   if(!await js("document.querySelector('#dialogue-transcript').textContent.includes('文件里的导演提示')"))throw Error('Attachment text not sent');
   await js(`(async()=>{const r=await testApi('/api/dialogue/conversations/'+conversationId);window.attachmentId=r.body.turns.at(-1).attachments[0].id;const response=await fetch('/api/dialogue/files/'+attachmentId);if(!response.ok||(await response.text())!=='文件里的导演提示：雨夜开场')throw Error('Download mismatch');})();`);
-  await js("document.querySelector('#close-dialogue').click();document.querySelector('#open-dialogue').click();");
+  await wait("!document.querySelector('#close-dialogue').disabled");await js("document.querySelector('#close-dialogue').click();document.querySelector('#open-dialogue').click();");
   await wait("document.querySelector('#dialogue-list .dialogue-list-item')");await js("document.querySelector('#dialogue-list .dialogue-list-item').click()");
   await wait("document.querySelectorAll('.dialogue-turn-files a').length===3");
   await wait("document.querySelector('.dialogue-turn-files img')?.naturalWidth>0");
@@ -112,7 +115,7 @@ app.whenReady().then(async()=>{
   fs.writeFileSync(path.join(directory,'dialogue-files.png'),(await win.webContents.capturePage()).toPNG());
   win.setContentSize(640,860);await new Promise(r=>setTimeout(r,250));
   if(await js("document.querySelector('#dialogue-mode').scrollWidth>document.querySelector('#dialogue-mode').clientWidth"))throw Error('Mobile overflow');
-  if(!await js("(()=>{const d=document.querySelector('#dialogue-mode').getBoundingClientRect(),t=document.querySelector('#dialogue-transcript');return d.width>=innerWidth-1&&d.height>=innerHeight-1&&t.clientHeight>=220})()"))throw Error('Mobile full-screen transcript too short');
+  if(!await js("(()=>{const d=document.querySelector('#dialogue-mode').getBoundingClientRect(),t=document.querySelector('#dialogue-transcript');return d.width>=innerWidth-1&&d.height>=innerHeight-1&&t.clientHeight>=220})()"))throw Error('Mobile full-screen transcript too short '+await js("document.querySelector('#dialogue-transcript').clientHeight"));
   fs.writeFileSync(path.join(directory,'dialogue-narrow.png'),(await win.webContents.capturePage()).toPNG());
   console.log('Dialogue UI verified: model switch/context, safe markdown, UUID sharding, linked packs, deduplication, provider failure, interruption recovery, history reopen, narrow layout. Artifacts:',directory);
  }catch(e){failed=true;console.error(e);if(win){console.error(await win.webContents.executeJavaScript("document.querySelector('#dialogue-status')?.textContent"));fs.writeFileSync(path.join(directory,'failure.png'),(await win.webContents.capturePage()).toPNG());}}

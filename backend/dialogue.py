@@ -107,6 +107,13 @@ async def category_for(conn, category_id, owner):
     return row
 
 
+async def unique_category(conn, name, owner, exclude=None):
+    rows = await (await conn.scan("SELECT block_id FROM entities WHERE body->>'kind'='dialogue_category' AND body->>'owner_id'=%s AND body->>'name'=%s",
+                                  (owner, name))).fetchall()
+    if any(row['block_id'] != exclude for row in rows):
+        raise HTTPError(409, reason='已有同名对话分类')
+
+
 async def store(conn, conversation_id, body):
     return await (await conn.execute('UPDATE entities SET body=%s WHERE block_id=%s RETURNING *', (Jsonb(body), conversation_id), block_id=conversation_id)).fetchone()
 
@@ -246,6 +253,7 @@ class DialogueCategoriesHandler(PrivateHandler):
         category_id = uuid.uuid4().hex
         body = {'kind': 'dialogue_category', 'owner_id': self.owner, 'name': category_name(self.data().get('name'))}
         async with self.projects.connection() as conn:
+            await unique_category(conn, body['name'], self.owner)
             row = await (await conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s) RETURNING *',
                                              (category_id, Jsonb(body)), block_id=category_id)).fetchone()
         self.finish(row)
@@ -255,7 +263,9 @@ class DialogueCategoryHandler(PrivateHandler):
     async def post(self, category_id):
         async with self.projects.connection() as conn:
             row = await category_for(conn, category_id, self.owner)
-            row['body']['name'] = category_name(self.data().get('name'))
+            name = category_name(self.data().get('name'))
+            await unique_category(conn, name, self.owner, category_id)
+            row['body']['name'] = name
             row = await store(conn, category_id, row['body'])
         self.finish(row)
 
@@ -312,11 +322,12 @@ class DialogueHandler(PrivateHandler):
         if data.get('action') == 'metadata':
             metadata = conversation_metadata(data)
             async with self.projects.connection() as conn:
-                row = await row_for(conn, conversation_id, self.owner)
+                await row_for(conn, conversation_id, self.owner)
                 if metadata['category_id']:
                     await category_for(conn, metadata['category_id'], self.owner)
-                row['body'].update(metadata)
-                row = await store(conn, conversation_id, row['body'])
+                row = await (await conn.execute(
+                    "UPDATE entities SET body=body || %s WHERE block_id=%s AND body->>'kind'='dialogue' AND body->>'owner_id'=%s RETURNING *",
+                    (Jsonb(metadata), conversation_id, self.owner), block_id=conversation_id)).fetchone()
                 result = await view_row(conn, row, self.owner)
             self.finish(result)
             return
@@ -385,6 +396,9 @@ class DialogueHandler(PrivateHandler):
             body['turn_count'] += 1
             body['pending_id'] = turn['id']
             body['pending_started_at'] = turn['created_at']
+            body['last_credential_id'] = profile['id']
+            body['last_model'] = model
+            body['last_protocol'] = data.get('protocol', 'auto')
             if body['turn_count'] == 1 and body.get('title') == '新对话':
                 body['title'] = question[:60]
             row = await store(conn, conversation_id, body)

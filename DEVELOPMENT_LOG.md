@@ -639,3 +639,11 @@ LTX 安装跟进：用户开通访问后，官方权重 HEAD 请求返回 200；
 对话增加账号私有的分类实体，分类和对话分别使用独立 UUID 求余路由。侧栏支持创建和重命名分类，按分类显示对话；每个对话可编辑 120 字标题、1000 字描述及所属分类。归档状态持久化，普通列表隐藏归档对话，可切换归档列表并恢复。首轮问题仅在标题仍为“新对话”时自动命名，保留用户预先设置的标题。
 
 Markdown 回答表格使用折叠的 1px 细边框、表头底色及单元格留白，宽表格在回答区横向滚动。验证：277 项 Python 测试通过；真实 Electron / 隔离 PostgreSQL验证分类新建 / 改名、资料保存、描述列表、归档 / 恢复、历史重开、表格计算样式和窄屏。候选与正式 HTTPS 各 105 项检查通过，五个生产文件 SHA-256 与本地一致。发布 `xialiwei-api:0.16.0-director-library` / 8641，保留 8640 worker，回滚 `/home/ubuntu/director-library-20260919/nginx-before-library.conf`。本地客户端已重启。
+
+## 2026-09-19 · 文档式对话资料与可搜索模型选择
+
+对话标题和描述改为常驻两行的 `contenteditable` 行内编辑，无输入框外观；限制分别为 120 / 1000 字，粘贴转为纯文本，输入停止 700ms 或失焦后自动保存，仍保留手动保存。资料更新使用 PostgreSQL JSONB 原子合并，避免模型回答完成时互相覆盖 pending、记录包和最近模型字段。分类位于标题右侧，通过 datalist 点击候选或键入搜索；同账号分类名称唯一。
+
+AK 与模型改为可搜索 datalist。每次成功持久化请求同时保存 `last_credential_id`、`last_model` 和 `last_protocol`，重开对话恢复仍存在且启用的选择；失效 AK / 模型清空并提示重新选择。新对话在本机沿用最近选择，首次使用选择第一个可用组合。
+
+验证：277 项 Python 全量测试、26 项对话相关测试通过；真实 Electron / 隔离 PostgreSQL验证两行资料、contenteditable、自动 / 手动资料持久化、分类搜索、AK / 模型搜索、重开恢复、附件与跨包历史、桌面和窄屏阅读高度。候选与正式 HTTPS 各 107 项检查通过。发布 `0.16.1-director-editor` / 8642 后以原子资料合并修订为 `0.16.2-director-metadata` / 8643；保留 8642 worker，回滚 `/home/ubuntu/director-metadata-20260919/nginx-before-metadata.conf`。
