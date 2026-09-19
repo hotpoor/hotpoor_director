@@ -52,9 +52,9 @@ def test_responses_extracts_only_assistant_output_not_reasoning():
     with pytest.raises(ProviderError): answer(result, '/v1/responses')
 
 
-def test_failed_turns_are_not_sent_as_context():
+def test_failed_turns_are_sent_as_context():
     turns = [{'question': 'q', 'answer': 'a', 'status': 'completed'}, {'question': 'retry', 'status': 'failed'}]
-    assert history(turns) == [{'role': 'user', 'content': 'q'}, {'role': 'assistant', 'content': 'a'}]
+    assert history(turns) == [{'role': 'user', 'content': 'q'}, {'role': 'assistant', 'content': 'a'}, {'role': 'user', 'content': 'retry'}, {'role': 'assistant', 'content': '本轮未完成，未生成回答。'}]
 
 
 @pytest.mark.parametrize('data', [{'question': ''}, {'question': 'q', 'request_id': 'bad'}, {'question': 'q'*20001, 'request_id': 'a'*32}])
@@ -108,3 +108,36 @@ def test_dialogue_names_and_metadata_validation():
         {'title': 'ok', 'category_id': 'bad'}, {'title': 'ok', 'archived': 1},
     ]:
         with pytest.raises(HTTPError): conversation_metadata(value)
+
+
+def test_tool_continuation_keeps_full_context_without_server_response_id():
+    from backend.dialogue import tool_continuation
+    context = [{'role': 'user', 'content': 'check'},
+               {'type': 'reasoning', 'encrypted_content': 'opaque'},
+               {'type': 'function_call', 'call_id': 'call_1', 'name': 'run_command', 'arguments': '{}'}]
+    turn = {'agent_context': context, 'provider_response_id': 'expired'}
+    messages, previous = tool_continuation(turn, {'call_id': 'call_1'}, 'done')
+    assert previous is None
+    assert messages[:-1] == context
+    assert len(context) == 3
+    assert messages[-1]['call_id'] == 'call_1'
+    body = request_body('gpt-6-astra', messages, '/v1/responses', True, previous)
+    assert 'previous_response_id' not in body
+    assert body['parallel_tool_calls'] is False
+    assert body['include'] == ['reasoning.encrypted_content']
+
+
+def test_failed_command_results_survive_followup():
+    messages = history([{'question': 'research', 'status': 'failed', 'error': 'reason 缺失',
+                         'tool_calls': [{'argv': ['mkdir', '资料'], 'cwd': '/tmp', 'status': 'completed',
+                                         'result': {'exit_code': 0, 'stdout': 'done'}}]}])
+    assert 'mkdir' in messages[1]['content']
+    assert 'done' in messages[1]['content']
+    assert 'reason 缺失' in messages[1]['content']
+    assert history([{'question': 'pending', 'status': 'running'}]) == []
+
+
+def test_command_error_identifies_field_without_echoing_content():
+    with pytest.raises(ProviderError, match=r'argv\[1\].*8193'):
+        function_call({'output': [{'type': 'function_call', 'name': 'run_command',
+                                  'arguments': __import__('json').dumps({'argv': ['python', 'x'*8193], 'cwd': '/tmp', 'reason': 'test'})}]})

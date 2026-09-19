@@ -44,10 +44,17 @@ def request_body(model, messages, path, agent=False, previous_response_id=None, 
     if agent:
         if path != '/v1/responses':
             raise HTTPError(400, reason='代理模式需要使用 Responses 接口')
-        body.update(tools=[command_tool(allowed_paths)], tool_choice='auto')
+        body.update(tools=[command_tool(allowed_paths)], tool_choice='auto', parallel_tool_calls=False,
+                    include=['reasoning.encrypted_content'])
         if previous_response_id:
             body['previous_response_id'] = previous_response_id
     return body
+
+
+def tool_continuation(turn, call, output):
+    context = turn.get('agent_context') or []
+    return ([*context, {'type': 'function_call_output', 'call_id': call['call_id'], 'output': output}],
+            None if context else turn.get('provider_response_id'))
 
 
 def answer(result, path):
@@ -72,11 +79,26 @@ def function_call(result):
                 arguments = json.loads(item.get('arguments') or '{}')
             except (TypeError, ValueError):
                 raise inference.ProviderError('模型返回的命令参数无法识别') from None
+            if not isinstance(arguments, dict):
+                raise inference.ProviderError('命令未执行：参数必须是 JSON 对象')
             argv, cwd, reason = arguments.get('argv'), arguments.get('cwd', '.'), arguments.get('reason')
-            if (not isinstance(argv, list) or not 1 <= len(argv) <= 128 or
-                    any(not isinstance(value, str) or not value or len(value) > 8192 for value in argv) or
-                    not isinstance(cwd, str) or len(cwd) > 2048 or not isinstance(reason, str) or not reason.strip()):
-                raise inference.ProviderError('模型返回的命令参数不安全或不完整')
+            issue = None
+            if not isinstance(argv, list) or not 1 <= len(argv) <= 128:
+                issue = 'argv 必须是包含 1–128 项的数组'
+            else:
+                for index, value in enumerate(argv):
+                    if not isinstance(value, str) or not value:
+                        issue = f'argv[{index}] 必须是非空字符串'
+                        break
+                    if len(value) > 8192:
+                        issue = f'argv[{index}] 长度 {len(value)} 字符，超过 8192 上限；请拆分脚本'
+                        break
+            if not issue and (not isinstance(cwd, str) or len(cwd) > 2048):
+                issue = 'cwd 必须是长度不超过 2048 字符的字符串'
+            if not issue and (not isinstance(reason, str) or not reason.strip()):
+                issue = 'reason 缺失或为空'
+            if issue:
+                raise inference.ProviderError('命令未执行：' + issue)
             return {'id': uuid.uuid4().hex, 'call_id': item.get('call_id') or item.get('id'),
                     'name': 'run_command', 'argv': argv, 'cwd': cwd or '.', 'reason': reason.strip(),
                     'status': 'approval_required', 'created_at': int(time.time() * 1000)}
@@ -86,8 +108,23 @@ def function_call(result):
 def history(turns):
     messages = []
     for turn in turns:
-        if turn['status'] == 'completed':
-            messages.extend([{'role': 'user', 'content': turn['question'], **({'attachments': turn['attachments']} if turn.get('attachments') else {})}, {'role': 'assistant', 'content': turn['answer']}])
+        if turn.get('status') not in ('completed', 'failed', 'interrupted'):
+            continue
+        messages.append({'role': 'user', 'content': turn['question'],
+                         **({'attachments': turn['attachments']} if turn.get('attachments') else {})})
+        parts = []
+        if turn.get('answer'):
+            parts.append(turn['answer'])
+        for call in turn.get('tool_calls', []):
+            result = json.dumps(call.get('result', {}), ensure_ascii=False)
+            if len(result) > 12000:
+                result = result[:12000] + '\n[历史命令输出已截断]'
+            parts.append('命令记录（已执行的命令不要因续问而自动重复）：' + json.dumps({
+                'argv': call.get('argv'), 'cwd': call.get('cwd'), 'status': call.get('status')}, ensure_ascii=False)
+                         + '\n结果：' + result)
+        if turn.get('error'):
+            parts.append('本轮未完成，原因：' + turn['error'])
+        messages.append({'role': 'assistant', 'content': '\n\n'.join(parts) or '本轮未完成，未生成回答。'})
     return messages
 
 
@@ -180,7 +217,7 @@ async def recent_turns(conn, body, owner, conversation_id):
     pack_id = body.get('last_id')
     while pack_id and len(turns) < limit:
         pack = await pack_for(conn, pack_id, owner, conversation_id)
-        turns = [t for t in pack['body']['turns'] if t['status'] == 'completed'] + turns
+        turns = [t for t in pack['body']['turns'] if t['status'] in ('completed', 'failed', 'interrupted')] + turns
         pack_id = pack['body'].get('prev_id')
     return turns[-limit:]
 
@@ -243,11 +280,15 @@ async def complete(pool, owner, conversation_id, pack_id, turn_id, key, model, m
         call = function_call(result) if agent else None
         if call:
             patch.update(status='awaiting_tool', tool_calls=[call], usage=result.get('usage'),
-                         provider_response_id=result.get('id'), provider_request_id=result.get('_request_id'))
+                         provider_response_id=result.get('id'), provider_request_id=result.get('_request_id'),
+                         agent_context=[*messages, *result.get('output', [])])
         else:
             patch.update(answer=answer(result, path), usage=result.get('usage'), provider_request_id=result.get('_request_id'))
     except inference.ProviderError as error:
-        patch = {'status': 'failed', 'error': str(error)}
+        detail = ('命令已执行，但模型续接失败（400）；不会重复执行命令。'
+                  if agent and error.code == 400 and any(m.get('type') == 'function_call_output' for m in messages)
+                  else str(error))
+        patch = {'status': 'failed', 'error': detail}
     except asyncio.CancelledError:
         patch = {'status': 'interrupted', 'error': '服务已停止；请求可能已受理，不会自动重发'}
     except Exception:
@@ -367,7 +408,8 @@ class DialogueHandler(PrivateHandler):
                 if not call:
                     raise HTTPError(409, reason='命令已处理或不存在')
                 previous_response_id = turn.get('provider_response_id')
-                if not previous_response_id:
+                agent_context = turn.get('agent_context')
+                if not previous_response_id and not agent_context:
                     raise HTTPError(409, reason='服务未返回可继续的响应 ID，无法提交命令结果')
                 call.update(status='completed' if output.get('approved', True) else 'rejected',
                             result=output, finished_at=int(time.time() * 1000))
@@ -382,7 +424,7 @@ class DialogueHandler(PrivateHandler):
                     raise HTTPError(400, reason='本轮使用的 AK 已不存在或被停用')
                 key_value = profile['api_key']
             tool_output = encoded if output.get('approved', True) else 'User rejected this command. Do not retry it without a materially different reason.'
-            messages = [{'type': 'function_call_output', 'call_id': call['call_id'], 'output': tool_output}]
+            messages, previous_response_id = tool_continuation(turn, call, tool_output)
             task = asyncio.create_task(complete(self.projects, self.owner, conversation_id, pack['block_id'],
                                                 turn['id'], key_value, model, messages, path, True,
                                                 previous_response_id, folders))

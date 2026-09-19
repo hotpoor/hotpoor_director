@@ -1,3 +1,4 @@
+const {createCommandOutput}=require('./command-output.cjs');
 const {app, BrowserWindow, nativeTheme, ipcMain, shell, dialog, safeStorage} = require('electron');
 const {spawn} = require('node:child_process');
 const path = require('node:path');
@@ -63,8 +64,14 @@ else app.whenReady().then(async () => {
       if (url.protocol !== 'https:' || url.username || url.password || !url.pathname.endsWith('/authorize') || !/^[A-F0-9]{8}$/.test(url.searchParams.get('code') || '')) throw Error('Invalid authorization URL');
       await shell.openExternal(url.href);
     });
+    const activeCommands=new Map();
+    ipcMain.handle('director:stop-command',(event,id)=>{
+      if(event.sender!==window.webContents||event.senderFrame?.url!==origin+'/')throw Error('Invalid sender');
+      const stop=activeCommands.get(id);if(!stop)return false;stop();return true;
+    });
     ipcMain.handle('director:run-command', async (event, request) => {
       if (event.sender !== window.webContents || event.senderFrame?.url !== origin + '/') throw Error('Invalid sender');
+      if(typeof request?.executionId!=='string'||! /^[a-f0-9-]{36}$/.test(request.executionId)||activeCommands.has(request.executionId))throw Error('执行标识不正确');
       const argv=request?.argv,cwdValue=request?.cwd||'.';
       if(!Array.isArray(argv)||!argv.length||argv.length>128||argv.some(value=>typeof value!=='string'||!value||value.length>8192))throw Error('命令参数不正确');
       if(typeof cwdValue!=='string'||cwdValue.length>2048)throw Error('工作目录不正确');
@@ -76,12 +83,17 @@ else app.whenReady().then(async () => {
       if(resolved.names.length){const decision=await dialog.showMessageBox(window,{type:'question',title:'允许使用凭据',message:'此命令申请使用：'+resolved.names.join('、'),detail:'工作目录：'+cwd+'\n命令：'+JSON.stringify(argv)+'\n密码将注入命令环境变量，命令本身可以读取该密码。',buttons:['取消','允许本次使用'],defaultId:0,cancelId:0});if(decision.response!==1)throw Error('已取消凭据使用');}
       const startedAt=Date.now();
       return await new Promise(resolve=>{
-        let stdout='',stderr='',finished=false,timedOut=false,truncated=false;
-        const child=spawn(resolved.argv[0],resolved.argv.slice(1),{cwd,windowsHide:true,shell:false,stdio:['ignore','pipe','pipe'],env:{...process.env,...resolved.env,TERM:'dumb',NO_COLOR:'1'}});
-        const append=(name,data)=>{const value=data.toString('utf8'),limit=1024*1024;let current=name==='stdout'?stdout:stderr;if(current.length<limit)current+=value.slice(0,limit-current.length);if(value.length>limit-current.length)truncated=true;if(name==='stdout')stdout=current;else stderr=current;};
+        let finished=false,timedOut=false,cancelled=false,publishTimer=null,killTimer=null;
+        const capture=createCommandOutput(resolved.secrets);
+        const publish=()=>{publishTimer=null;if(!event.sender.isDestroyed())event.sender.send('director:command-output',{executionId:request.executionId,...capture.snapshot()});};
+        const child=spawn(resolved.argv[0],resolved.argv.slice(1),{cwd,detached:process.platform!=='win32',windowsHide:true,shell:false,stdio:['ignore','pipe','pipe'],env:{...process.env,...resolved.env,TERM:'dumb',NO_COLOR:'1'}});
+        const append=(name,data)=>{capture.append(name,data);if(!publishTimer)publishTimer=setTimeout(publish,100);};
         child.stdout.on('data',data=>append('stdout',data));child.stderr.on('data',data=>append('stderr',data));
-        const timer=setTimeout(()=>{timedOut=true;child.kill('SIGTERM');setTimeout(()=>{if(!finished)child.kill('SIGKILL');},2000).unref();},120000);
-        const done=(code,signal,error)=>{if(finished)return;finished=true;clearTimeout(timer);resolve({exit_code:Number.isInteger(code)?code:null,signal:signal||null,stdout:resolved.redact(stdout),stderr:resolved.redact(stderr),error:error?resolved.redact(error.message):null,timed_out:timedOut,truncated,duration_ms:Date.now()-startedAt,cwd});};
+        const signalTree=signal=>{if(!child.pid)return;try{if(process.platform==='win32')child.kill(signal);else process.kill(-child.pid,signal);}catch(error){if(error.code!=='ESRCH')throw error;}};
+        const stop=()=>{if(finished||cancelled)return;cancelled=true;signalTree('SIGINT');killTimer=setTimeout(()=>{if(!finished)signalTree('SIGKILL');},3000);};
+        activeCommands.set(request.executionId,stop);publish();
+        const timer=setTimeout(()=>{timedOut=true;signalTree('SIGTERM');killTimer=setTimeout(()=>{if(!finished)signalTree('SIGKILL');},2000);},120000);
+        const done=(code,signal,error)=>{if(finished)return;finished=true;activeCommands.delete(request.executionId);clearTimeout(killTimer);clearTimeout(timer);clearTimeout(publishTimer);capture.finish();publish();resolve({exit_code:Number.isInteger(code)?code:null,signal:signal||null,...capture.snapshot(),error:error?resolved.redact(error.message):cancelled?'用户已停止命令':null,cancelled,timed_out:timedOut,duration_ms:Date.now()-startedAt,cwd});};
         child.once('error',error=>done(null,null,error));child.once('close',(code,signal)=>done(code,signal));
       });
     });
