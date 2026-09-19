@@ -346,7 +346,8 @@ class AssetHandler(PrivateHandler):
 
 def workspace_routes():
     from backend.dialogue_files import DialogueUploadHandler, DialogueFileHandler
-    from backend.dialogue import DialogueModelsHandler, DialoguesHandler, DialogueHandler
+    from backend.dialogue import (DialogueModelsHandler, DialoguesHandler, DialogueHandler,
+                                  DialogueCategoriesHandler, DialogueCategoryHandler)
     from backend.editing import handler_class
     EditingHandler = handler_class()
     from backend.management import ManagementSettingsHandler, ManagementTestHandler, ManagementReportHandler
@@ -359,6 +360,8 @@ def workspace_routes():
         (r'/api/dialogue/conversations/([0-9a-f]{32})/files', DialogueUploadHandler),
         (r'/api/dialogue/files/([0-9a-f]{32})', DialogueFileHandler),
         (r'/api/dialogue/models', DialogueModelsHandler),
+        (r'/api/dialogue/categories', DialogueCategoriesHandler),
+        (r'/api/dialogue/categories/([0-9a-f]{32})', DialogueCategoryHandler),
         (r'/api/dialogue/conversations', DialoguesHandler),
         (r'/api/dialogue/conversations/([0-9a-f]{32})', DialogueHandler),
         (r'/api/projects/([0-9a-f]{32})/chats', CreateChatHandler),

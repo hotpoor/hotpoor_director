@@ -71,10 +71,39 @@ def dialogue_options(data):
     return result
 
 
+def category_name(value):
+    if not isinstance(value, str) or not 1 <= len(value.strip()) <= 60:
+        raise HTTPError(400, reason='分类名称需为 1–60 个字符')
+    return value.strip()
+
+
+def conversation_metadata(data):
+    title, description = data.get('title'), data.get('description', '')
+    category_id, archived = data.get('category_id'), data.get('archived', False)
+    if not isinstance(title, str) or not 1 <= len(title.strip()) <= 120:
+        raise HTTPError(400, reason='对话标题需为 1–120 个字符')
+    if not isinstance(description, str) or len(description) > 1000:
+        raise HTTPError(400, reason='对话描述最多 1000 个字符')
+    if category_id not in (None, '') and (not isinstance(category_id, str) or not ID.fullmatch(category_id)):
+        raise HTTPError(400, reason='对话分类 ID 不正确')
+    if type(archived) is not bool:
+        raise HTTPError(400, reason='归档状态不正确')
+    return {'title': title.strip(), 'description': description.strip(),
+            'category_id': category_id or None, 'archived': archived}
+
+
 async def row_for(conn, conversation_id, owner):
     row = await (await conn.execute("SELECT * FROM entities WHERE block_id=%s AND body->>'kind'='dialogue' AND body->>'owner_id'=%s", (conversation_id, owner), block_id=conversation_id)).fetchone()
     if not row:
         raise HTTPError(404, reason='对话不存在或无权访问')
+    return row
+
+
+async def category_for(conn, category_id, owner):
+    row = await (await conn.execute("SELECT * FROM entities WHERE block_id=%s AND body->>'kind'='dialogue_category' AND body->>'owner_id'=%s",
+                                    (category_id, owner), block_id=category_id)).fetchone()
+    if not row:
+        raise HTTPError(404, reason='对话分类不存在或无权访问')
     return row
 
 
@@ -199,14 +228,36 @@ class DialoguesHandler(PrivateHandler):
     async def get(self):
         async with self.projects.connection() as conn:
             rows = await (await conn.scan("SELECT block_id, body - 'turns' AS body, createtime, updatetime FROM entities WHERE body->>'kind'='dialogue' AND body->>'owner_id'=%s ORDER BY updatetime DESC", (self.owner,), order_by='updatetime')).fetchall()
-        self.finish({'conversations': rows})
+            categories = await (await conn.scan("SELECT block_id, body, createtime, updatetime FROM entities WHERE body->>'kind'='dialogue_category' AND body->>'owner_id'=%s ORDER BY createtime", (self.owner,), order_by='createtime')).fetchall()
+        self.finish({'conversations': rows, 'categories': categories})
 
     async def post(self):
         conversation_id = uuid.uuid4().hex
-        body = {'kind': 'dialogue', 'owner_id': self.owner, 'title': '新对话', 'first_id': None, 'last_id': None, 'turn_count': 0, 'pending_id': None, **dialogue_options(self.data())}
+        body = {'kind': 'dialogue', 'owner_id': self.owner, 'title': '新对话', 'description': '',
+                'category_id': None, 'archived': False, 'first_id': None, 'last_id': None,
+                'turn_count': 0, 'pending_id': None, **dialogue_options(self.data())}
         async with self.projects.connection() as conn:
             row = await (await conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s) RETURNING *', (conversation_id, Jsonb(body)), block_id=conversation_id)).fetchone()
         self.finish({**row, 'body': {**row['body'], 'turns': [], 'pack_id': None, 'prev_id': None, 'next_id': None}})
+
+
+class DialogueCategoriesHandler(PrivateHandler):
+    async def post(self):
+        category_id = uuid.uuid4().hex
+        body = {'kind': 'dialogue_category', 'owner_id': self.owner, 'name': category_name(self.data().get('name'))}
+        async with self.projects.connection() as conn:
+            row = await (await conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s) RETURNING *',
+                                             (category_id, Jsonb(body)), block_id=category_id)).fetchone()
+        self.finish(row)
+
+
+class DialogueCategoryHandler(PrivateHandler):
+    async def post(self, category_id):
+        async with self.projects.connection() as conn:
+            row = await category_for(conn, category_id, self.owner)
+            row['body']['name'] = category_name(self.data().get('name'))
+            row = await store(conn, category_id, row['body'])
+        self.finish(row)
 
 
 class DialogueHandler(PrivateHandler):
@@ -254,6 +305,17 @@ class DialogueHandler(PrivateHandler):
                 if row['body'].get('pending_id'):
                     raise HTTPError(409, reason='请等待当前回答完成后修改配置')
                 row['body'].update(options)
+                row = await store(conn, conversation_id, row['body'])
+                result = await view_row(conn, row, self.owner)
+            self.finish(result)
+            return
+        if data.get('action') == 'metadata':
+            metadata = conversation_metadata(data)
+            async with self.projects.connection() as conn:
+                row = await row_for(conn, conversation_id, self.owner)
+                if metadata['category_id']:
+                    await category_for(conn, metadata['category_id'], self.owner)
+                row['body'].update(metadata)
                 row = await store(conn, conversation_id, row['body'])
                 result = await view_row(conn, row, self.owner)
             self.finish(result)
@@ -323,7 +385,7 @@ class DialogueHandler(PrivateHandler):
             body['turn_count'] += 1
             body['pending_id'] = turn['id']
             body['pending_started_at'] = turn['created_at']
-            if body['turn_count'] == 1:
+            if body['turn_count'] == 1 and body.get('title') == '新对话':
                 body['title'] = question[:60]
             row = await store(conn, conversation_id, body)
             result = await view_row(conn, row, self.owner)

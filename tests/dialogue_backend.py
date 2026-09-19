@@ -12,7 +12,7 @@ from backend.__main__ import main
 from backend import dialogue
 from types import SimpleNamespace
 import itertools, uuid
-ids = itertools.count(200)
+ids = itertools.chain(iter([200, 201, 204, 202]), itertools.count(205))
 dialogue.uuid = SimpleNamespace(uuid4=lambda: uuid.UUID(int=next(ids)))
 
 config = load_config()
@@ -44,7 +44,7 @@ async def fake_api(key, path, data=None):
         content = '\n'.join(part['text'] for part in content if part['type'] in ('text', 'input_text'))
     if content == 'FAIL':
         raise inference.ProviderError('service-inference：余额不足（402）', 402)
-    text = f"回答：{content} · 模型 {data['model']} · 上下文 {len(messages)}\n\n<script>alert('unsafe')</script> **已保存** · 附件类型 {','.join(kinds)} · 历史附件类型 {','.join(history_kinds)}"
+    text = f"回答：{content} · 模型 {data['model']} · 上下文 {len(messages)}\n\n<script>alert('unsafe')</script> **已保存**\n\n| 项目 | 内容 |\n| --- | --- |\n| 上下文 | 可追溯 |\n\n附件类型 {','.join(kinds)} · 历史附件类型 {','.join(history_kinds)}"
     if path == '/v1/responses':
         return {'status': 'completed', 'output': [{'type': 'message', 'role': 'assistant', 'content': [{'type': 'output_text', 'text': text}]}], 'usage': {'input_tokens': 10, 'output_tokens': 20}}
     return {'choices': [{'message': {'content': text}, 'finish_reason': 'stop'}], 'usage': {'prompt_tokens': 10, 'completion_tokens': 20}}

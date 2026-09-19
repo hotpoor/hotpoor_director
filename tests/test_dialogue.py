@@ -60,3 +60,18 @@ def test_submission_stats_reports_exact_request_size_and_content_totals():
                       'attachment_bytes': 579,
                       'request_bytes': len(json.dumps(request_body('fixture-chat', prepared, '/v1/chat/completions'),
                                                       ensure_ascii=False, separators=(',', ':')).encode())}
+
+
+def test_dialogue_names_and_metadata_validation():
+    from backend.dialogue import category_name, conversation_metadata
+    assert category_name('  研究  ') == '研究'
+    assert conversation_metadata({'title': ' 标题 ', 'description': ' 说明 ', 'category_id': None,
+                                  'archived': True}) == {
+        'title': '标题', 'description': '说明', 'category_id': None, 'archived': True}
+    for value in ['', 'x' * 61, None]:
+        with pytest.raises(HTTPError): category_name(value)
+    for value in [
+        {'title': ''}, {'title': 'x' * 121}, {'title': 'ok', 'description': 'x' * 1001},
+        {'title': 'ok', 'category_id': 'bad'}, {'title': 'ok', 'archived': 1},
+    ]:
+        with pytest.raises(HTTPError): conversation_metadata(value)

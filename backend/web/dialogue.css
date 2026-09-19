@@ -48,3 +48,19 @@
   #dialogue-mode .dialogue-attachment-tools{flex-wrap:nowrap}
   #dialogue-mode .dialogue-attachment-tools small{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 }
+
+#dialogue-info{flex:none;margin:0 0 8px;border:1px solid #333;border-radius:7px;background:#111}
+#dialogue-info>summary{cursor:pointer;padding:7px 10px;color:#b9cce0;font-size:12px}
+.dialogue-info-fields{display:grid;grid-template-columns:minmax(180px,1fr) 180px auto auto;gap:8px;align-items:end;padding:0 10px 10px}
+#dialogue-mode .dialogue-info-fields label{display:grid;margin:0;gap:3px}.dialogue-info-fields label:nth-child(3){grid-column:1/-1}
+#dialogue-mode .dialogue-info-fields textarea{min-height:52px;max-height:90px}
+.dialogue-sidebar-actions{display:grid;grid-template-columns:1fr auto;gap:7px}.dialogue-sidebar-actions #new-dialogue{grid-column:1/-1;width:100%}
+#dialogue-list{display:grid;gap:14px}.dialogue-list-group{display:grid;gap:6px}.dialogue-list-heading{display:flex;align-items:center;justify-content:space-between;gap:7px;color:#999;font-size:11px}.dialogue-list-heading strong{overflow-wrap:anywhere}.dialogue-list-heading button{padding:3px 6px;font-size:10px}
+#dialogue-list .dialogue-list-item{display:grid;text-align:left;gap:4px;width:100%;white-space:normal;overflow-wrap:anywhere}.dialogue-list-item strong{font-size:12px}.dialogue-list-item small{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:#888}
+.dialogue-answer{overflow-x:auto}.dialogue-answer table{display:table;width:max-content;min-width:100%;border-collapse:collapse;margin:10px 0}.dialogue-answer th,.dialogue-answer td{border:1px solid #4a4a4a;padding:8px 10px;text-align:left;vertical-align:top}.dialogue-answer th{background:#1d1d1d;color:#eee}
+@media(max-width:760px){
+  #dialogue-mode .dialogue-sidebar{display:flex;align-items:stretch;max-height:66px}
+  .dialogue-sidebar-actions{display:flex;flex:none}.dialogue-sidebar-actions #new-dialogue{width:auto}.dialogue-sidebar-actions button{white-space:nowrap}
+  #dialogue-list{display:flex;gap:8px;margin:0;overflow:auto}.dialogue-list-group{display:flex;gap:6px;align-items:stretch}.dialogue-list-heading{min-width:max-content}.dialogue-list-heading .dialogue-rename-category{display:none}#dialogue-list .dialogue-list-item{min-width:150px;max-width:210px}
+  #dialogue-info{margin-bottom:5px}.dialogue-info-fields{grid-template-columns:1fr 1fr}.dialogue-info-fields label:nth-child(3){grid-column:1/-1}.dialogue-info-fields button{font-size:11px;padding:7px}
+}
