@@ -157,8 +157,8 @@
   }
   function directoryView(response,turnId){
     const headings=[...response.querySelectorAll('h1,h2,h3,h4,h5,h6')];if(!headings.length)return null;
-    const details=document.createElement('details'),summary=document.createElement('summary'),list=document.createElement('ol'),key=turnKey(turnId);details.className='dialogue-directory';details.open=openDirectories.has(key);summary.textContent='标题目录 · '+headings.length;
-    headings.forEach((heading,index)=>{heading.id='dialogue-heading-'+turnId+'-'+index;const item=document.createElement('li'),link=document.createElement('a');item.style.setProperty('--directory-depth',String(Number(heading.tagName.slice(1))-1));link.href='#'+heading.id;link.textContent=heading.textContent;link.onclick=event=>{event.preventDefault();heading.scrollIntoView({behavior:'smooth',block:'nearest'});};item.append(link);list.append(item);});
+    const details=document.createElement('details'),summary=document.createElement('summary'),list=document.createElement('nav'),key=turnKey(turnId);details.className='dialogue-directory';details.open=openDirectories.has(key);details.title='标题目录 · '+headings.length;summary.textContent='标题目录 · '+headings.length;list.className='dialogue-directory-links';list.setAttribute('aria-label','回答标题目录');
+    headings.forEach((heading,index)=>{heading.id='dialogue-heading-'+turnId+'-'+index;const link=document.createElement('a');link.style.setProperty('--directory-depth',String(Number(heading.tagName.slice(1))-1));link.href='#'+heading.id;link.textContent=heading.textContent;link.onclick=event=>{event.preventDefault();heading.scrollIntoView({behavior:'smooth',block:'center'});heading.classList.remove('dialogue-heading-target');requestAnimationFrame(()=>heading.classList.add('dialogue-heading-target'));setTimeout(()=>heading.classList.remove('dialogue-heading-target'),1200);};list.append(link);});
     details.ontoggle=()=>{if(details.open)openDirectories.add(key);else openDirectories.delete(key);localStorage.setItem('dialogue-open-directories',JSON.stringify([...openDirectories]));};details.append(summary,list);return details;
   }
   function render(){

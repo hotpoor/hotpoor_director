@@ -64,7 +64,12 @@ app.whenReady().then(async()=>{
   if(!await js("(()=>{const cell=document.querySelector('.dialogue-answer td');return cell&&getComputedStyle(cell).borderTopWidth==='1px'})()"))throw Error('Markdown table borders missing');
   if(!await js("(()=>{const w=document.querySelector('.dialogue-table-scroll');return w&&getComputedStyle(w).overflowX==='auto'&&w.querySelector('table')})()"))throw Error('Markdown table has no independent horizontal scroller');
   if(!await js("(()=>{const d=document.querySelector('.dialogue-directory'),a=document.querySelector('.dialogue-answer'),c=document.querySelector('.dialogue-answer-content'),s=getComputedStyle(a);return d?.parentElement===a&&c?.parentElement===a&&d.querySelector('summary')?.textContent.includes('标题目录')&&d.querySelector('a')&&s.display==='grid'&&s.gridTemplateColumns.split(' ').length>1})()"))throw Error('Markdown heading directory is not split beside the answer content');
+  if(!await js("document.querySelector('.dialogue-directory').getBoundingClientRect().width<60"))throw Error('Closed Markdown directory does not fit its icon');
   await js("document.querySelector('.dialogue-directory').open=true");
+  await wait("document.querySelector('.dialogue-directory').getBoundingClientRect().width>=180");
+  if(!await js("!document.querySelector('.dialogue-directory ol,.dialogue-directory li')&&document.querySelectorAll('.dialogue-directory-links>a').length>0"))throw Error('Markdown directory added synthetic list numbering');
+  await js("[...document.querySelectorAll('.dialogue-directory-links>a')].at(-1).click()");
+  await wait("document.querySelector('.dialogue-heading-target')");
   await wait("(()=>{const d=document.querySelector('.dialogue-directory'),a=document.querySelector('.dialogue-answer'),id=a.id.replace('dialogue-answer-',''),v=JSON.parse(localStorage.getItem('dialogue-open-directories'));return d.open&&v.includes(conversationId+':'+id)})()");
   await js("document.querySelector('.dialogue-directory').open=false");
   await wait("(()=>{const a=document.querySelector('.dialogue-answer'),id=a.id.replace('dialogue-answer-',''),v=JSON.parse(localStorage.getItem('dialogue-open-directories'));return !v.includes(conversationId+':'+id)})()");

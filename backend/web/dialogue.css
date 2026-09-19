@@ -133,13 +133,20 @@
 .dialogue-answer-font-popover[hidden]{display:none}
 #dialogue-mode .dialogue-answer-font-popover input[type=range]{width:175px;padding:0;accent-color:#ddd}
 .dialogue-answer-font-popover output{min-width:28px;color:#ddd;font-size:11px;text-align:center}
-.dialogue-answer-with-directory{display:grid;grid-template-columns:minmax(180px,min(28%,300px)) minmax(0,1fr);gap:14px;align-items:start;overflow:visible}
+.dialogue-answer-with-directory{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:10px;align-items:start;overflow:visible}
+.dialogue-answer-with-directory:has(>.dialogue-directory[open]){grid-template-columns:minmax(180px,min(28%,300px)) minmax(0,1fr);gap:14px}
 .dialogue-answer-with-directory>.dialogue-answer-content{min-width:0;overflow-x:hidden}
 .dialogue-answer-with-directory.dialogue-answer-collapsed{display:grid;overflow:hidden}
 .dialogue-answer-with-directory.dialogue-answer-collapsed>.dialogue-answer-content{height:100%;overflow:auto;overscroll-behavior:contain}
 .dialogue-directory{position:sticky;top:8px;align-self:start;width:100%;min-width:0;max-width:100%;max-height:min(70vh,560px);margin:0;box-sizing:border-box;overflow:auto;border:1px solid #3f3f3f;border-radius:7px;background:#121212;color:#bbb;font-size:12px}
 .dialogue-directory>summary{cursor:pointer;padding:7px 10px;color:#b9cce0;white-space:nowrap}
-.dialogue-directory>ol{display:grid;gap:5px;max-width:min(720px,80vw);max-height:280px;margin:0;padding:2px 12px 10px;overflow:auto;list-style-position:inside}
-.dialogue-directory li{padding-left:calc(var(--directory-depth,0)*14px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dialogue-directory:not([open]){width:36px;overflow:hidden}
+.dialogue-directory:not([open])>summary{display:grid;place-items:center;width:34px;height:34px;box-sizing:border-box;padding:0;font-size:0;list-style:none}
+.dialogue-directory:not([open])>summary::-webkit-details-marker{display:none}
+.dialogue-directory:not([open])>summary::after{content:"☷";font-size:17px;line-height:1}
+.dialogue-directory-links{display:grid;gap:5px;max-width:min(720px,80vw);max-height:280px;margin:0;padding:2px 12px 10px;overflow:auto}
+.dialogue-directory-links>a{display:block;padding-left:calc(var(--directory-depth,0)*14px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dialogue-directory a{color:#ccc;text-decoration:none}.dialogue-directory a:hover{text-decoration:underline;color:#fff}
-@media(max-width:700px){.dialogue-answer-with-directory{grid-template-columns:minmax(0,1fr)}.dialogue-directory{position:static;max-height:220px}.dialogue-answer-with-directory.dialogue-answer-collapsed{grid-template-rows:auto minmax(0,1fr)}}
+.dialogue-answer h1,.dialogue-answer h2,.dialogue-answer h3,.dialogue-answer h4,.dialogue-answer h5,.dialogue-answer h6{scroll-margin-block:35vh}
+.dialogue-heading-target{animation:dialogue-heading-target 1.2s ease-out}@keyframes dialogue-heading-target{0%{background:#9fc7f233;box-shadow:0 0 0 6px #9fc7f222}100%{background:transparent;box-shadow:0 0 0 0 transparent}}
+@media(max-width:700px){.dialogue-answer-with-directory:has(>.dialogue-directory[open]){grid-template-columns:minmax(0,1fr)}.dialogue-directory{position:static;max-height:220px}.dialogue-answer-with-directory.dialogue-answer-collapsed{grid-template-rows:auto minmax(0,1fr)}}
