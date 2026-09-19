@@ -173,9 +173,11 @@
     headings.forEach((heading,index)=>{heading.id='dialogue-heading-'+turnId+'-'+index;const link=document.createElement('a');link.style.setProperty('--directory-depth',String(Number(heading.tagName.slice(1))-1));link.href='#'+heading.id;link.textContent=heading.textContent;link.onclick=event=>{event.preventDefault();heading.scrollIntoView({behavior:'smooth',block:'center'});heading.classList.remove('dialogue-heading-target');requestAnimationFrame(()=>heading.classList.add('dialogue-heading-target'));setTimeout(()=>heading.classList.remove('dialogue-heading-target'),1200);};list.append(link);});
     details.ontoggle=()=>{if(details.open)openDirectories.add(key);else openDirectories.delete(key);localStorage.setItem('dialogue-open-directories',JSON.stringify([...openDirectories]));};details.append(summary,list);return details;
   }
+  const toolExecutions=new Map();
   function toolView(turn,call){
+    const conversation=current,executionKey=conversation+":"+call.id,execution=toolExecutions.get(executionKey);
     const card=document.createElement('section');card.className='dialogue-tool-call';
-    const heading=document.createElement('div');heading.className='dialogue-tool-heading';heading.innerHTML='<strong>命令执行</strong><span></span>';heading.querySelector('span').textContent=call.status==='approval_required'?'等待确认':call.status==='completed'?'已完成':'已拒绝';
+    const heading=document.createElement('div');heading.className='dialogue-tool-heading';heading.innerHTML='<strong>命令执行</strong><span></span>';heading.querySelector('span').textContent=call.status==='approval_required'?(execution?.phase||'等待确认'):call.status==='completed'?'已完成':'已拒绝';
     const reason=document.createElement('p');reason.textContent=call.reason;
     const command=document.createElement('code');command.textContent=call.argv.map(value=>/^[\w@%+=:,./-]+$/.test(value)?value:JSON.stringify(value)).join(' ');
     const cwd=document.createElement('small');cwd.textContent='工作目录：'+call.cwd;
@@ -185,8 +187,25 @@
       const actions=document.createElement('div');actions.className='dialogue-tool-actions';
       const reject=document.createElement('button');reject.type='button';reject.className='quiet';reject.textContent='拒绝';
       const approve=document.createElement('button');approve.type='button';approve.textContent='允许执行';approve.disabled=!window.directorDesktop?.runCommand;approve.title=approve.disabled?'请在 Hotpoor Director Electron 客户端中执行':'';
-      const submit=async output=>{approve.disabled=reject.disabled=true;status.textContent=output.approved===false?'正在把拒绝结果交给模型…':'正在把命令结果交给模型…';try{apply(await api('conversations/'+current,{action:'tool_result',tool_id:call.id,output}));poll();}catch(e){approve.disabled=reject.disabled=false;status.textContent=e.message;}};
-      reject.onclick=()=>submit({approved:false});approve.onclick=async()=>{approve.disabled=reject.disabled=true;heading.querySelector('span').textContent='执行中…';try{const result=await window.directorDesktop.runCommand({argv:call.argv,cwd:call.cwd});await submit({approved:true,...result});}catch(e){await submit({approved:true,error:e.message,exit_code:null});}};
+      const refresh=()=>{if(current===conversation)render();};
+      const submit=async output=>{
+        toolExecutions.set(executionKey,{phase:'正在回传结果…',output});refresh();
+        try{const result=await api('conversations/'+conversation,{action:'tool_result',tool_id:call.id,output});toolExecutions.set(executionKey,{phase:'结果已提交',output});if(current===conversation){apply(result);poll();}}
+        catch(e){toolExecutions.set(executionKey,{phase:'结果回传失败',output,error:e.message});refresh();if(current===conversation)status.textContent=e.message;}
+      };
+      reject.disabled=Boolean(execution);reject.hidden=Boolean(execution?.output);
+      approve.disabled=!window.directorDesktop?.runCommand||Boolean(execution&&!execution.error);
+      if(execution)approve.textContent=execution.error?'重试回传结果':execution.phase;
+      reject.onclick=()=>{if(toolExecutions.has(executionKey))return;submit({approved:false});};
+      approve.onclick=async()=>{
+        const existing=toolExecutions.get(executionKey);
+        if(existing){if(existing.error)await submit(existing.output);return;}
+        toolExecutions.set(executionKey,{phase:'执行中…'});refresh();
+        let output;
+        try{output={approved:true,...await window.directorDesktop.runCommand({argv:call.argv,cwd:call.cwd})};}
+        catch(e){output={approved:true,error:e.message,exit_code:null};}
+        await submit(output);
+      };
       actions.append(reject,approve);card.append(actions);
     }
     return card;
@@ -234,7 +253,7 @@
     const selectionWarning=reset?restoreSelection(body):'';
     if(reset){turns=body.turns;older=body.prev_id;}else{const map=new Map(turns.map(t=>[t.id,t]));for(const t of body.turns)map.set(t.id,t);turns=[...map.values()];}
     pending=Boolean(body.pending_id);$('#dialogue-acknowledge').hidden=!body.interrupted;
-    if(body.interrupted)status.textContent='服务或连接中断，请先在服务控制台核对请求；不会自动重发或重复计费。';else if(body.turns?.at(-1)?.status==='awaiting_tool')status.textContent='模型正在等待你确认命令';else if(selectionWarning)status.textContent=selectionWarning;
+    if(body.interrupted)status.textContent='服务或连接中断，请先在服务控制台核对请求；不会自动重发或重复计费。';else if(body.turns?.at(-1)?.status==='awaiting_tool'){const active=body.turns.at(-1).tool_calls?.find(call=>call.status==='approval_required');status.textContent=toolExecutions.get(current+':'+active?.id)?.phase||'模型正在等待你确认命令';}else if(selectionWarning)status.textContent=selectionWarning;
     render();controls();
   }
   async function poll(token=generation){
