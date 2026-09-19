@@ -1,0 +1,12 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const source=fs.readFileSync('backend/web/studio.js','utf8');
+const state={inferenceCredentials:{keys:[{id:'chat'},{id:'video'},{id:'disabled'}],enabled_key_ids:['chat','video'],active_key_id:'chat'},models:[{id:'video-model',type:'video',provider:'service-inference',credential_ids:['video']},{id:'image-model',type:'image',provider:'service-inference',credential_ids:['chat']}]};
+const ctx=vm.createContext({state});
+vm.runInContext(source.slice(source.indexOf('  function cardCredentials('),source.indexOf('  function renderCard(')),ctx);
+let card={type:'video'};ctx.cardCredentials(card);assert.equal(card.credential_id,'video');
+state.inferenceCredentials.active_key_id=null;card={type:'video'};ctx.cardCredentials(card);assert.equal(card.credential_id,'video');
+card={type:'video',credential_id:'old'};ctx.cardCredentials(card);assert.equal(card.credential_id,'old');
+card={type:'video',credential_id:''};ctx.cardCredentials(card);assert.equal(card.credential_id,'video');
+state.inferenceCredentials.enabled_key_ids=[];card={type:'video'};assert.equal(ctx.cardCredentials(card).keys.length,0);assert.equal(card.credential_id,undefined);
+assert.ok(source.includes("model?.provider==='service-inference'||credentials.keys.length||card.credential_id"));
+console.log('New cards select a supported enabled AK; saved selections are retained; AK selection is independent of selected model.');

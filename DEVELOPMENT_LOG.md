@@ -717,3 +717,11 @@ SKILL 补入失败历史、无状态工具续接、命令停止平台差异、cw
 生产镜像 `xialiwei-api:0.18.0-director-summary`，端口 **8662**。基于原 0.17.2 生产镜像只更新 Director runtime，未混入 API 仓库其他未提交业务改动。候选与正式 HTTPS 各 **109 项检查通过**；本地云端网关及对话相关 **50 项回归通过**，64 个共享运行时文件 SHA-256 验证通过。线上验证使用临时账号和数据，已清理；未调用付费模型。上线前待处理对话为 0。
 
 旧 worker `xialiwei-api-before-summary-20260919`（8661）保留运行；发布目录 `/home/ubuntu/director-summary-20260919`，Nginx 回滚配置 `nginx-before-summary.conf`。切流前的静态文件校验按网关实际 `/api/`、`/static/` 前缀改写计算，切流后确认正式资源与候选一致。
+
+## 2026-09-19 · 新视频卡 AK / 模型选择恢复
+
+修复生成 AK 选择框依赖已选云端模型的循环：无有效默认 AK（例如删除原默认 AK 后仍保留其他启用项）时，新卡无法进入云端模型。现在有已启用 AK 时始终提供切换入口；没有保存 AK 的卡片优先采用支持该卡片类型的启用项，已有非空选择保留。
+
+新增 `test-card-credentials.cjs` 和 `smoke-card-credentials.cjs`；后者使用隔离 PostgreSQL、模拟模型和真实编辑租约，验证删除默认 AK 后新建视频卡、云端模型选择、切换 AK、保存和重开。77 项推理/云端网关 Python 回归通过。未发起付费生成。旧通用 inference UI 脚本直接派发未取得租约的选择事件，在上传步骤中止；本次专项 UI 测试显式走真实租约流程并通过，未修改协作锁行为。
+
+发布 `xialiwei-api:0.18.1-director-card-keys` / **8663**；候选与正式 HTTPS 各 109 项检查通过，候选 64 文件 manifest 校验通过，切流前待处理对话为 0。生产 `studio.js` 经网关路径改写后与本地一致。保留 8662 worker，回滚 `/home/ubuntu/director-card-keys-20260919/nginx-before-card-keys.conf`。
