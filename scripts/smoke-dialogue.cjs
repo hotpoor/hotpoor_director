@@ -63,7 +63,7 @@ app.whenReady().then(async()=>{
   await js("document.querySelector('#toggle-archived').click()");await wait("document.querySelector('.dialogue-list-item[data-id=\"'+conversationId+'\"]')");
   if(!await js("(()=>{const cell=document.querySelector('.dialogue-answer td');return cell&&getComputedStyle(cell).borderTopWidth==='1px'})()"))throw Error('Markdown table borders missing');
   if(!await js("(()=>{const w=document.querySelector('.dialogue-table-scroll');return w&&getComputedStyle(w).overflowX==='auto'&&w.querySelector('table')})()"))throw Error('Markdown table has no independent horizontal scroller');
-  if(!await js("document.querySelector('.dialogue-directory summary')?.textContent.includes('标题目录')&&document.querySelector('.dialogue-directory a')"))throw Error('Markdown heading directory missing');
+  if(!await js("(()=>{const d=document.querySelector('.dialogue-directory'),a=document.querySelector('.dialogue-answer');return d?.parentElement===a&&d.querySelector('summary')?.textContent.includes('标题目录')&&d.querySelector('a')&&getComputedStyle(d).position==='sticky'})()"))throw Error('Markdown heading directory is not a sticky element inside the answer');
   await js("document.querySelector('.dialogue-directory').open=true");
   await wait("(()=>{const d=document.querySelector('.dialogue-directory'),a=document.querySelector('.dialogue-answer'),id=a.id.replace('dialogue-answer-',''),v=JSON.parse(localStorage.getItem('dialogue-open-directories'));return d.open&&v.includes(conversationId+':'+id)})()");
   await js("document.querySelector('.dialogue-directory').open=false");
