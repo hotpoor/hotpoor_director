@@ -8,9 +8,11 @@ function createVault(directory,safeStorage){
  function write(value){fs.mkdirSync(directory,{recursive:true});const temp=file+'.tmp';fs.writeFileSync(temp,JSON.stringify(value),{mode:0o600});fs.renameSync(temp,file);}
  return {
   list:()=>Object.keys(read()),
-  save:(key,secret)=>{name(key);available();if(typeof secret!=='string'||!secret||secret.length>8192)throw Error('密码需为1–8192字符');const data=read();if(!Object.hasOwn(data,key)&&Object.keys(data).length>=100)throw Error('最多保存100个凭据');Object.defineProperty(data,key,{value:safeStorage.encryptString(secret).toString('base64'),enumerable:true,configurable:true,writable:true});write(data);return Object.keys(data);},
+  entries:()=>Object.entries(read()).map(([name,value])=>({name,description:typeof value==='object'?value.description||'':''})),
+  save:(key,secret,description='')=>{name(key);available();if(typeof description!=='string'||description.length>200)throw Error('中文描述最多200字符');if(typeof secret!=='string'||!secret||secret.length>8192)throw Error('密码需为1–8192字符');const data=read();if(!Object.hasOwn(data,key)&&Object.keys(data).length>=100)throw Error('最多保存100个凭据');Object.defineProperty(data,key,{value:{encrypted:safeStorage.encryptString(secret).toString('base64'),description:description.trim()},enumerable:true,configurable:true,writable:true});write(data);return Object.keys(data);},
+  describe:(key,description)=>{name(key);if(typeof description!=='string'||description.length>200)throw Error('中文描述最多200字符');const data=read();if(!Object.hasOwn(data,key))throw Error('凭据不存在');data[key]={encrypted:typeof data[key]==='string'?data[key]:data[key].encrypted,description:description.trim()};write(data);},
   remove:key=>{name(key);const data=read();delete data[key];write(data);return Object.keys(data);},
-  get:key=>{name(key);available();const data=read();if(!Object.hasOwn(data,key))throw Error('凭据不存在：'+key);return safeStorage.decryptString(Buffer.from(data[key],'base64'));}
+  get:key=>{name(key);available();const data=read();if(!Object.hasOwn(data,key))throw Error('凭据不存在：'+key);return safeStorage.decryptString(Buffer.from(typeof data[key]==='string'?data[key]:data[key].encrypted,'base64'));}
  };
 }
 function resolveCredentials(argv,vault){

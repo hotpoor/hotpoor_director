@@ -10,6 +10,10 @@ contextBridge.exposeInMainWorld('directorDesktop',Object.freeze({
     finally{ipcRenderer.removeListener('director:command-output',listener);}
   },
   stopCommand:id=>ipcRenderer.invoke('director:stop-command',id),
+  authorizationStatus:id=>ipcRenderer.invoke('director:authorization-status',id),
+  setAuthorization:value=>ipcRenderer.invoke('director:authorization-set',value),
+  credentialEntries:()=>ipcRenderer.invoke('director:credentials-entries'),
+  describeCredential:value=>ipcRenderer.invoke('director:credentials-describe',value),
   credentialNames:()=>ipcRenderer.invoke('director:credentials-list'),
   saveCredential:value=>ipcRenderer.invoke('director:credentials-save',value),
   removeCredential:name=>ipcRenderer.invoke('director:credentials-remove',name),

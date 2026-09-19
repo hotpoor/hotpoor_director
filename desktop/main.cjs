@@ -1,3 +1,4 @@
+const {createAuthorization}=require('./agent-authorization.cjs');
 const {createCommandOutput}=require('./command-output.cjs');
 const {app, BrowserWindow, nativeTheme, ipcMain, shell, dialog, safeStorage} = require('electron');
 const {spawn} = require('node:child_process');
@@ -24,6 +25,7 @@ else app.whenReady().then(async () => {
     (fs.existsSync(path.join(localDirectory, 'config.json')) || !fs.existsSync(path.join(savedDirectory, 'config.json')))
     ? localDirectory : savedDirectory);
   const vault=createVault(dataDirectory,safeStorage);
+  const authorization=createAuthorization(dataDirectory);
   const agentPermissionsPath=path.join(dataDirectory,'agent-permissions.json');
   const defaultAgentFolder=fs.existsSync(path.join(app.getPath('home'),'Sites'))?path.join(app.getPath('home'),'Sites'):root;
   const readAgentFolders=()=>{try{const value=JSON.parse(fs.readFileSync(agentPermissionsPath,'utf8'));return [...new Set(value.folders.filter(item=>typeof item==='string'&&path.isAbsolute(item)&&fs.existsSync(item)&&fs.statSync(item).isDirectory()).map(item=>fs.realpathSync(item)))];}catch{return [fs.realpathSync(defaultAgentFolder)];}};
@@ -64,6 +66,14 @@ else app.whenReady().then(async () => {
       if (url.protocol !== 'https:' || url.username || url.password || !url.pathname.endsWith('/authorize') || !/^[A-F0-9]{8}$/.test(url.searchParams.get('code') || '')) throw Error('Invalid authorization URL');
       await shell.openExternal(url.href);
     });
+    ipcMain.handle('director:authorization-status',(event,id)=>{if(event.sender!==window.webContents||event.senderFrame?.url!==origin+'/')throw Error('Invalid sender');return authorization.status(id);});
+    ipcMain.handle('director:authorization-set',async(event,value)=>{
+      if(event.sender!==window.webContents||event.senderFrame?.url!==origin+'/')throw Error('Invalid sender');
+      authorization.status(value?.conversationId);
+      if(value.enabled!==true)return authorization.revoke(value.conversationId);
+      const decision=await dialog.showMessageBox(window,{type:'warning',title:'完全访问 · 授权一个月',message:'允许此对话自动执行命令并使用现有凭据？',detail:'有效期30天。命令倒计时3秒后自动运行，可读写当前系统账号能访问的文件，并使用目前已保存的凭据。执行目录不是沙箱；系统权限仍由操作系统控制。可随时取消倒计时、停止命令或撤销授权。',buttons:['取消','授权30天'],defaultId:0,cancelId:0});
+      return decision.response===1?authorization.grant(value.conversationId,vault.list()):authorization.status(value.conversationId);
+    });
     const activeCommands=new Map();
     ipcMain.handle('director:stop-command',(event,id)=>{
       if(event.sender!==window.webContents||event.senderFrame?.url!==origin+'/')throw Error('Invalid sender');
@@ -79,8 +89,10 @@ else app.whenReady().then(async () => {
       const expanded=cwdValue==='~'||cwdValue.startsWith('~/')?path.join(app.getPath('home'),cwdValue.slice(2)):cwdValue;
       const candidate=path.isAbsolute(expanded)?expanded:path.resolve(folders[0],expanded),cwd=fs.existsSync(candidate)?fs.realpathSync(candidate):candidate;
       if(!fs.existsSync(cwd)||!fs.statSync(cwd).isDirectory()||!folders.some(folder=>{const relative=path.relative(folder,cwd);return relative===''||!relative.startsWith('..')&&!path.isAbsolute(relative);}))throw Error('工作目录不在允许执行的文件夹内');
+      if(request.automatic&&!authorization.allows(request.conversationId))throw Error('自动执行授权已失效，请手动确认');
       const resolved=resolveCredentials(argv,vault);
-      if(resolved.names.length){const decision=await dialog.showMessageBox(window,{type:'question',title:'允许使用凭据',message:'此命令申请使用：'+resolved.names.join('、'),detail:'工作目录：'+cwd+'\n命令：'+JSON.stringify(argv)+'\n密码将注入命令环境变量，命令本身可以读取该密码。',buttons:['取消','允许本次使用'],defaultId:0,cancelId:0});if(decision.response!==1)throw Error('已取消凭据使用');}
+      if(resolved.names.length&&!authorization.allows(request.conversationId,resolved.names)){const decision=await dialog.showMessageBox(window,{type:'question',title:'允许使用凭据',message:'此命令申请使用：'+resolved.names.join('、'),detail:'工作目录：'+cwd+'\n命令：'+JSON.stringify(argv)+'\n密码将注入命令环境变量，命令本身可以读取该密码。',buttons:['取消','允许本次使用'],defaultId:0,cancelId:0});if(decision.response!==1)throw Error('已取消凭据使用');}
+      if(request.automatic&&!authorization.allows(request.conversationId))throw Error('自动执行授权已撤销或到期');
       const startedAt=Date.now();
       return await new Promise(resolve=>{
         let finished=false,timedOut=false,cancelled=false,publishTimer=null,killTimer=null;
@@ -99,7 +111,9 @@ else app.whenReady().then(async () => {
     });
     for(const [channel,handler] of Object.entries({
       'director:credentials-list':()=>vault.list(),
-      'director:credentials-save':value=>vault.save(value?.name,value?.secret),
+      'director:credentials-entries':()=>vault.entries(),
+      'director:credentials-describe':value=>vault.describe(value?.name,value?.description),
+      'director:credentials-save':value=>vault.save(value?.name,value?.secret,value?.description),
       'director:credentials-remove':value=>vault.remove(value)
     }))ipcMain.handle(channel,(event,value)=>{if(event.sender!==window.webContents||event.senderFrame?.url!==origin+'/')throw Error('Invalid sender');return handler(value);});
     ipcMain.handle('director:agent-folders',event=>{if(event.sender!==window.webContents||event.senderFrame?.url!==origin+'/')throw Error('Invalid sender');return readAgentFolders();});

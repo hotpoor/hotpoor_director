@@ -6,18 +6,41 @@
   const $=selector=>dialog.querySelector(selector),key=$('#dialogue-key'),model=$('#dialogue-model'),status=$('#dialogue-status'),question=$('#dialogue-question');
   const credentialButton=document.createElement('button');credentialButton.type='button';credentialButton.className='quiet';credentialButton.textContent='凭据';$('.dialogue-controls').append(credentialButton);
   const credentialPanel=document.createElement('aside');credentialPanel.id='dialogue-credentials';credentialPanel.hidden=true;
-  credentialPanel.innerHTML='<header><strong>本机凭据</strong><button type="button" class="quiet" data-close>✕</button></header><p>系统安全存储加密保存。模型只知道名称，使用时由本机注入命令。</p><div data-list></div><form autocomplete="off"><label>名称<input name="name" required pattern="[A-Za-z][A-Za-z0-9_-]{0,63}" placeholder="例如 database_password"></label><label>密码<span class="credential-secret-field"><input name="secret" type="password" required maxlength="8192" autocomplete="new-password"><button type="button" class="quiet credential-visibility" data-toggle-secret aria-label="显示密码" title="显示密码" aria-pressed="false"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path data-eye-slash d="m3 3 18 18"/></svg></button></span></label><button type="submit">保存凭据</button></form><p data-notice role="status"></p>';
+  credentialPanel.innerHTML='<header><strong>本机凭据</strong><button type="button" class="quiet" data-close>✕</button></header><p>系统安全存储加密保存。模型只知道名称，使用时由本机注入命令。</p><div data-list></div><form autocomplete="off"><label>名称<input name="name" required pattern="[A-Za-z][A-Za-z0-9_-]{0,63}" placeholder="例如 database_password"></label><label>中文描述<input name="description" maxlength="200" placeholder="例如：研究服务 API 密钥（不要填写密码）"></label><label>密码<span class="credential-secret-field"><input name="secret" type="password" required maxlength="8192" autocomplete="new-password"><button type="button" class="quiet credential-visibility" data-toggle-secret aria-label="显示密码" title="显示密码" aria-pressed="false"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path data-eye-slash d="m3 3 18 18"/></svg></button></span></label><button type="submit">保存凭据</button></form><p data-notice role="status"></p>';
   $('.dialogue-main').append(credentialPanel);
   const credentialNotice=credentialPanel.querySelector('[data-notice]');
   const credentialSecret=credentialPanel.querySelector('[name=secret]'),credentialVisibility=credentialPanel.querySelector('[data-toggle-secret]');
   function setCredentialVisible(visible){credentialSecret.type=visible?'text':'password';credentialVisibility.setAttribute('aria-pressed',String(visible));credentialVisibility.title=visible?'隐藏密码':'显示密码';credentialVisibility.setAttribute('aria-label',credentialVisibility.title);credentialVisibility.querySelector('[data-eye-slash]').style.display=visible?'':'none';}
   credentialVisibility.onclick=()=>setCredentialVisible(credentialSecret.type==='password');
   setCredentialVisible(false);
-  async function renderCredentials(){const names=await window.directorDesktop.credentialNames(),list=credentialPanel.querySelector('[data-list]');list.replaceChildren();for(const name of names){const row=document.createElement('div');row.className='dialogue-agent-folder';const label=document.createElement('code');label.textContent=name;const remove=document.createElement('button');remove.type='button';remove.className='quiet';remove.textContent='删除';remove.onclick=async()=>{try{await window.directorDesktop.removeCredential(name);await renderCredentials();}catch(e){credentialNotice.textContent=e.message;}};row.append(label,remove);list.append(row);}return names;}
+  async function renderCredentials(){
+    const entries=window.directorDesktop.credentialEntries?await window.directorDesktop.credentialEntries():(await window.directorDesktop.credentialNames()).map(name=>({name,description:''})),list=credentialPanel.querySelector('[data-list]');list.replaceChildren();
+    for(const entry of entries){const row=document.createElement('div');row.className='dialogue-agent-folder';const label=document.createElement('div'),name=document.createElement('code'),description=document.createElement('small');name.textContent=entry.name;description.textContent=entry.description||'未填写描述';label.append(name,document.createElement('br'),description);
+      const actions=document.createElement('div'),edit=document.createElement('button'),remove=document.createElement('button');edit.type=remove.type='button';edit.className=remove.className='quiet';edit.textContent='描述';remove.textContent='删除';
+      edit.onclick=async()=>{const value=await window.directorDialogs.prompt('填写中文用途描述，不要填写密码',{title:'凭据描述',value:entry.description});if(value===null)return;try{await window.directorDesktop.describeCredential({name:entry.name,description:value});await renderCredentials();}catch(e){credentialNotice.textContent=e.message;}};
+      remove.onclick=async()=>{try{await window.directorDesktop.removeCredential(entry.name);await renderCredentials();}catch(e){credentialNotice.textContent=e.message;}};actions.append(edit,remove);row.append(label,actions);list.append(row);
+    }return entries;
+  }
+
   credentialButton.onclick=async()=>{if(!window.directorDesktop?.credentialNames){status.textContent='凭据管理需使用更新后的 Electron 客户端';return;}showAgentFolders(false);credentialPanel.hidden=false;try{await renderCredentials();}catch(e){credentialNotice.textContent=e.message;}};
   credentialPanel.querySelector('[data-close]').onclick=()=>{credentialPanel.hidden=true;credentialSecret.value='';setCredentialVisible(false);};
-  credentialPanel.querySelector('form').onsubmit=async event=>{event.preventDefault();const form=event.target,secret=form.elements.secret.value;form.elements.secret.value='';setCredentialVisible(false);try{await window.directorDesktop.saveCredential({name:form.elements.name.value.trim(),secret});await renderCredentials();credentialNotice.textContent='已加密保存；同名保存会更新密码';}catch(e){credentialNotice.textContent=e.message;}};
+  credentialPanel.querySelector('form').onsubmit=async event=>{event.preventDefault();const form=event.target,secret=form.elements.secret.value;form.elements.secret.value='';setCredentialVisible(false);try{await window.directorDesktop.saveCredential({name:form.elements.name.value.trim(),secret,description:form.elements.description.value});await renderCredentials();credentialNotice.textContent='已加密保存；同名保存会更新密码';}catch(e){credentialNotice.textContent=e.message;}};
   let inventory={keys:[]},categories=[],showArchived=false,currentBody=null,metadataTimer=null,metadataSaving=false,metadataQueued=false,current='',turns=[],older=null,timer=null,generation=0,busy=false,pending=false,requestId='',requestQuestion='',draftFiles=[],agentFolders=[];
+  const authorizationButton=document.createElement('button');authorizationButton.type='button';authorizationButton.className='quiet';authorizationButton.textContent='□ 完全访问 · 授权一个月';authorizationButton.setAttribute('aria-pressed','false');$('.dialogue-controls').append(authorizationButton);
+  let authorizationState={conversation:'',active:false,expiresAt:0};
+  const autoCountdowns=new Map(),autoCancelled=new Set();
+  function paintAuthorization(){const active=authorizationState.conversation===current&&authorizationState.active&&Date.now()<authorizationState.expiresAt;authorizationButton.textContent=active?'☑ 完全访问 · 点击撤销':'□ 完全访问 · 授权一个月';authorizationButton.setAttribute('aria-pressed',String(active));authorizationButton.title=active?'有效期至 '+new Date(authorizationState.expiresAt).toLocaleString()+'；允许自动执行和使用授权时已有凭据':'当前对话授权30天；3秒倒计时自动执行，并允许使用现有凭据';}
+  async function refreshAuthorization(){const id=current;if(!id||!window.directorDesktop?.authorizationStatus){authorizationState={conversation:id,active:false,expiresAt:0};paintAuthorization();return;}try{const value=await window.directorDesktop.authorizationStatus(id);if(current!==id)return;const changed=authorizationState.conversation!==id||authorizationState.active!==value.active||authorizationState.expiresAt!==value.expiresAt;authorizationState={conversation:id,...value};paintAuthorization();if(changed)render();}catch(e){authorizationState={conversation:id,active:false,expiresAt:0};paintAuthorization();}}
+  authorizationButton.onclick=async()=>{if(!current){status.textContent='请先创建或打开对话';return;}if(!window.directorDesktop?.setAuthorization){status.textContent='请重启更新后的 Electron 客户端';return;}const id=current;authorizationButton.disabled=true;try{const value=await window.directorDesktop.setAuthorization({conversationId:id,enabled:!(authorizationState.conversation===id&&authorizationState.active&&Date.now()<authorizationState.expiresAt)});if(current===id){authorizationState={conversation:id,...value};if(!value.active)autoCountdowns.clear();paintAuthorization();render();}}catch(e){status.textContent=e.message;}finally{authorizationButton.disabled=false;}};
+  setInterval(()=>{
+    paintAuthorization();
+    for(const [id,countdown] of autoCountdowns){
+      if(!dialog.open||current!==countdown.conversation||!authorizationState.active||authorizationState.conversation!==current||Date.now()>=authorizationState.expiresAt){autoCountdowns.delete(id);continue;}
+      const button=[...dialog.querySelectorAll('[data-auto-command]')].find(node=>node.dataset.autoCommand===id);if(!button){autoCountdowns.delete(id);continue;}
+      const seconds=Math.max(0,Math.ceil((countdown.deadline-Date.now())/1000));button.textContent=seconds+' 秒后自动执行';
+      if(seconds===0){autoCountdowns.delete(id);autoCancelled.add(id);button.onclick(true);}
+    }
+  },200);
   const storedSet=name=>{try{return new Set(JSON.parse(localStorage.getItem(name)||'[]'));}catch{return new Set();}},collapsed=storedSet('dialogue-collapsed-answers'),openDirectories=storedSet('dialogue-open-directories'),contextExpanded=new Set(),contextCache=new Map();
   const makeId=()=>crypto.randomUUID().replaceAll('-','');
   function renderAgentFolders(){const list=$('#dialogue-agent-folder-list');list.replaceChildren();if(!agentFolders.length){const empty=document.createElement('p');empty.textContent='尚未允许任何文件夹';list.append(empty);}for(const path of agentFolders){const row=document.createElement('div');row.className='dialogue-agent-folder';const value=document.createElement('code');value.textContent=path;const remove=document.createElement('button');remove.type='button';remove.className='quiet';remove.textContent='移除';remove.onclick=async()=>{try{agentFolders=await window.directorDesktop.removeAgentFolder(path);renderAgentFolders();status.textContent='执行目录权限已更新';}catch(e){status.textContent=e.message;}};row.append(value,remove);list.append(row);}}
@@ -225,14 +248,15 @@
       reject.disabled=Boolean(execution);reject.hidden=Boolean(execution?.output);
       approve.disabled=!window.directorDesktop?.runCommand||Boolean(execution&&!execution.error);
       if(execution)approve.textContent=execution.error?'重试回传结果':execution.phase;
-      reject.onclick=()=>{if(toolExecutions.has(executionKey))return;submit({approved:false});};
-      approve.onclick=async()=>{
+      reject.onclick=()=>{autoCountdowns.delete(executionKey);autoCancelled.add(executionKey);if(toolExecutions.has(executionKey))return;submit({approved:false});};
+      approve.onclick=async automatic=>{
+        autoCountdowns.delete(executionKey);
         const existing=toolExecutions.get(executionKey);
         if(existing){if(existing.error)await submit(existing.output);return;}
         const executionId=crypto.randomUUID();
         toolExecutions.set(executionKey,{phase:'执行中…',startedAt:Date.now(),executionId});refresh();
         let output;
-        try{output={approved:true,...await window.directorDesktop.runCommand({argv:call.argv,cwd:call.cwd,executionId},live=>{
+        try{output={approved:true,...await window.directorDesktop.runCommand({argv:call.argv,cwd:call.cwd,executionId,conversationId:conversation,automatic:automatic===true},live=>{
           const state=toolExecutions.get(executionKey);if(!state)return;const first=!state.live;state.live=live;if(first)refresh();
           for(const node of dialog.querySelectorAll('[data-execution-key]'))if(node.dataset.executionKey===executionKey){const follow=node.scrollHeight-node.scrollTop-node.clientHeight<40;node.textContent=[live.stdout,live.stderr,live.truncated?'（输出过长，已截断）':''].filter(Boolean).join('\n')||'等待命令输出…';if(follow)node.scrollTop=node.scrollHeight;}
         })};}
@@ -240,6 +264,11 @@
         if(!Number.isFinite(output.duration_ms))output.duration_ms=Date.now()-toolExecutions.get(executionKey).startedAt;
         await submit(output);
       };
+      if(!execution&&authorizationState.conversation===conversation&&authorizationState.active&&Date.now()<authorizationState.expiresAt&&!autoCancelled.has(executionKey)){
+        if(!autoCountdowns.has(executionKey))autoCountdowns.set(executionKey,{conversation,deadline:Date.now()+3000});
+        approve.dataset.autoCommand=executionKey;approve.textContent=Math.max(0,Math.ceil((autoCountdowns.get(executionKey).deadline-Date.now())/1000))+' 秒后自动执行';
+        const cancel=document.createElement('button');cancel.type='button';cancel.className='quiet';cancel.textContent='取消自动执行';cancel.onclick=()=>{autoCountdowns.delete(executionKey);autoCancelled.add(executionKey);refresh();};actions.append(cancel);
+      }
       actions.append(reject,approve);
       if(execution?.executionId&&execution.live&&!execution.output&&window.directorDesktop?.stopCommand){
         const stop=document.createElement('button');stop.type='button';stop.className='quiet';stop.textContent=execution.stopping?'正在停止…':'停止';stop.title='中断命令（Ctrl+C）';stop.disabled=Boolean(execution.stopping);
@@ -295,7 +324,7 @@
     if(reset){turns=body.turns;older=body.prev_id;}else{const map=new Map(turns.map(t=>[t.id,t]));for(const t of body.turns)map.set(t.id,t);turns=[...map.values()];}
     pending=Boolean(body.pending_id);$('#dialogue-acknowledge').hidden=!body.interrupted;
     if(body.interrupted)status.textContent='服务或连接中断，请先在服务控制台核对请求；不会自动重发或重复计费。';else if(body.turns?.at(-1)?.status==='awaiting_tool'){const active=body.turns.at(-1).tool_calls?.find(call=>call.status==='approval_required');status.textContent=toolExecutions.get(current+':'+active?.id)?.phase||'模型正在等待你确认命令';}else if(selectionWarning)status.textContent=selectionWarning;
-    render();controls();
+    render();controls();refreshAuthorization();
   }
   async function poll(token=generation){
     clearTimeout(timer);if(!dialog.open||!current||!pending)return;
@@ -304,12 +333,12 @@
     if(pending&&dialog.open&&token===generation)timer=setTimeout(()=>poll(token),2000);
   }
   async function openConversation(id){
-    if(busy)return;const token=++generation;clearTimeout(timer);current=id;question.value='';requestId='';clearDraft();status.textContent='读取对话…';
+    if(busy)return;autoCountdowns.clear();const token=++generation;clearTimeout(timer);current=id;question.value='';requestId='';clearDraft();status.textContent='读取对话…';
     try{const result=await api('conversations/'+id);if(token!==generation||!dialog.open)return;apply(result,true);if(!result.body.interrupted&&!status.textContent.includes('已不存在')&&!status.textContent.includes('已不可用'))status.textContent=pending?'模型正在回答…':'历史记录已加载';await loadList();poll(token);}
     catch(e){if(token===generation)status.textContent=e.message;}
   }
   async function newConversation(){
-    ++generation;clearTimeout(timer);const result=await api('conversations',options());apply(result,true);question.value='';requestId='';clearDraft();status.textContent='新对话已创建';await loadList();question.focus();
+    autoCountdowns.clear();++generation;clearTimeout(timer);const result=await api('conversations',options());apply(result,true);question.value='';requestId='';clearDraft();status.textContent='新对话已创建';await loadList();question.focus();
   }
   async function renameCategory(category){
     const name=await window.directorDialogs.prompt('输入分类名称',{title:'重命名分类',value:category.body.name});
@@ -339,7 +368,7 @@
     ++generation;current='';currentBody=null;turns=[];older=null;pending=false;requestId='';question.value='';clearDraft();$('#dialogue-acknowledge').hidden=true;render();dialog.showModal();
     try{await loadAgentFolders();await loadModels();await loadList();controls();}catch(e){status.textContent=e.message;}
   };
-  $('#close-dialogue').onclick=()=>dialog.close();dialog.addEventListener('cancel',e=>{if(busy)e.preventDefault();});dialog.addEventListener('close',()=>{++generation;clearTimeout(timer);});
+  $('#close-dialogue').onclick=()=>dialog.close();dialog.addEventListener('cancel',e=>{if(busy)e.preventDefault();});dialog.addEventListener('close',()=>{autoCountdowns.clear();++generation;clearTimeout(timer);});
   key.oninput=()=>models(model.value);key.onchange=()=>{models(model.value);if(!keyProfile())status.textContent='请选择搜索结果中的 AK';};
   $('#dialogue-refresh').onclick=async()=>{try{await loadModels(true);}catch(e){status.textContent=e.message;}};
   $('#dialogue-settings').onclick=()=>document.querySelector('#open-inference-settings').click();
@@ -359,7 +388,7 @@
       if(!requestId||requestQuestion!==text+JSON.stringify(draftFiles.map(f=>f.id))){requestId=makeId();requestQuestion=text+JSON.stringify(draftFiles.map(f=>f.id));}
       status.textContent='提交问题…';
       if(mode==='agent'&&!agentFolders.length)throw Error('请先在“执行目录”侧边栏添加允许的文件夹');
-      const result=await api('conversations/'+current,{request_id:requestId,question:text,credential_id:selectedKey,model:selectedModel,protocol,mode,credential_names:mode==='agent'&&window.directorDesktop.credentialNames?await window.directorDesktop.credentialNames():[],allowed_paths:mode==='agent'?agentFolders:[],attachments:draftFiles.map(f=>f.id)});localStorage.setItem('dialogue-key-id',selectedKey);localStorage.setItem('dialogue-model',selectedModel);localStorage.setItem('dialogue-run-mode',mode);
+      const result=await api('conversations/'+current,{request_id:requestId,question:text,credential_id:selectedKey,model:selectedModel,protocol,mode,credential_names:mode==='agent'&&window.directorDesktop.credentialNames?await window.directorDesktop.credentialNames():[],credential_descriptions:mode==='agent'&&window.directorDesktop.credentialEntries?await window.directorDesktop.credentialEntries():[],allowed_paths:mode==='agent'?agentFolders:[],attachments:draftFiles.map(f=>f.id)});localStorage.setItem('dialogue-key-id',selectedKey);localStorage.setItem('dialogue-model',selectedModel);localStorage.setItem('dialogue-run-mode',mode);
       apply(result);question.value='';requestId='';clearDraft();status.textContent='模型正在回答，记录已保存';await loadList();poll();
     }catch(e){status.textContent=e.message+'；若连接中断，请重新打开此对话检查已保存记录';}
     finally{busy=false;controls();}
