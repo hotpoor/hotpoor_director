@@ -1,6 +1,6 @@
 import pytest
 from tornado.web import HTTPError
-from backend.dialogue import endpoint, answer, request_body, history, validate_question, language_models
+from backend.dialogue import endpoint, answer, request_body, history, validate_question, language_models, function_call
 from backend.inference import ProviderError
 
 
@@ -18,6 +18,25 @@ def test_endpoint_and_payload_never_send_incompatible_tools():
         body = request_body('gpt-6-astra', messages, path)
         assert not {'tools', 'reasoning_effort', 'reasoning'} & body.keys()
     with pytest.raises(HTTPError): endpoint('gpt-6-astra', 'invalid')
+
+
+def test_agent_payload_uses_responses_function_tool():
+    body = request_body('gpt-6-astra', [{'role': 'user', 'content': 'run tests'}], '/v1/responses', True)
+    assert body['tools'][0]['name'] == 'run_command'
+    assert body['tool_choice'] == 'auto'
+    continued = request_body('gpt-6-astra', [{'type': 'function_call_output', 'call_id': 'call_1', 'output': '{}'}],
+                             '/v1/responses', True, 'resp_1')
+    assert continued['previous_response_id'] == 'resp_1'
+    with pytest.raises(HTTPError): request_body('gpt-6-astra', [], '/v1/chat/completions', True)
+
+
+def test_agent_function_call_is_validated():
+    result = {'output': [{'type': 'function_call', 'name': 'run_command', 'call_id': 'call_1',
+                          'arguments': '{"argv":["python","-V"],"cwd":".","reason":"Check Python"}'}]}
+    call = function_call(result)
+    assert call['argv'] == ['python', '-V']
+    assert call['status'] == 'approval_required'
+    with pytest.raises(ProviderError): function_call({'output': [{**result['output'][0], 'arguments': '{bad'}]})
 
 
 def test_responses_extracts_only_assistant_output_not_reasoning():

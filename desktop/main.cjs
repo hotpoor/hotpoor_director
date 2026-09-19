@@ -57,6 +57,24 @@ else app.whenReady().then(async () => {
       if (url.protocol !== 'https:' || url.username || url.password || !url.pathname.endsWith('/authorize') || !/^[A-F0-9]{8}$/.test(url.searchParams.get('code') || '')) throw Error('Invalid authorization URL');
       await shell.openExternal(url.href);
     });
+    ipcMain.handle('director:run-command', async (event, request) => {
+      if (event.sender !== window.webContents || event.senderFrame?.url !== origin + '/') throw Error('Invalid sender');
+      const argv=request?.argv,cwdValue=request?.cwd||'.';
+      if(!Array.isArray(argv)||!argv.length||argv.length>128||argv.some(value=>typeof value!=='string'||!value||value.length>8192))throw Error('命令参数不正确');
+      if(typeof cwdValue!=='string'||cwdValue.length>2048||path.isAbsolute(cwdValue))throw Error('工作目录必须是工作区内的相对路径');
+      const cwd=path.resolve(root,cwdValue),relative=path.relative(root,cwd);
+      if(relative.startsWith('..')||path.isAbsolute(relative)||!fs.existsSync(cwd)||!fs.statSync(cwd).isDirectory())throw Error('工作目录不在当前工作区内');
+      const startedAt=Date.now();
+      return await new Promise(resolve=>{
+        let stdout='',stderr='',finished=false,timedOut=false,truncated=false;
+        const child=spawn(argv[0],argv.slice(1),{cwd,windowsHide:true,shell:false,stdio:['ignore','pipe','pipe'],env:{...process.env,TERM:'dumb',NO_COLOR:'1'}});
+        const append=(name,data)=>{const value=data.toString('utf8'),limit=1024*1024;let current=name==='stdout'?stdout:stderr;if(current.length<limit)current+=value.slice(0,limit-current.length);if(value.length>limit-current.length)truncated=true;if(name==='stdout')stdout=current;else stderr=current;};
+        child.stdout.on('data',data=>append('stdout',data));child.stderr.on('data',data=>append('stderr',data));
+        const timer=setTimeout(()=>{timedOut=true;child.kill('SIGTERM');setTimeout(()=>{if(!finished)child.kill('SIGKILL');},2000).unref();},120000);
+        const done=(code,signal,error)=>{if(finished)return;finished=true;clearTimeout(timer);resolve({exit_code:Number.isInteger(code)?code:null,signal:signal||null,stdout,stderr,error:error?.message||null,timed_out:timedOut,truncated,duration_ms:Date.now()-startedAt,cwd:relative||'.'});};
+        child.once('error',error=>done(null,null,error));child.once('close',(code,signal)=>done(code,signal));
+      });
+    });
     window.webContents.setWindowOpenHandler(() => ({action:'deny'}));
     window.webContents.on('will-navigate', (event, url) => {if (new URL(url).origin !== origin) event.preventDefault();});
     await window.webContents.session.cookies.set({url:origin,name:'director_bootstrap',value:bootstrapToken,httpOnly:true,sameSite:'strict',path:'/'});

@@ -25,8 +25,26 @@ def endpoint(model, protocol='auto'):
     return '/v1/responses' if protocol == 'responses' or protocol == 'auto' and model.startswith('gpt-6') else '/v1/chat/completions'
 
 
-def request_body(model, messages, path):
-    return {'model': model, 'input' if path == '/v1/responses' else 'messages': messages, 'stream': False}
+COMMAND_TOOL = {'type': 'function', 'name': 'run_command',
+                'description': 'Run one executable in the current Hotpoor Director workspace after the user explicitly approves it.',
+                'parameters': {'type': 'object', 'additionalProperties': False,
+                               'properties': {'argv': {'type': 'array', 'minItems': 1, 'maxItems': 128,
+                                                       'items': {'type': 'string'},
+                                                       'description': 'Executable followed by arguments. Do not use a shell string.'},
+                                              'cwd': {'type': 'string', 'description': 'Relative directory inside the workspace, normally .'},
+                                              'reason': {'type': 'string', 'description': 'Short user-facing reason for running this command.'}},
+                               'required': ['argv', 'reason']}, 'strict': True}
+
+
+def request_body(model, messages, path, agent=False, previous_response_id=None):
+    body = {'model': model, 'input' if path == '/v1/responses' else 'messages': messages, 'stream': False}
+    if agent:
+        if path != '/v1/responses':
+            raise HTTPError(400, reason='代理模式需要使用 Responses 接口')
+        body.update(tools=[COMMAND_TOOL], tool_choice='auto')
+        if previous_response_id:
+            body['previous_response_id'] = previous_response_id
+    return body
 
 
 def answer(result, path):
@@ -42,6 +60,24 @@ def answer(result, path):
     if not isinstance(text, str) or not text.strip() or len(text) > MAX_CONTEXT:
         raise inference.ProviderError('模型未返回可显示的文本回答，或回答超过保存上限')
     return text
+
+
+def function_call(result):
+    for item in result.get('output', []):
+        if item.get('type') == 'function_call' and item.get('name') == 'run_command':
+            try:
+                arguments = json.loads(item.get('arguments') or '{}')
+            except (TypeError, ValueError):
+                raise inference.ProviderError('模型返回的命令参数无法识别') from None
+            argv, cwd, reason = arguments.get('argv'), arguments.get('cwd', '.'), arguments.get('reason')
+            if (not isinstance(argv, list) or not 1 <= len(argv) <= 128 or
+                    any(not isinstance(value, str) or not value or len(value) > 8192 for value in argv) or
+                    not isinstance(cwd, str) or len(cwd) > 2048 or not isinstance(reason, str) or not reason.strip()):
+                raise inference.ProviderError('模型返回的命令参数不安全或不完整')
+            return {'id': uuid.uuid4().hex, 'call_id': item.get('call_id') or item.get('id'),
+                    'name': 'run_command', 'argv': argv, 'cwd': cwd or '.', 'reason': reason.strip(),
+                    'status': 'approval_required', 'created_at': int(time.time() * 1000)}
+    return None
 
 
 def history(turns):
@@ -188,11 +224,17 @@ async def view_row(conn, row, owner, cursor=None):
     return {**row, 'body': body}
 
 
-async def complete(pool, owner, conversation_id, pack_id, turn_id, key, model, messages, path):
+async def complete(pool, owner, conversation_id, pack_id, turn_id, key, model, messages, path, agent=False,
+                   previous_response_id=None):
     patch = {'status': 'completed'}
     try:
-        result = await inference.api(key, path, request_body(model, messages, path))
-        patch.update(answer=answer(result, path), usage=result.get('usage'), provider_request_id=result.get('_request_id'))
+        result = await inference.api(key, path, request_body(model, messages, path, agent, previous_response_id))
+        call = function_call(result) if agent else None
+        if call:
+            patch.update(status='awaiting_tool', tool_calls=[call], usage=result.get('usage'),
+                         provider_response_id=result.get('id'), provider_request_id=result.get('_request_id'))
+        else:
+            patch.update(answer=answer(result, path), usage=result.get('usage'), provider_request_id=result.get('_request_id'))
     except inference.ProviderError as error:
         patch = {'status': 'failed', 'error': str(error)}
     except asyncio.CancelledError:
@@ -204,9 +246,12 @@ async def complete(pool, owner, conversation_id, pack_id, turn_id, key, model, m
         pack = await pack_for(conn, pack_id, owner, conversation_id)
         turn = next(t for t in pack['body']['turns'] if t['id'] == turn_id)
         if turn['status'] == 'running':
+            if patch.get('tool_calls'):
+                patch['tool_calls'] = [*turn.get('tool_calls', []), *patch['tool_calls']]
             turn.update(patch, finished_at=int(time.time() * 1000))
             await store(conn, pack_id, pack['body'])
-            row['body']['pending_id'] = None
+            if patch['status'] != 'awaiting_tool':
+                row['body']['pending_id'] = None
             await store(conn, conversation_id, row['body'])
 
 
@@ -292,6 +337,55 @@ class DialogueHandler(PrivateHandler):
     async def post(self, conversation_id):
         data = self.data()
         tasks = self.application.settings.setdefault('dialogue_tasks', {})
+        if data.get('action') == 'tool_result':
+            tool_id, output = data.get('tool_id'), data.get('output')
+            if not isinstance(tool_id, str) or not ID.fullmatch(tool_id) or not isinstance(output, dict):
+                raise HTTPError(400, reason='工具执行结果不正确')
+            encoded = json.dumps(output, ensure_ascii=False, separators=(',', ':'))
+            if len(encoded) > 2200000:
+                raise HTTPError(400, reason='工具执行结果超过 2.2 MB')
+            async with self.projects.connection() as conn:
+                row = await row_for(conn, conversation_id, self.owner)
+                if conversation_id in tasks:
+                    raise HTTPError(409, reason='模型仍在处理中')
+                pack = await pack_for(conn, row['body'].get('last_id'), self.owner, conversation_id)
+                turn = next((item for item in pack['body']['turns'] if item['id'] == row['body'].get('pending_id')), None)
+                if not turn or turn.get('status') != 'awaiting_tool':
+                    raise HTTPError(409, reason='当前没有等待处理的命令')
+                call = next((item for item in turn.get('tool_calls', []) if item['id'] == tool_id and item['status'] == 'approval_required'), None)
+                if not call:
+                    raise HTTPError(409, reason='命令已处理或不存在')
+                previous_response_id = turn.get('provider_response_id')
+                if not previous_response_id:
+                    raise HTTPError(409, reason='服务未返回可继续的响应 ID，无法提交命令结果')
+                call.update(status='completed' if output.get('approved', True) else 'rejected',
+                            result=output, finished_at=int(time.time() * 1000))
+                turn['status'] = 'running'
+                await store(conn, pack['block_id'], pack['body'])
+                key_id, model, path = turn['credential_id'], turn['model'], turn['protocol']
+            async with self.settings['inference_manager'].lock:
+                key_config = inference.load_keys(self.settings['config'])
+                profile = inference.key_profile(key_config, key_id)
+                if not profile or profile['id'] not in inference.enabled_ids(key_config):
+                    raise HTTPError(400, reason='本轮使用的 AK 已不存在或被停用')
+                key_value = profile['api_key']
+            tool_output = encoded if output.get('approved', True) else 'User rejected this command. Do not retry it without a materially different reason.'
+            messages = [{'type': 'function_call_output', 'call_id': call['call_id'], 'output': tool_output}]
+            task = asyncio.create_task(complete(self.projects, self.owner, conversation_id, pack['block_id'],
+                                                turn['id'], key_value, model, messages, path, True,
+                                                previous_response_id))
+            tasks[conversation_id] = task
+            def tool_done(finished):
+                if tasks.get(conversation_id) is finished:
+                    tasks.pop(conversation_id, None)
+                if not finished.cancelled():
+                    finished.exception()
+            task.add_done_callback(tool_done)
+            async with self.projects.connection() as conn:
+                current_row = await row_for(conn, conversation_id, self.owner)
+                result = await view_row(conn, current_row, self.owner)
+            self.finish(result)
+            return
         if data.get('action') == 'acknowledge':
             async with self.projects.connection() as conn:
                 row = await row_for(conn, conversation_id, self.owner)
@@ -354,6 +448,11 @@ class DialogueHandler(PrivateHandler):
                 raise HTTPError(400, reason='此 AK 当前无法使用所选语言模型，请刷新列表')
             key = profile['api_key']
         path = endpoint(model, data.get('protocol', 'auto'))
+        agent = data.get('mode', 'chat') == 'agent'
+        if data.get('mode', 'chat') not in ('chat', 'agent'):
+            raise HTTPError(400, reason='对话模式不正确')
+        if agent and path != '/v1/responses':
+            raise HTTPError(400, reason='代理模式需要选择 Responses 接口或兼容模型')
         async with self.projects.connection() as conn:
             row = await row_for(conn, conversation_id, self.owner)
             body = row['body']
@@ -390,7 +489,7 @@ class DialogueHandler(PrivateHandler):
             turn = {'id': data['request_id'], 'question': question, 'model': model, 'credential_id': profile['id'],
                     'key_name': profile['name'], 'attachments': attachments,
                     'context_ids': [item['id'] for item in context_turns], 'submission': submission,
-                    'protocol': path, 'status': 'running', 'created_at': int(time.time() * 1000)}
+                    'protocol': path, 'mode': 'agent' if agent else 'chat', 'status': 'running', 'created_at': int(time.time() * 1000)}
             pack['body']['turns'].append(turn)
             await store(conn, pack['block_id'], pack['body'])
             body['turn_count'] += 1
@@ -399,11 +498,12 @@ class DialogueHandler(PrivateHandler):
             body['last_credential_id'] = profile['id']
             body['last_model'] = model
             body['last_protocol'] = data.get('protocol', 'auto')
+            body['last_mode'] = 'agent' if agent else 'chat'
             if body['turn_count'] == 1 and body.get('title') == '新对话':
                 body['title'] = question[:60]
             row = await store(conn, conversation_id, body)
             result = await view_row(conn, row, self.owner)
-        task = asyncio.create_task(complete(self.projects, self.owner, conversation_id, pack['block_id'], turn['id'], key, model, messages, path))
+        task = asyncio.create_task(complete(self.projects, self.owner, conversation_id, pack['block_id'], turn['id'], key, model, messages, path, agent))
         tasks[conversation_id] = task
         def done(finished):
             if tasks.get(conversation_id) is finished:
