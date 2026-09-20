@@ -787,3 +787,9 @@ README 顶部增加可点击 TokenMart Logo、控制台入口、Logo 原图来�
 验证：JavaScript 语法与差异检查通过；隔离 Electron 测试覆盖左右/上下布局、最小卡片、固定生成栏、尺寸即时更新、参数跳转、AK 保存与切换、管理费用 Tab、Logo 加载和跳转、密钥遮蔽及既有素材引用/独立滚动。截图检查通过，未调用付费模型。
 
 发布 `xialiwei-api:0.20.0-director-workbench-brand` / **8670**；65 文件 manifest 校验、候选与正式 HTTPS 各 109 项检查通过，线上脚本/样式/Logo 与源码一致，切流前待处理对话为 0。保留旧 8669 worker；回滚配置 `/home/ubuntu/director-workbench-brand-20260920/nginx-before-workbench-brand.conf`。源码客户端重启一次后启用系统浏览器官网跳转，无需构建安装包。
+
+## 2026-09-20 · README 技术栈 Logo
+
+技术与服务来源表补齐 HTML5、CSS3、JavaScript、Electron、Chromium、Node.js、Python、Tornado、PostgreSQL、Psycopg、ComfyUI 和 TokenMart 标识，每个 Logo 链接对应官网或官方仓库。图片保存在仓库并记录原始来源与 Devicon 许可。此项仅更新 GitHub 文档，无服务运行代码变更。
+
+验证：12 个表格 Logo 均在 Chromium 中解码成功，表格截图检查通过；README 图片路径与差异格式检查通过。ComfyUI 使用官网自带深色底图标，保证浅色背景下可见。
