@@ -16,14 +16,14 @@
 
 | 技术 / 服务 | 在本项目中的职责 | 来源 |
 | --- | --- | --- |
-| HTML / CSS / JavaScript | 项目页面、无限画布、生成卡片与对话界面 | [本仓库前端源码](backend/web/) |
-| Electron（Chromium / Node.js） | 桌面客户端、系统集成与本机命令执行 | [Electron 官方网站](https://www.electronjs.org/) |
-| Python / Tornado | 本机 HTTP API、任务调度与生成服务适配 | [Python](https://www.python.org/) · [Tornado](https://www.tornadoweb.org/en/stable/) |
-| PostgreSQL / Psycopg | 账号、项目、对话与任务数据持久化 | [PostgreSQL](https://www.postgresql.org/) · [Psycopg](https://www.psycopg.org/) |
-| ComfyUI | 用户独立部署的本地模型推理与工作流执行 | [ComfyUI 官方仓库](https://github.com/Comfy-Org/ComfyUI) |
-| service-inference / TokenMart | 云端模型 API、AK 管理及用量账单服务 | [TokenMart 控制台](https://console.service-inference.ai/) |
+| <a href="https://html.spec.whatwg.org/"><img src="docs/logos/html5.svg" height="32" alt="HTML5" title="HTML5"></a> <a href="https://www.w3.org/Style/CSS/"><img src="docs/logos/css3.svg" height="32" alt="CSS" title="CSS"></a> <a href="https://tc39.es/ecma262/"><img src="docs/logos/javascript.svg" height="32" alt="JavaScript" title="JavaScript"></a><br>HTML / CSS / JavaScript | 项目页面、无限画布、生成卡片与对话界面 | [本仓库前端源码](backend/web/) |
+| <a href="https://www.electronjs.org/"><img src="docs/logos/electron.svg" height="32" alt="Electron" title="Electron"></a> <a href="https://www.chromium.org/"><img src="docs/logos/chromium.png" height="32" alt="Chromium" title="Chromium"></a> <a href="https://nodejs.org/"><img src="docs/logos/nodejs.svg" height="32" alt="Node.js" title="Node.js"></a><br>Electron（Chromium / Node.js） | 桌面客户端、系统集成与本机命令执行 | [Electron 官方网站](https://www.electronjs.org/) |
+| <a href="https://www.python.org/"><img src="docs/logos/python.svg" height="32" alt="Python" title="Python"></a> <a href="https://www.tornadoweb.org/en/stable/"><img src="docs/logos/tornado.png" height="32" alt="Tornado" title="Tornado"></a><br>Python / Tornado | 本机 HTTP API、任务调度与生成服务适配 | [Python](https://www.python.org/) · [Tornado](https://www.tornadoweb.org/en/stable/) |
+| <a href="https://www.postgresql.org/"><img src="docs/logos/postgresql.svg" height="32" alt="PostgreSQL" title="PostgreSQL"></a> <a href="https://www.psycopg.org/"><img src="docs/logos/psycopg.png" height="32" alt="Psycopg" title="Psycopg"></a><br>PostgreSQL / Psycopg | 账号、项目、对话与任务数据持久化 | [PostgreSQL](https://www.postgresql.org/) · [Psycopg](https://www.psycopg.org/) |
+| <a href="https://github.com/Comfy-Org/ComfyUI"><img src="docs/logos/comfyui.svg" height="32" alt="ComfyUI" title="ComfyUI"></a><br>ComfyUI | 用户独立部署的本地模型推理与工作流执行 | [ComfyUI 官方仓库](https://github.com/Comfy-Org/ComfyUI) |
+| <a href="https://console.service-inference.ai/"><img src="backend/web/brand/tokenmart-cart.png" height="32" alt="TokenMart" title="TokenMart"></a><br>service-inference / TokenMart | 云端模型 API、AK 管理及用量账单服务 | [TokenMart 控制台](https://console.service-inference.ai/) |
 
-Hotpoor Director 负责工作台界面与服务编排；以上开源技术由各自项目维护，云端 API 由 service-inference 提供，本地推理由用户配置的 ComfyUI 执行。模型名称表示调用的模型，API 服务供应商与模型开发方分别标识。TokenMart Logo [原图来源](https://console.service-inference.ai/tokenmart-cart.png)，品牌与标识归其各自权利人所有。
+Hotpoor Director 负责工作台界面与服务编排；以上开源技术由各自项目维护，云端 API 由 service-inference 提供，本地推理由用户配置的 ComfyUI 执行。模型名称表示调用的模型，API 服务供应商与模型开发方分别标识。TokenMart Logo [原图来源](https://console.service-inference.ai/tokenmart-cart.png)，品牌与标识归其各自权利人所有。其余 Logo 的下载来源与许可说明见 [Logo 来源清单](docs/logos/README.md)。
 
 ## 对话与代理模式
 

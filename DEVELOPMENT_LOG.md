@@ -803,3 +803,9 @@ README 顶部增加可点击 TokenMart Logo、控制台入口、Logo 原图来�
 - 合并 main 的左右生成布局、素材编号插入和画布操作更新，保留本地 Ref2VA Turbo、云端 H3 独立音频参考及 Windows 重启脚本。
 - 合并后 144 项模型、素材与尺寸测试通过；隔离 Electron 验证 Turbo 开关、4 步锁定、关闭恢复和保存重开通过，无新增 GPU 或付费任务。
 - 服务器需同步共享 backend 运行时；本地 LoRA 权重及 Windows 重启脚本不上传服务器。服务器实际发布结果另行记录。
+
+## 2026-09-20 · README 技术栈 Logo
+
+技术与服务来源表补齐 HTML5、CSS3、JavaScript、Electron、Chromium、Node.js、Python、Tornado、PostgreSQL、Psycopg、ComfyUI 和 TokenMart 标识，每个 Logo 链接对应官网或官方仓库。图片保存在仓库并记录原始来源与 Devicon 许可。此项仅更新 GitHub 文档，无服务运行代码变更。
+
+验证：12 个表格 Logo 均在 Chromium 中解码成功，表格截图检查通过；README 图片路径与差异格式检查通过。ComfyUI 使用官网自带深色底图标，保证浅色背景下可见。
