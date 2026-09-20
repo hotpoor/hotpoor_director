@@ -812,6 +812,8 @@
       if(event.ctrlKey||event.metaKey)event.preventDefault();
       return;
     }
+    // Card content owns native scrolling; its padding also scrolls the outer card.
+    if(!event.ctrlKey&&event.target.closest('.card-content,.asset-content,.imported-items,.ref-list,.history-strip,.pinned-results,.hidden-items'))return;
     event.preventDefault();
     const canvas=$('#canvas'),r=canvas.getBoundingClientRect();
     const unit=event.deltaMode===1?16:event.deltaMode===2?canvas.clientHeight:1;

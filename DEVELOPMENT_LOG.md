@@ -765,3 +765,13 @@ JavaScript 语法及缩放/平移逻辑检查通过，候选与正式 HTTPS 各 
 新增 `scripts/smoke-reference-mentions.cjs`：隔离 PostgreSQL、模拟云端模型/图片与真实编辑租约，验证编号、选区替换、连续插入光标、保存重开、原生鼠标滚轮文本滚动、边界不带动画布/卡片、textarea 捏合隔离。JavaScript 语法、专项 Electron 验证和界面截图检查通过；未调用付费模型。
 
 发布 `xialiwei-api:0.19.4-director-reference-mentions` / **8668**；候选与正式 HTTPS 各 109 项检查通过，64 文件 manifest 校验通过，切流前待处理对话为 0。保留旧 8667 worker，回滚配置 `/home/ubuntu/director-reference-mentions-20260920/nginx-before-reference-mentions.conf`。
+
+## 2026-09-20 · 卡片滚动区域与间距
+
+画布手势让出卡片正文的普通滚轮事件：在卡片侧边留白滚动外层卡片，在 textarea 与展开的生成信息中独立滚动；引入素材、参考素材和历史缩略图列表使用原生双指横向滚动。画布空白处和卡片标题仍可平移，卡片正文 Ctrl/捏合缩放保留，textarea 内继续隔离画布手势。
+
+增加卡片正文横向 padding、生成设置内边距、生成信息与引入素材外边距；滚动条加宽至 12px 并预留槽位。横向列表增加底部滚动条空隙，生成信息到边界后不串动父卡片。
+
+验证：专项 Electron 测试通过外层侧边留白滚动、textarea 独立滚动、生成信息独立滚动和边界隔离、12 项素材的左右横向滚动及边界不带动画布。测试等待布局绘制后派发原生滚轮事件；横向素材测试先收起置顶生成信息，避免命中被遮挡区域。截图检查通过。
+
+发布 `xialiwei-api:0.19.5-director-card-scroll` / **8669**；候选与正式 HTTPS 各 109 项检查通过，64 文件 manifest 校验通过。保留旧 8668 worker，回滚配置 `/home/ubuntu/director-card-scroll-20260920/nginx-before-card-scroll.conf`。

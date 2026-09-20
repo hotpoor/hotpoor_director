@@ -217,3 +217,15 @@ img[data-preview]{cursor:zoom-in}#image-preview{position:fixed;inset:0;width:100
 #studio .ref-list .reference-token{position:static;padding:3px 5px;margin-top:4px;font-size:10px}
 
 .reference-mentions>[data-reference-field]{display:contents}.reference-mention-help{font-size:11px;line-height:1.6;color:#aaa;margin:6px 0}
+
+/* Separate nested scroll areas from the outer card's scroll rail. */
+.card-content{padding:20px 26px 26px;scrollbar-gutter:stable}
+.generation-settings{padding:0 8px 18px}
+.history-details{margin:12px 8px 18px;padding:12px 14px;max-height:280px;overscroll-behavior:contain;scrollbar-gutter:stable}
+.history-details summary{top:-12px;padding:10px 0}
+.imported-library{margin:16px 8px;padding:12px}
+:is(.imported-items,.ref-list,.history-strip,.pinned-results,.hidden-items){padding-bottom:12px;margin-bottom:10px;overscroll-behavior-x:contain;overscroll-behavior-y:auto}
+:is(.card-content,.history-details,.imported-items,.ref-list,.history-strip,.pinned-results,.hidden-items)::-webkit-scrollbar{width:12px;height:12px}
+:is(.card-content,.history-details,.imported-items,.ref-list,.history-strip,.pinned-results,.hidden-items)::-webkit-scrollbar-track{background:#141414;border-radius:6px}
+:is(.card-content,.history-details,.imported-items,.ref-list,.history-strip,.pinned-results,.hidden-items)::-webkit-scrollbar-thumb{background:#666;border:3px solid #141414;border-radius:6px}
+:is(.card-content,.history-details,.imported-items,.ref-list,.history-strip,.pinned-results,.hidden-items)::-webkit-scrollbar-thumb:hover{background:#999}
