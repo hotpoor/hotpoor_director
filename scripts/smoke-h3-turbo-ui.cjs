@@ -22,7 +22,7 @@ with (config['data_dir'] / 'config.json').open('r+', encoding='utf-8') as stream
     stream.truncate()
 main()
 `;
-  backend=spawn(path.join(root,'.venv','Scripts','python.exe'),['-c',bootstrap,'serve','--port','0','--desktop','--dev'],{
+  backend=spawn(path.join(root,'.venv',process.platform==='win32'?'Scripts/python.exe':'bin/python'),['-c',bootstrap,'serve','--port','0','--desktop','--dev'],{
     cwd:root,stdio:['pipe','pipe','pipe'],windowsHide:true,
     env:{...process.env,DIRECTOR_DATA_DIR:directory,DIRECTOR_BOOTSTRAP_TOKEN:'h3-turbo-ui-bootstrap'}});
   backend.stderr.on('data',data=>process.stderr.write(data));

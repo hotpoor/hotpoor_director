@@ -809,3 +809,11 @@ README 顶部增加可点击 TokenMart Logo、控制台入口、Logo 原图来�
 技术与服务来源表补齐 HTML5、CSS3、JavaScript、Electron、Chromium、Node.js、Python、Tornado、PostgreSQL、Psycopg、ComfyUI 和 TokenMart 标识，每个 Logo 链接对应官网或官方仓库。图片保存在仓库并记录原始来源与 Devicon 许可。此项仅更新 GitHub 文档，无服务运行代码变更。
 
 验证：12 个表格 Logo 均在 Chromium 中解码成功，表格截图检查通过；README 图片路径与差异格式检查通过。ComfyUI 使用官网自带深色底图标，保证浅色背景下可见。
+
+## 2026-09-20 · H3 更新同步发布
+
+同步 main 的 `88d5650` / `f9e4c0c`：本地 H3 Ref2VA 可选专用 Turbo 4 步 LoRA，云端 H3 支持图片/视频/音频混合参考，并保留新版左右生成布局。Windows 重启脚本随客户端源码提供；LoRA 权重不包含在 Git 或服务器镜像内。
+
+将 H3 UI 测试的 Python 路径改为按平台选择，macOS 隔离 Electron 验证通过开关、4 步锁定、标准步数恢复和保存重开；模型、尺寸、同步与云端网关共 165 项测试通过。未新增真实 GPU 或付费生成任务。
+
+发布 `xialiwei-api:0.20.1-director-h3-turbo` / **8671**：65 文件 manifest 校验、候选与正式 HTTPS 各 109 项检查通过；线上 H3 界面与源码一致。切流前待处理对话为 0，保留旧 8670 worker；回滚配置 `/home/ubuntu/director-h3-turbo-20260920/nginx-before-h3-turbo.conf`。客户端源码已同步；本机没有需要重启的正式客户端进程，下次启动加载新版后端。
