@@ -734,6 +734,29 @@
     if(keyboardPort&&keyboardPort.side!==selected.side){connectCards(selected.side==='input'?keyboardPort.id:selected.id,selected.side==='input'?selected.id:keyboardPort.id);keyboardPort=null;}
     else{keyboardPort=selected;tell('已选连接点，请聚焦另一张卡片的对应连接点并按 Enter');}
   });
+  const zoomSensitivityKey='director-canvas-zoom-sensitivity';
+  const zoomSensitivityOptions=[1,2,4,6,8,12,20];
+  const desktopZoomPreference=!!window.directorDesktop?.isDesktop;
+  let zoomSensitivity=6;
+  try{
+    // Desktop uses a new loopback port on launch; cookies survive that port change.
+    const stored=desktopZoomPreference?document.cookie.split('; ').find(row=>row.startsWith(zoomSensitivityKey+'='))?.split('=')[1]:localStorage.getItem(zoomSensitivityKey);
+    const saved=Number(stored);
+    if(zoomSensitivityOptions.includes(saved))zoomSensitivity=saved;
+  }catch{}
+  $('#zoom-sensitivity').value=String(zoomSensitivity);
+  $('#zoom-sensitivity').onchange=event=>{
+    const value=Number(event.target.value);
+    if(!zoomSensitivityOptions.includes(value))return;
+    zoomSensitivity=value;
+    try{
+      if(desktopZoomPreference){
+        document.cookie=zoomSensitivityKey+'='+value+'; Path=/; Max-Age=31536000; SameSite=Strict';
+        if(!document.cookie.split('; ').includes(zoomSensitivityKey+'='+value))throw Error('Preference unavailable');
+      }else localStorage.setItem(zoomSensitivityKey,String(value));
+    }
+    catch{tell('缩放灵敏度已生效，但当前浏览器无法保存设置。');}
+  };
   function zoom(factor,px,py){const v=state.project.body.canvas.viewport,old=v.zoom;v.zoom=Math.max(.15,Math.min(3,old*factor));v.x=px-(px-v.x)*v.zoom/old;v.y=py-(py-v.y)*v.zoom/old;transform();changed();}
   $('#canvas').addEventListener('wheel',event=>{
     if(!state.project)return;
@@ -741,7 +764,7 @@
     const canvas=$('#canvas'),r=canvas.getBoundingClientRect();
     const unit=event.deltaMode===1?16:event.deltaMode===2?canvas.clientHeight:1;
     // Trackpad pinch is delivered as Ctrl+wheel; two-finger scrolling pans.
-    if(event.ctrlKey){zoom(Math.exp(-event.deltaY*unit*.002),event.clientX-r.left,event.clientY-r.top);return;}
+    if(event.ctrlKey){zoom(Math.exp(-event.deltaY*unit*.001*zoomSensitivity),event.clientX-r.left,event.clientY-r.top);return;}
     const v=state.project.body.canvas.viewport;
     v.x-=event.deltaX*(event.deltaMode===2?canvas.clientWidth:unit);
     v.y-=event.deltaY*unit;

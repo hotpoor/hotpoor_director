@@ -747,3 +747,11 @@ SKILL 补入失败历史、无状态工具续接、命令停止平台差异、cw
 捏合缩放指数系数从 0.001 提高到 0.002，同样手势移动可产生更明显的缩放；平移速度、指针锚点及 15%–300% 缩放范围保持。Ctrl+滚轮沿用相同灵敏度。
 
 JavaScript 语法及缩放/平移逻辑检查通过，候选与正式 HTTPS 各 109 项检查及 64 文件 manifest 校验通过。发布 `xialiwei-api:0.19.2-director-pinch-speed` / **8666**，保留旧 8665 worker；回滚配置 `/home/ubuntu/director-pinch-speed-20260920/nginx-before-pinch-speed.conf`。
+
+## 2026-09-20 · 可设置的画布缩放灵敏度
+
+底栏新增「缩放灵敏度」下拉选择：1×、2×、4×、6×、8×、12×、20×，默认 6×（上一版的 3 倍），调整后立即生效。只影响双指捏合与 Ctrl+滚轮，平移与缩放按钮保持原速度。网页用 localStorage；源码客户端用持久 Cookie 跨启动时的本地端口变化保存，客户端和线上分别记忆。存储不可用时仍可调整并显示保存失败提示。底栏支持换行。
+
+验证覆盖默认与高低档位、保存恢复、非法/不可用存储、缩放锚点与边界、平移；隔离 Electron 检查控件、刷新恢复、1100/640px 布局与截图，以及客户端切换实际本地端口后的设置恢复。未进行物理触控板人工实测。
+
+发布 `xialiwei-api:0.19.3-director-zoom-settings` / **8667**；候选与正式 HTTPS 各 109 项检查通过，64 文件 manifest 校验通过。保留旧 8666 worker，回滚配置 `/home/ubuntu/director-zoom-settings-20260920/nginx-before-zoom-settings.conf`。
