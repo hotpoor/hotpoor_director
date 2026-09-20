@@ -229,3 +229,58 @@ img[data-preview]{cursor:zoom-in}#image-preview{position:fixed;inset:0;width:100
 :is(.card-content,.history-details,.imported-items,.ref-list,.history-strip,.pinned-results,.hidden-items)::-webkit-scrollbar-track{background:#141414;border-radius:6px}
 :is(.card-content,.history-details,.imported-items,.ref-list,.history-strip,.pinned-results,.hidden-items)::-webkit-scrollbar-thumb{background:#666;border:3px solid #141414;border-radius:6px}
 :is(.card-content,.history-details,.imported-items,.ref-list,.history-strip,.pinned-results,.hidden-items)::-webkit-scrollbar-thumb:hover{background:#999}
+
+/* Generation workbench: independently scrolling preview/editor and a fixed submit bar. */
+.generation-workbench>.card-progress{max-height:120px;overflow:auto;overscroll-behavior:contain}
+.generation-workbench>.card-heading{gap:8px;padding:0 12px}
+.generation-workbench>.card-heading strong{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.generation-workbench>.card-heading>small{display:none}
+#studio .card-layout-toggle{font-size:10px;padding:5px 7px;border:1px solid #444}
+.generation-workspace{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,.65fr) minmax(0,1fr);flex:1;min-height:0;min-width:0}
+.generation-wide .generation-workspace{grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);grid-template-rows:minmax(0,1fr)}
+.generation-workbench .generation-preview{padding:16px 20px;min-width:0;min-height:0;border-radius:0;border-bottom:1px solid #393939}
+.generation-wide .generation-preview{border-bottom:0;border-right:1px solid #393939}
+.generation-editor{min-width:0;min-height:0;overflow:auto;padding:16px 22px 22px;overscroll-behavior:contain;scrollbar-gutter:stable;background:#191919}
+.generation-models{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+#studio .generation-models>.model-picker{margin:0}
+.generation-workbench .generation-tabs{margin:10px 0}
+#studio .generation-workbench .generation-tabs button{padding:9px 2px;font-size:10px}
+.generation-workbench .generation-settings{padding:0 6px 12px}
+.generation-workbench .generation-settings>label:first-child{margin-top:0}
+.generation-workbench .parameter-grid{grid-template-columns:repeat(2,minmax(0,1fr));margin:10px 0 16px;gap:8px 12px}
+.generation-workbench .history-details{position:relative;top:auto;margin:14px 0;padding:10px 12px;max-height:240px;box-shadow:none}
+.generation-workbench .imported-library{margin:16px 0}
+.generation-notes{border-top:1px solid #363636;margin-top:16px;padding-top:12px;color:#999;font-size:11px;line-height:1.7}
+.generation-notes summary{cursor:pointer}
+.generation-submit{flex:none;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px 16px;padding:12px 18px;border-top:1px solid #444;background:#222;min-width:0}
+#studio .generation-submit .generate{margin:0;width:auto;min-width:140px;padding:12px 20px}
+#studio .generation-size-link{display:flex;align-items:center;flex-wrap:wrap;gap:8px 14px;padding:6px 0;text-align:left;border:0;white-space:normal}
+.generation-size-summary{font-size:13px;font-weight:600;color:#eee;line-height:1.5}
+#studio .generation-size-link small{font-size:10px;color:#aaa}
+#studio .generation-size-link.size-invalid .generation-size-summary{color:#f3a49b}
+.generation-submit .card-feedback{grid-column:1/-1;margin:0;max-height:48px;overflow:auto;overscroll-behavior:contain}
+.generation-submit .card-feedback:empty{display:none}
+.generation-editor::-webkit-scrollbar{width:12px;height:12px}
+.generation-editor::-webkit-scrollbar-track{background:#141414;border-radius:6px}
+.generation-editor::-webkit-scrollbar-thumb{background:#666;border:3px solid #141414;border-radius:6px}
+
+.generation-submit{border-radius:0 0 10px 10px}
+
+/* TokenMart identity and separate application/management credential panels. */
+#open-inference-settings{display:inline-flex;align-items:center;gap:8px}
+.inference-entry-logo{width:24px;height:24px;object-fit:contain}
+#inference-dialog{width:min(840px,calc(100vw - 32px));padding:0 24px 24px}
+#inference-dialog>.dialog-heading{position:sticky;top:0;z-index:3;background:#181818;margin:0;padding:18px 0 14px}
+.inference-brand{display:flex;align-items:center;gap:12px;color:#eee;text-decoration:none;min-width:0}
+.inference-brand>img{width:52px;height:52px;object-fit:contain;flex:none}
+.inference-brand>span{display:flex;flex-direction:column;gap:4px}
+.inference-brand strong{font-size:18px;letter-spacing:.3px}
+#studio .inference-brand small{font-size:11px;color:#f047a0}
+.inference-settings-tabs{display:flex;gap:6px;border-bottom:1px solid #404040;padding:0 0 10px;margin:0 0 18px;position:sticky;top:84px;z-index:2;background:#181818}
+#studio .inference-settings-tabs button{flex:1;background:#202020;color:#aaa;border:1px solid #383838;padding:12px;font-size:13px}
+#studio .inference-settings-tabs button[aria-selected=true]{background:#3c2332;color:#fff;border-color:#d52d83}
+#inference-dialog #management-settings{margin:0;border:0;padding:0}
+#inference-dialog #management-settings h2{font-size:16px;margin-top:0}
+#inference-dialog [role=tabpanel]{min-width:0}
+
+.generation-workbench>.edit-lock-badge{top:-22px;right:12px}

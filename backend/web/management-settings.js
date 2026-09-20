@@ -3,7 +3,29 @@
   const dialog=document.querySelector('#inference-dialog');
   const section=document.createElement('section');section.id='management-settings';
   section.innerHTML='<h2>管理 AK · 费用与用量查询</h2><p class="mode-note">每个生成 AK 绑定一个管理 AK；多个生成 AK 可共用。管理 AK 支持多个配置，多选启用用于组织汇总，同一组织只计一次。费用范围为整个组织，按生成 Key 分摊的费用为近似值。</p><form id="management-form"><div id="management-key-list"></div><button type="button" id="new-management-key" class="quiet">＋ 添加管理 AK</button><label>管理 AK 名称<input name="name" maxlength="80" required placeholder="例如 主组织 / 视频业务"></label><label>管理 AK<input name="api_key" type="password" autocomplete="off" spellcheck="false" maxlength="4096" placeholder="sk-mgmt-v1-…；编辑时留空保留密钥"></label><div class="comfy-actions"><button type="button" class="quiet" id="delete-management-key">删除此管理 AK</button><button type="button" class="quiet" id="test-management-key">验证管理 AK</button><button type="submit">保存并启用管理 AK</button></div><p id="management-status" role="status" aria-live="polite"></p></form><div class="management-report-filters"><label>查询范围<select id="management-period"><option value="all" selected>全部历史</option><option value="24h">24 小时</option><option value="7d">7 天</option><option value="14d">14 天</option><option value="30d">30 天</option><option value="90d">90 天</option></select></label><label>开始日期（UTC）<input type="date" id="management-from"></label><label>结束日期（UTC）<input type="date" id="management-to"></label></div><button type="button" class="quiet" id="query-management-report">查询启用管理 AK 的组织费用</button><p class="comfy-help">管理凭据独立保存于隐藏文件，点击显示或复制 AK。保存与验证只读查询组织身份，不触发生成。本管理 API 文档未提供单条请求费用查询。</p><div id="management-report" aria-live="polite"></div>';
-  dialog.append(section);
+  const applicationPanel=document.querySelector('#inference-form');
+  const heading=applicationPanel.querySelector('.dialog-heading');dialog.prepend(heading);
+  dialog.setAttribute('aria-label','service-inference AK 管理');
+  const tabs=document.createElement('div');tabs.className='inference-settings-tabs';tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label','AK 类型');
+  tabs.innerHTML='<button type="button" id="management-ak-tab" role="tab" aria-controls="management-settings">管理 AK</button><button type="button" id="application-ak-tab" role="tab" aria-controls="inference-form">应用 AK</button>';
+  heading.after(tabs);dialog.insertBefore(section,applicationPanel);
+  applicationPanel.setAttribute('role','tabpanel');applicationPanel.setAttribute('aria-labelledby','application-ak-tab');
+  section.setAttribute('role','tabpanel');section.setAttribute('aria-labelledby','management-ak-tab');
+  function selectTab(name,focus=false){
+    const management=name==='management';section.hidden=!management;applicationPanel.hidden=management;
+    for(const [id,active] of [['management-ak-tab',management],['application-ak-tab',!management]]){
+      const tab=document.getElementById(id);tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;if(active&&focus)tab.focus();
+    }
+    dialog.scrollTop=0;
+    window.dispatchEvent(new Event('director-inference-tab-changed'));
+  }
+  tabs.addEventListener('click',event=>{const tab=event.target.closest('[role="tab"]');if(tab)selectTab(tab.id==='management-ak-tab'?'management':'application');});
+  tabs.addEventListener('keydown',event=>{
+    if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();
+    const name=event.key==='Home'?'management':event.key==='End'?'application':section.hidden?'management':'application';selectTab(name,true);
+  });
+  selectTab('management');
+
   const form=section.querySelector('form'),status=document.querySelector('#management-status'),key=form.elements.api_key;
   const editor=document.createElement('div');editor.className='ak-inline-editor';editor.hidden=true;
   const newButton=document.querySelector('#new-management-key');
@@ -36,6 +58,7 @@
     finally{copy.disabled=false;}
   };
   dialog.addEventListener('close',hideKey);
+  window.addEventListener('director-inference-tab-changed',()=>{keyRequest++;key.type='password';reveal.textContent='显示 AK';});
 
   function placeEditor(id,open=true){
     editor.hidden=!open;
@@ -61,7 +84,7 @@
   document.querySelector('#management-key-list').addEventListener('click',e=>{const b=e.target.closest('[data-edit-management]');if(b)edit(b.dataset.editManagement,editor.hidden||editing!==b.dataset.editManagement);});
   let reporting=false;
   async function report(generationId=''){
-    if(reporting)return;reporting=true;
+    if(reporting)return;selectTab('management');reporting=true;
     const output=document.querySelector('#management-report'),buttons=[document.querySelector('#query-management-report'),document.querySelector('#query-bound-management')];buttons.forEach(b=>b.disabled=true);output.textContent='查询组织费用…';
     try{const query=new URLSearchParams({period:document.querySelector('#management-period').value});if(generationId)query.set('generation_key_id',generationId);const from=document.querySelector('#management-from').value,to=document.querySelector('#management-to').value;if(from||to){query.set('from',from);query.set('to',to);}const r=await request('/api/service-inference/management/report?'+query);output.innerHTML=(r.reports?`<p>组织费用合计 USD ${esc(r.total_cost_usd)} · ${r.organization_count} 个组织（已去重）</p>`:'')+(r.reports||[r]).map(r=>`<p><strong>${esc(r.key_name)} · 组织 ${esc(r.organization_id)}</strong></p><p>${esc(r.from)} → ${esc(r.to)} · UTC · 组织总费用 USD ${esc(r.total_cost_usd)}</p><p>未定价模型 ${esc(r.unpriced_count??'未提供')} 个${Number(r.unpriced_count)>0?'，汇总费用尚不完整':''}</p><h3>按模型</h3>${r.by_model.map(x=>`<p>${esc(x.model)} · USD ${esc(x.total_cost_usd)}</p>`).join('')||'<p>暂无记录</p>'}<h3>按生成 Key · 近似分摊费用</h3>${r.by_key.map(x=>`<p>${esc(x.apiKeyId)} · USD ${esc(x.total_cost_usd)}</p>`).join('')||'<p>暂无记录</p>'}`).join('<hr>');output.scrollIntoView({block:'nearest'});}catch(e){output.textContent=e.message;}finally{reporting=false;buttons.forEach(b=>b.disabled=false);}
   }

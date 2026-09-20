@@ -189,7 +189,14 @@
     for (const card of cards()) { const candidate=liveChats.get(card.id);const live=card.type==='chat'&&candidate?._commentCard===card?candidate:null;const el=live||document.createElement('article');if(!live){el.className='generation-card';el.dataset.card=card.id;}$('#canvas-world').append(el);if(live)position(card,el);else renderCard(card); }
     $('#canvas-empty').hidden = !!cards().length; transform();renderConnections();
   }
-  function position(card, el) { Object.assign(el.style,{left:card.x+'px',top:card.y+'px',width:card.w+'px',height:card.h+'px'}); }
+  function position(card, el) {
+    Object.assign(el.style,{left:card.x+'px',top:card.y+'px',width:card.w+'px',height:card.h+'px'});
+    if(['image','video'].includes(card.type)){
+      el.classList.toggle('generation-wide',card.w>=760);
+      const toggle=el.querySelector('[data-card-layout]');
+      if(toggle){toggle.textContent=card.w>=760?'上下布局':'左右布局';toggle.setAttribute('aria-label',card.w>=760?'收窄卡片，切换上下布局':'展开卡片，切换左右布局');}
+    }
+  }
   const connections=()=>state.project.body.canvas.connections ||= [];
   function referenceLimit(card){return state.models.find(m=>m.id===card.model)?.ref_limit || (card.mode==='reference'?8:card.type==='video'?2:1);}
   function referenceLabel(card,i){if(card.mode==='reference'){const d=draft(card),kind=refKind(d,d.refs[i]);return `${{image:'Picture',video:'Video',audio:'Audio'}[kind]} ${d.refs.slice(0,i+1).filter(r=>refKind(d,r)===kind).length}`;}return card.type==='video'?(i?'尾帧':'首帧'):String(i+1);}
@@ -246,7 +253,7 @@
   }
   function sizeHelp(card,model){const l=model?.size_limits;if(!l)return '';return `<section class="size-help"><strong>推荐尺寸</strong><div>${l.presets.map(([w,h])=>`<button class="quiet" data-size-preset="${w},${h}">${w} × ${h}</button>`).join('')}</div><small>宽高各 ${l.minimum}–${l.maximum} px，${l.step} 的倍数；总像素 ≤ ${l.max_pixels.toLocaleString()}。这是当前工作台的本机限制；分辨率越高越耗显存。${card.type==='video'?'建议先用 512×320 短片测试。':''}</small><p class="size-error" role="status" hidden></p></section>`;}
   function checkSize(card){const d=draft(card),l=state.models.find(m=>m.id===d.model)?.size_limits;if(!l)return '';for(const [key,label] of [['width','宽度'],['height','高度']]){const n=d[key];if(!Number.isInteger(n)||n<l.minimum||n>l.maximum)return `${label}需为 ${l.minimum}–${l.maximum} px 的整数`;if(n%l.step)return `${label} ${n} px 不符合要求，需为 ${l.step} 的倍数`;}return d.width*d.height>l.max_pixels?`总像素 ${(d.width*d.height).toLocaleString()} 超过本机上限 ${l.max_pixels.toLocaleString()}，请减小宽高或选择推荐尺寸。`:'';}
-  function updateSizeFeedback(card){const el=document.querySelector(`[data-card="${card.id}"]`),error=checkSize(card),hint=el?.querySelector('.size-error');if(hint){hint.textContent=error;hint.hidden=!error;}for(const key of ['width','height'])el?.querySelector(`[data-field="${key}"]`)?.setAttribute('aria-invalid',String(!!error));return error;}
+  function updateSizeFeedback(card){const el=document.querySelector(`[data-card="${card.id}"]`),error=checkSize(card),hint=el?.querySelector('.size-error');if(hint){hint.textContent=error;hint.hidden=!error;}for(const key of ['width','height'])el?.querySelector(`[data-field="${key}"]`)?.setAttribute('aria-invalid',String(!!error));updateGenerationSummary(card);return error;}
   function cardPorts(){return '<button class="card-port port-input" data-port="input" aria-label="输入连接点，接收其他卡片素材" title="左侧输入：从其他卡片右侧拖线到这里"></button><button class="card-port port-output" data-port="output" aria-label="输出连接点，拖向另一张卡片左侧" title="右侧输出：拖向另一张卡片左侧"></button>';}
   function portPoint(card,side){return {x:side==='output'?card.x+card.w+15:card.x-15,y:card.y+card.h/2};}
   function wirePath(a,b){const bend=Math.max(70,Math.abs(b.x-a.x)*.45);return `M ${a.x} ${a.y} C ${a.x+bend} ${a.y}, ${b.x-bend} ${b.y}, ${b.x} ${b.y}`;}
@@ -368,7 +375,41 @@
     el.innerHTML = `<header class="card-heading"><span class="card-grip">⠿</span><strong title="${esc(cardName(card))}">${esc(cardName(card))}</strong><button class="quiet rename-card" title="重命名卡片" aria-label="重命名卡片">✎</button><small>${card.id.slice(0,6).toUpperCase()}</small><button class="quiet remove-card" title="移除卡片">✕</button></header><div class="card-progress"></div><div class="card-content"><section class="card-results"></section><details class="imported-library" open></details>${(model?.provider==='service-inference'||credentials.keys.length||card.credential_id)?`<label class="model-picker">生成 AK<select data-credential><option value="">请选择生成 AK</option>${credentials.keys.map(p=>`<option value="${esc(p.id)}" ${p.id===card.credential_id?'selected':''}>${esc(p.name)}</option>`).join('')}${card.credential_id&&!credentials.keys.some(p=>p.id===card.credential_id)?'<option selected disabled>原 AK 在当前账号不可用，请重新选择</option>':''}</select></label>`:''}<label class="model-picker">模型<select data-field="model" ${available.length?'':'disabled'}>${available.map(m=>`<option value="${m.id}" ${m.available===false?'disabled':''} ${m.id===d.model?'selected':''}>${esc(m.name)}${m.available===false?'（所选 AK 不可用）':''}</option>`).join('') || '<option>暂无可用模型</option>'}</select></label><div class="generation-tabs" role="tablist">${['text','image','reference','edit','series'].map((m,i)=>model?.modes.includes(m)?`<button role="tab" aria-selected="${m===card.mode}" data-mode="${m}">${model?.type==='image'&&model?.provider==='service-inference'?({text:'文生图',image:'图片编辑',reference:'多图融合',edit:'交互编辑',series:'组图生成'}[m]):tabLabels[i]}</button>`:'').join('')}</div><div class="generation-settings">${model?.note?`<p class="mode-note">${esc(model.note)}</p>`:''}<label>提示词<textarea data-field="prompt" rows="3" placeholder="描述画面、镜头、光线与情绪…">${esc(d.prompt)}</textarea></label>${d.model==='z-image'?`<label>反向提示词<textarea data-field="negative_prompt" rows="2" placeholder="希望避免的内容…">${esc(d.negative_prompt)}</textarea></label>`:''}${card.mode!=='text' ? `<div class="ref-zone" tabindex="0"><span>${card.mode==='reference'?'参考素材（按类型编号）':card.type==='video'?(referenceLimit(card)>1?'首帧 / 尾帧（可选）':'首帧图片'):'输入图片'}</span><button class="quiet choose-ref">＋ 添加${model?.ref_types?'素材':'图片'} · 拖入 / 粘贴</button><input hidden class="ref-upload" type="file" accept="${model?.ref_types?'image/png,image/jpeg,image/webp,video/mp4,video/webm,audio/*':'image/png,image/jpeg,image/webp'}" ${card.type==='video'||card.mode==='reference'?'multiple':''}></div><div class="ref-list">${d.refs.map((r,i)=>`<div>${refKind(d,r)==='image'?`<button type="button" class="local-reference-mention" data-ref-mention="${localReferenceToken(d,i)}" title="插入 ${localReferenceToken(d,i)}">${refPreview(d,r)}</button>`:refPreview(d,r)}<button class="quiet" data-remove-ref="${i}" title="移除参考素材">✕</button><small>${referenceLabel(card,i)}</small><button type="button" class="quiet reference-token" data-ref-mention="${localReferenceToken(d,i)}">${localReferenceToken(d,i)}</button></div>`).join('')}</div>`:''}${sizeHelp(card,model)}<div class="parameter-grid"><label>宽度<input data-field="width" type="number" min="256" max="1536" step="${model?.dimension_step || (card.type==='image'?16:32)}" value="${d.width}"></label><label>高度<input data-field="height" type="number" min="256" max="1536" step="${model?.dimension_step || (card.type==='image'?16:32)}" value="${d.height}"></label><label>步数<input data-field="steps" type="number" min="1" max="${d.model==='z-image'?60:40}" value="${d.steps}" ${model?.fixed_steps?'readonly':''}></label>${d.model==='z-image'?`<label>CFG / 提示词引导<input data-field="cfg" type="number" min="1" max="20" step="0.5" value="${d.cfg}"></label>`:''}${card.type==='video'?`<label>时长 / 秒<input data-field="duration" type="number" min="1" max="15" step="1" value="${d.duration}"></label>`:`<label>重绘强度<input data-field="denoise" type="number" min="0.01" max="1" step="0.05" value="${d.denoise}" ${card.mode==='text'?'disabled':''}></label>`}</div><label>种子 <small>−1 为随机</small><input data-field="seed" type="number" min="-1" max="9007199254740991" value="${d.seed}"></label><button class="generate" ${unsupported?'disabled':''}>${unsupported?'当前模式暂不可生成':'生成'+(card.type==='image'?'图片':'视频')+' ↗'}</button><p class="card-feedback" role="status"></p></div></div>${['n','s','e','w','ne','nw','se','sw'].map(dir=>`<div class="resize-handle resize-${dir}" data-resize="${dir}"></div>`).join('')}`;
     el.insertAdjacentHTML('beforeend',cardPorts());
     if(model?.provider==='service-inference')el.querySelector('.generation-settings').innerHTML=cloudFields(card,model,d);
+    arrangeGenerationCard(card,el);
     renderResults(card);renderLibrary(card);updateSizeFeedback(card);
+  }
+  function arrangeGenerationCard(card,el){
+    el.classList.add('generation-workbench');
+    const preview=el.querySelector('.card-content'),settings=el.querySelector('.generation-settings');
+    const workspace=document.createElement('div');workspace.className='generation-workspace';
+    preview.before(workspace);workspace.append(preview);
+    preview.classList.add('generation-preview');preview.setAttribute('aria-label','生成结果与素材');
+    const editor=document.createElement('section');editor.className='generation-editor';editor.setAttribute('aria-label','提示词与生成参数');
+    workspace.append(editor);
+    for(const child of [...preview.children])if(!child.matches('.card-results,.imported-library'))editor.append(child);
+    const models=document.createElement('div');models.className='generation-models';editor.prepend(models);
+    editor.querySelectorAll(':scope > .model-picker').forEach(label=>models.append(label));
+    const notes=document.createElement('details');notes.className='generation-notes';notes.innerHTML='<summary>模型与生成说明</summary>';
+    settings.querySelectorAll(':scope > .mode-note').forEach(note=>notes.append(note));
+    if(notes.children.length>1)settings.append(notes);
+    const parameters=settings.querySelector('.parameter-grid');
+    const prompt=settings.querySelector('[data-field="prompt"]')?.closest('label');
+    const mentions=settings.querySelector('.reference-mentions');
+    if(parameters&&prompt)(mentions||prompt).after(parameters);
+    const footer=document.createElement('div');footer.className='generation-submit';
+    footer.innerHTML='<button type="button" class="quiet generation-size-link" data-edit-dimensions title="查看并调整输出尺寸"><span class="generation-size-summary"></span><small>调整尺寸 ↗</small></button>';
+    footer.append(settings.querySelector('.generate'),settings.querySelector('.card-feedback'));
+    workspace.after(footer);
+    const toggle=document.createElement('button');toggle.type='button';toggle.className='quiet card-layout-toggle';toggle.dataset.cardLayout='';
+    el.querySelector('.card-heading .remove-card').before(toggle);
+    position(card,el);
+  }
+  function updateGenerationSummary(card){
+    const el=document.querySelector(`[data-card="${card.id}"]`),output=el?.querySelector('.generation-size-summary');if(!output)return;
+    const d=draft(card),model=state.models.find(m=>m.id===card.model);
+    const size=model?.provider==='service-inference'?(card.type==='video'?`${d.resolution} · ${d.ratio}`:d.size):`${d.width} × ${d.height} px`;
+    output.textContent=size+(card.type==='video'?` · ${d.duration} 秒`:'');
+    el.querySelector('.generation-size-link').classList.toggle('size-invalid',!!checkSize(card));
   }
   function parameterSummary(body){const p=body.params;if(body.provider==='service-inference')return body.type==='image'?`分辨率 ${p.size}`:`${p.resolution} · ${p.ratio} · ${p.duration} 秒`;return `${p.width} × ${p.height} · ${p.steps} 步 · seed ${p.seed}`;}
   function cloudFields(card,model,d){
@@ -670,7 +711,7 @@
     if(cards().length>=200){tell('当前画布最多 200 张卡片');return;}
     const v=state.project.body.canvas.viewport;
     const nextX=cards().length ? Math.max(...cards().map(c=>c.x+c.w))+80 : (50-v.x)/v.zoom;
-    const card={id:uid(),type,mode:'text',x:nextX,y:cards()[0]?.y ?? (40-v.y)/v.zoom,w:480,h:Math.max(520,Math.min(860,($('#canvas').clientHeight-80)/v.zoom)),drafts:{},pins:[],pinLimit:2};
+    const card={id:uid(),type,mode:'text',x:nextX,y:cards()[0]?.y ?? (40-v.y)/v.zoom,w:920,h:Math.max(520,Math.min(720,($('#canvas').clientHeight-80)/v.zoom)),drafts:{},pins:[],pinLimit:2};
     cards().push(card);draft(card);renderCanvas();changed();
   }
   for(const type of ['select','focusout','keyup','pointerup','input'])$('#canvas-world').addEventListener(type,rememberPromptSelection,true);
@@ -683,7 +724,7 @@
   },true);
   $('#canvas-world').addEventListener('input',event=>{
     const el=event.target.closest('[data-card]');if(!el)return;const card=cardById(el.dataset.card);
-    if(event.target.dataset.field && event.target.dataset.field!=='model'){const key=event.target.dataset.field;draft(card)[key]=event.target.type==='checkbox'?event.target.checked:['model','prompt','negative_prompt','size','resolution','ratio','image_urls','video_urls','audio_urls','first_frame','last_frame','output_format','optimize_mode','quality','background'].includes(key)?event.target.value:Number(event.target.value);changed();if(['image_urls','video_urls','audio_urls','first_frame','last_frame'].includes(key))refreshReferenceMentions(card,el,key);if(['width','height'].includes(key))updateSizeFeedback(card);}
+    if(event.target.dataset.field && event.target.dataset.field!=='model'){const key=event.target.dataset.field;draft(card)[key]=event.target.type==='checkbox'?event.target.checked:['model','prompt','negative_prompt','size','resolution','ratio','image_urls','video_urls','audio_urls','first_frame','last_frame','output_format','optimize_mode','quality','background'].includes(key)?event.target.value:Number(event.target.value);changed();updateGenerationSummary(card);if(['image_urls','video_urls','audio_urls','first_frame','last_frame'].includes(key))refreshReferenceMentions(card,el,key);if(['width','height'].includes(key))updateSizeFeedback(card);}
   });
   $('#canvas-world').addEventListener('change',async event=>{
     const el=event.target.closest('[data-card]');if(!el)return;const card=cardById(el.dataset.card);
@@ -694,8 +735,8 @@
       const model=state.models.find(m=>m.id===event.target.value&&m.type===card.type);
       if(!model)return;
       card.model=model.id;
-      const top=el.querySelector('.card-content').scrollTop;
-      renderCard(card);el.querySelector('.card-content').scrollTop=top;
+      const top=el.querySelector('.card-content').scrollTop,editorTop=el.querySelector('.generation-editor')?.scrollTop||0;
+      renderCard(card);el.querySelector('.card-content').scrollTop=top;el.querySelector('.generation-editor').scrollTop=editorTop;
       el.querySelector('[data-field=model]').focus({preventScroll:true});changed();
     }
     if(event.target.dataset.hideJob){const id=event.target.dataset.hideJob;card.hiddenJobs=[...new Set([...(card.hiddenJobs||[]),id])];card.pins=(card.pins||[]).filter(p=>p!==id);if(card.selected===id)delete card.selected;renderResults(card);changed();}
@@ -708,6 +749,14 @@
   $('#canvas-world').addEventListener('click',async event=>{
     const button=event.target.closest('button'),el=event.target.closest('[data-card]');if(!button||!el)return;
     const card=cardById(el.dataset.card);
+    if(button.hasAttribute('data-card-layout')){
+      if(window.directorPublicShare||state.project?.permission&&!['owner','editor','admin'].includes(state.project.permission.role))return;
+      card.w=card.w>=760?480:920;position(card,el);renderConnections();changed();return;
+    }
+    if(button.hasAttribute('data-edit-dimensions')){
+      const target=el.querySelector('.parameter-grid');target?.scrollIntoView({block:'nearest',inline:'nearest'});
+      target?.querySelector('input,select')?.focus({preventScroll:true});return;
+    }
     if(button.dataset.refMention){insertReferenceMention(card,el,button.dataset.refMention);return;}
     if(button.classList.contains('copy-cloud-url')){try{await navigator.clipboard.writeText(card.url);tell('公网 URL 已复制');}catch(e){tell('复制失败：'+e.message);}return;}
     if(button.dataset.sizePreset){const [w,h]=button.dataset.sizePreset.split(',').map(Number);Object.assign(draft(card),{width:w,height:h});el.querySelector('[data-field=width]').value=w;el.querySelector('[data-field=height]').value=h;updateSizeFeedback(card);changed();return;}
@@ -813,7 +862,7 @@
       return;
     }
     // Card content owns native scrolling; its padding also scrolls the outer card.
-    if(!event.ctrlKey&&event.target.closest('.card-content,.asset-content,.imported-items,.ref-list,.history-strip,.pinned-results,.hidden-items'))return;
+    if(!event.ctrlKey&&event.target.closest('.card-content,.generation-editor,.generation-submit,.asset-content,.imported-items,.ref-list,.history-strip,.pinned-results,.hidden-items'))return;
     event.preventDefault();
     const canvas=$('#canvas'),r=canvas.getBoundingClientRect();
     const unit=event.deltaMode===1?16:event.deltaMode===2?canvas.clientHeight:1;

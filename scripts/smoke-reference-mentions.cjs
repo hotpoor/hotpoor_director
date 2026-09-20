@@ -77,22 +77,22 @@ app.whenReady().then(async()=>{
     await new Promise(r=>setTimeout(r,300));
     const scrollPoint=await js("(()=>{const r=document.querySelector('[data-field=prompt]').getBoundingClientRect();return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)}})()");
     const before=await js("JSON.stringify(directorStudio.currentProject().body.canvas.viewport)");
-    const cardTop=await js("document.querySelector('.card-content').scrollTop");
+    const cardTop=await js("document.querySelector('.generation-editor').scrollTop");
     win.webContents.sendInputEvent({type:'mouseMove',...scrollPoint});
     await new Promise(r=>setTimeout(r,250));
     win.webContents.sendInputEvent({type:'mouseWheel',...scrollPoint,deltaY:-90,deltaX:0,canScroll:true});
     await wait("document.querySelector('[data-field=prompt]').scrollTop>0");
     if(await js("JSON.stringify(directorStudio.currentProject().body.canvas.viewport)")!==before)throw Error('Textarea wheel moved canvas');
-    if(await js("document.querySelector('.card-content').scrollTop")!==cardTop)throw Error('Textarea wheel moved parent card');
+    if(await js("document.querySelector('.generation-editor').scrollTop")!==cardTop)throw Error('Textarea wheel moved parent card');
     await js("document.querySelector('[data-field=prompt]').scrollTop=100000");
     win.webContents.sendInputEvent({type:'mouseWheel',...scrollPoint,deltaY:-200,deltaX:0,canScroll:true});
     await new Promise(r=>setTimeout(r,250));
-    if(await js("JSON.stringify(directorStudio.currentProject().body.canvas.viewport)")!==before||await js("document.querySelector('.card-content').scrollTop")!==cardTop)throw Error('Textarea boundary chained scroll');
+    if(await js("JSON.stringify(directorStudio.currentProject().body.canvas.viewport)")!==before||await js("document.querySelector('.generation-editor').scrollTop")!==cardTop)throw Error('Textarea boundary chained scroll');
     await js("document.querySelector('[data-field=prompt]').dispatchEvent(new WheelEvent('wheel',{deltaY:-100,ctrlKey:true,bubbles:true,cancelable:true}))");
     if(await js("JSON.stringify(directorStudio.currentProject().body.canvas.viewport)")!==before)throw Error('Textarea pinch changed canvas');
     // The card padding is a usable outer scrolling lane, independent of its textarea.
     const marginPoint=await js("(()=>{const r=document.querySelector('.card-content').getBoundingClientRect();return {x:Math.round(r.left+8),y:Math.round(r.top+r.height/2)}})()");
-    if(await js(`document.elementFromPoint(${marginPoint.x},${marginPoint.y}).className`)!=='card-content')throw Error('Outer card scrolling lane is covered');
+    if(await js(`document.elementFromPoint(${marginPoint.x},${marginPoint.y}).classList.contains('card-content')`)!==true)throw Error('Outer card scrolling lane is covered: '+await js(`document.elementFromPoint(${marginPoint.x},${marginPoint.y})?.outerHTML.slice(0,200)`));
     const outerBefore=await js("document.querySelector('.card-content').scrollTop");
     win.webContents.sendInputEvent({type:'mouseMove',...marginPoint});
     await new Promise(r=>setTimeout(r,250));

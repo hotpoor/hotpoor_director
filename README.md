@@ -2,11 +2,28 @@
 
 一个把无限画布、图片/视频生成、资料对话和本机命令执行放在一起的 Electron 工作台。内置 Python/Tornado 后端与 PostgreSQL，支持 ComfyUI 本地生成、service-inference 多模型调用、素材直传、时间轴以及云端协作。
 
-[对话与代理](#对话与代理模式) · [画布与素材](#无限画布与资源引用关系) · [视频时间轴](#视频时间轴2026-09-18) · [macOS 启动](#macos-源码启动) · [Windows 启动](#windows-开发启动) · [助手使用指南](SKILL.md)
+[技术栈与服务来源](#技术栈与服务来源) · [对话与代理](#对话与代理模式) · [画布与素材](#无限画布与资源引用关系) · [视频时间轴](#视频时间轴2026-09-18) · [macOS 启动](#macos-源码启动) · [Windows 启动](#windows-开发启动) · [助手使用指南](SKILL.md)
 
 开发过程、验证结果和待办见 [开发日志](DEVELOPMENT_LOG.md)。
 
 首次部署、架构原理与维护排查见 [SKILL.md](SKILL.md)。也可以让代码助手先阅读仓库根目录的 `SKILL.md`，再按你的环境执行部署；该文件不包含个人账号或本地数据。
+
+## 技术栈与服务来源
+
+<a href="https://console.service-inference.ai/"><img src="backend/web/brand/tokenmart-cart.png" width="88" alt="TokenMart · service-inference 控制台"></a>
+
+**云端 API 服务供应商：service-inference（TokenMart）**。点击 Logo 或进入 [TokenMart 控制台](https://console.service-inference.ai/) 管理服务账号与 AK。本项目通过该服务调用云端图片、视频和对话模型；推理 API 地址为 `https://model.service-inference.ai`，管理 AK 用于查询服务商提供的余额与账单。
+
+| 技术 / 服务 | 在本项目中的职责 | 来源 |
+| --- | --- | --- |
+| HTML / CSS / JavaScript | 项目页面、无限画布、生成卡片与对话界面 | [本仓库前端源码](backend/web/) |
+| Electron（Chromium / Node.js） | 桌面客户端、系统集成与本机命令执行 | [Electron 官方网站](https://www.electronjs.org/) |
+| Python / Tornado | 本机 HTTP API、任务调度与生成服务适配 | [Python](https://www.python.org/) · [Tornado](https://www.tornadoweb.org/en/stable/) |
+| PostgreSQL / Psycopg | 账号、项目、对话与任务数据持久化 | [PostgreSQL](https://www.postgresql.org/) · [Psycopg](https://www.psycopg.org/) |
+| ComfyUI | 用户独立部署的本地模型推理与工作流执行 | [ComfyUI 官方仓库](https://github.com/Comfy-Org/ComfyUI) |
+| service-inference / TokenMart | 云端模型 API、AK 管理及用量账单服务 | [TokenMart 控制台](https://console.service-inference.ai/) |
+
+Hotpoor Director 负责工作台界面与服务编排；以上开源技术由各自项目维护，云端 API 由 service-inference 提供，本地推理由用户配置的 ComfyUI 执行。模型名称表示调用的模型，API 服务供应商与模型开发方分别标识。TokenMart Logo [原图来源](https://console.service-inference.ai/tokenmart-cart.png)，品牌与标识归其各自权利人所有。
 
 ## 对话与代理模式
 
@@ -523,3 +540,9 @@ ComfyUI 默认没有账号保护，只向可信局域网开放，不需要路由
 声音默认「跟随播放轴」：独立播放时听最后发起播放的轴，同步播放时听发起同步播放的轴；也可手动固定某轴、混音或静音。预览右下角的「音源 / 静音」标记显示当前路由。2026-09-18 已修复第二轴动态编辑控件绑定问题，拖动、裁剪与片段命名对各轴独立生效。
 
 同一服务中的同一项目支持约每秒检查更新：保存后的卡片和时间轴自动更新到其他窗口，不同位置的修改进行三方合并；同一字段冲突保留当前草稿并提示。鼠标进入或焦点进入卡片／时间轴时申请独占编辑锁，其他窗口显示编辑者账号（同账号不同窗口也互斥）。离开且保存完成后释放；关闭或断网停止续租，锁最多 15 秒过期。播放预览仍可使用。客户端与线上使用同一实现；本机项目副本与云端副本仍通过已有同步功能管理。
+
+### 生成卡片左右布局与固定生成栏
+
+新图片/视频生成卡片默认 920px 宽：左侧预览、历史与引入素材，右侧模型、提示词与参数，各自滚动；底部固定输出尺寸/比例/时长和生成按钮。点击「调整尺寸」定位到参数。已有窄卡片可在标题栏点击「左右布局」展开，「上下布局」恢复 480px；拖窄至 760px 以下也会自动上下排列。只调整卡片显示，不修改生成尺寸，宽度随项目保存。
+
+service-inference 设置使用用户提供的 [TokenMart Logo](https://console.service-inference.ai/tokenmart-cart.png)，点击 Logo 可打开 [TokenMart 控制台](https://console.service-inference.ai/)。窗口分为左侧「管理 AK」和右侧「应用 AK」两个 Tab，默认管理 AK；应用 AK 用于生成和对话，管理 AK 用于费用与用量查询。切换 Tab 保留未保存输入并隐藏已显示密钥，查询绑定管理 AK 的费用会自动切换到管理 Tab。客户端需重启一次以载入系统浏览器跳转支持。

@@ -34,6 +34,7 @@
     finally{copy.disabled=false;}
   };
   dialog.addEventListener('close',hideKey);
+  window.addEventListener('director-inference-tab-changed',()=>{keyRequest++;key.type='password';reveal.textContent='显示 AK';});
 
   function placeEditor(id,open=true){
     editor.hidden=!open;

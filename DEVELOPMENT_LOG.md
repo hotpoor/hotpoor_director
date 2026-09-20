@@ -775,3 +775,15 @@ JavaScript 语法及缩放/平移逻辑检查通过，候选与正式 HTTPS 各 
 验证：专项 Electron 测试通过外层侧边留白滚动、textarea 独立滚动、生成信息独立滚动和边界隔离、12 项素材的左右横向滚动及边界不带动画布。测试等待布局绘制后派发原生滚轮事件；横向素材测试先收起置顶生成信息，避免命中被遮挡区域。截图检查通过。
 
 发布 `xialiwei-api:0.19.5-director-card-scroll` / **8669**；候选与正式 HTTPS 各 109 项检查通过，64 文件 manifest 校验通过。保留旧 8668 worker，回滚配置 `/home/ubuntu/director-card-scroll-20260920/nginx-before-card-scroll.conf`。
+
+## 2026-09-20 · 左右生成工作区与 TokenMart 设置
+
+图片/视频生成卡片拆分为左右独立滚动区域，左侧预览/历史/引入素材，右侧模型/提示词/参数；输出尺寸、比例、时长与生成按钮固定在底栏，尺寸摘要随参数变化更新并可跳转编辑。新卡默认宽 920px，旧卡保留宽度并提供一键左右/上下布局，760px 以下自动上下排列；外部连线点保留，编辑状态徽标避让标题按钮。
+
+service-inference 使用用户指定的 TokenMart PNG 原图（本地打包），Logo 链接到 https://console.service-inference.ai/ 。设置改为管理 AK / 应用 AK Tab，管理排在左侧并默认显示；切换保留未保存输入并遮蔽密钥，绑定费用查询自动进入管理 Tab。桌面仅为此精确 HTTPS 官网地址增加系统浏览器跳转，其他新窗口继续拦截。两个表单与原有保存/启用逻辑分离保留。
+
+README 顶部增加可点击 TokenMart Logo、控制台入口、Logo 原图来源与技术栈/服务来源表，分别标明 Electron、Python/Tornado、PostgreSQL/Psycopg、ComfyUI 与云端 API 服务商的职责。
+
+验证：JavaScript 语法与差异检查通过；隔离 Electron 测试覆盖左右/上下布局、最小卡片、固定生成栏、尺寸即时更新、参数跳转、AK 保存与切换、管理费用 Tab、Logo 加载和跳转、密钥遮蔽及既有素材引用/独立滚动。截图检查通过，未调用付费模型。
+
+发布 `xialiwei-api:0.20.0-director-workbench-brand` / **8670**；65 文件 manifest 校验、候选与正式 HTTPS 各 109 项检查通过，线上脚本/样式/Logo 与源码一致，切流前待处理对话为 0。保留旧 8669 worker；回滚配置 `/home/ubuntu/director-workbench-brand-20260920/nginx-before-workbench-brand.conf`。源码客户端重启一次后启用系统浏览器官网跳转，无需构建安装包。

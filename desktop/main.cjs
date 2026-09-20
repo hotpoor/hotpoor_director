@@ -119,7 +119,10 @@ else app.whenReady().then(async () => {
     ipcMain.handle('director:agent-folders',event=>{if(event.sender!==window.webContents||event.senderFrame?.url!==origin+'/')throw Error('Invalid sender');return readAgentFolders();});
     ipcMain.handle('director:add-agent-folder',async event=>{if(event.sender!==window.webContents||event.senderFrame?.url!==origin+'/')throw Error('Invalid sender');const result=await dialog.showOpenDialog(window,{title:'选择允许代理执行命令的文件夹',properties:['openDirectory','createDirectory']});if(result.canceled||!result.filePaths[0])return readAgentFolders();const folders=[...new Set([...readAgentFolders(),fs.realpathSync(result.filePaths[0])])];writeAgentFolders(folders);return folders;});
     ipcMain.handle('director:remove-agent-folder',(event,value)=>{if(event.sender!==window.webContents||event.senderFrame?.url!==origin+'/')throw Error('Invalid sender');if(typeof value!=='string')throw Error('Invalid folder');const target=fs.existsSync(value)?fs.realpathSync(value):value,folders=readAgentFolders().filter(folder=>folder!==target);writeAgentFolders(folders);return folders;});
-    window.webContents.setWindowOpenHandler(() => ({action:'deny'}));
+    window.webContents.setWindowOpenHandler(({url}) => {
+      if(url==='https://console.service-inference.ai/')void shell.openExternal(url).catch(()=>{});
+      return {action:'deny'};
+    });
     window.webContents.on('will-navigate', (event, url) => {if (new URL(url).origin !== origin) event.preventDefault();});
     await window.webContents.session.cookies.set({url:origin,name:'director_bootstrap',value:bootstrapToken,httpOnly:true,sameSite:'strict',path:'/'});
     await window.loadURL(origin);
