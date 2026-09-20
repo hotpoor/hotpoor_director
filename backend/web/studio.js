@@ -741,7 +741,7 @@
     const canvas=$('#canvas'),r=canvas.getBoundingClientRect();
     const unit=event.deltaMode===1?16:event.deltaMode===2?canvas.clientHeight:1;
     // Trackpad pinch is delivered as Ctrl+wheel; two-finger scrolling pans.
-    if(event.ctrlKey){zoom(Math.exp(-event.deltaY*unit*.001),event.clientX-r.left,event.clientY-r.top);return;}
+    if(event.ctrlKey){zoom(Math.exp(-event.deltaY*unit*.002),event.clientX-r.left,event.clientY-r.top);return;}
     const v=state.project.body.canvas.viewport;
     v.x-=event.deltaX*(event.deltaMode===2?canvas.clientWidth:unit);
     v.y-=event.deltaY*unit;

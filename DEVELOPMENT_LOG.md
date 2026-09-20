@@ -741,3 +741,9 @@ SKILL 补入失败历史、无状态工具续接、命令停止平台差异、cw
 验证：平移方向、双向缩放、缩放锚点与边界逻辑检查通过，JavaScript 语法检查通过；同步与云端网关 23 项测试通过。候选与正式 HTTPS 各 109 项检查通过，64 文件 manifest 校验通过，切流前待处理对话为 0。未进行物理触控板人工实测。
 
 发布镜像 `xialiwei-api:0.19.1-director-trackpad`，端口 **8665**，基于原生产镜像只替换 Director runtime。保留旧 8664 worker `xialiwei-api-before-trackpad-20260920`；回滚配置 `/home/ubuntu/director-trackpad-20260920/nginx-before-trackpad.conf`。客户端使用共享源码，无需构建安装包。
+
+## 2026-09-20 · 提高双指缩放灵敏度
+
+捏合缩放指数系数从 0.001 提高到 0.002，同样手势移动可产生更明显的缩放；平移速度、指针锚点及 15%–300% 缩放范围保持。Ctrl+滚轮沿用相同灵敏度。
+
+JavaScript 语法及缩放/平移逻辑检查通过，候选与正式 HTTPS 各 109 项检查及 64 文件 manifest 校验通过。发布 `xialiwei-api:0.19.2-director-pinch-speed` / **8666**，保留旧 8665 worker；回滚配置 `/home/ubuntu/director-pinch-speed-20260920/nginx-before-pinch-speed.conf`。
