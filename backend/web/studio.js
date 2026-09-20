@@ -735,7 +735,18 @@
     else{keyboardPort=selected;tell('已选连接点，请聚焦另一张卡片的对应连接点并按 Enter');}
   });
   function zoom(factor,px,py){const v=state.project.body.canvas.viewport,old=v.zoom;v.zoom=Math.max(.15,Math.min(3,old*factor));v.x=px-(px-v.x)*v.zoom/old;v.y=py-(py-v.y)*v.zoom/old;transform();changed();}
-  $('#canvas').addEventListener('wheel',event=>{if(event.target.closest('[data-card]')&&!event.ctrlKey)return;event.preventDefault();const r=$('#canvas').getBoundingClientRect();zoom(Math.exp(-event.deltaY*.001),event.clientX-r.left,event.clientY-r.top);},{passive:false});
+  $('#canvas').addEventListener('wheel',event=>{
+    if(!state.project)return;
+    event.preventDefault();
+    const canvas=$('#canvas'),r=canvas.getBoundingClientRect();
+    const unit=event.deltaMode===1?16:event.deltaMode===2?canvas.clientHeight:1;
+    // Trackpad pinch is delivered as Ctrl+wheel; two-finger scrolling pans.
+    if(event.ctrlKey){zoom(Math.exp(-event.deltaY*unit*.001),event.clientX-r.left,event.clientY-r.top);return;}
+    const v=state.project.body.canvas.viewport;
+    v.x-=event.deltaX*(event.deltaMode===2?canvas.clientWidth:unit);
+    v.y-=event.deltaY*unit;
+    transform();changed();
+  },{passive:false});
   $('#zoom-in').onclick=()=>zoom(1.2,$('#canvas').clientWidth/2,$('#canvas').clientHeight/2);
   $('#zoom-out').onclick=()=>zoom(1/1.2,$('#canvas').clientWidth/2,$('#canvas').clientHeight/2);
   $('#zoom-reset').onclick=()=>zoom(1/state.project.body.canvas.viewport.zoom,$('#canvas').clientWidth/2,$('#canvas').clientHeight/2);

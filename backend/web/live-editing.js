@@ -58,7 +58,7 @@
     if(!mine(key)||!online){event.preventDefault();event.stopImmediatePropagation();void claim(key);label.textContent=leases[key]?.client!==client&&leases[key]?.expires>Date.now()/1000?leases[key].login+' 正在编辑':'正在取得编辑权限，请稍后操作';}
   }
   for(const type of ['pointerdown','click','dblclick','keydown','beforeinput','paste','drop','change'])document.addEventListener(type,gate,true);
-  document.addEventListener('wheel',e=>{if(e.ctrlKey||e.metaKey)gate(e);},{capture:true,passive:false});
+  document.addEventListener('wheel',e=>{if(!e.target.closest('#canvas')&&(e.ctrlKey||e.metaKey))gate(e);},{capture:true,passive:false});
   document.addEventListener('pointerover',e=>{hover=resource(e.target);if(hover)void claim(hover);},true);
   document.addEventListener('pointerout',e=>{hover=resource(e.relatedTarget);},true);
   document.addEventListener('focusin',e=>{focus=resource(e.target);if(focus)void claim(focus);},true);

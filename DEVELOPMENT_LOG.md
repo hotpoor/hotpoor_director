@@ -733,3 +733,11 @@ SKILL 补入失败历史、无状态工具续接、命令停止平台差异、cw
 - 参数随卡片保存，切换模型重置不兼容选项；WebP 在本地与云端保持正确 MIME。校验非法画质、张数、参考图数量、透明 JPEG，提交仍不自动重试。
 - 验证：348 项 Python 测试通过；隔离 Electron GPT 卡片验证通过（AK、Flare max、参数保存重开、切换模型）。使用模拟生成响应，未调用真实付费生成接口。
 - 发布：导出 64 文件同步 API 仓库，镜像 `xialiwei-api:0.19.0-director-gpt-images`；候选 8664 的 109 项 HTTP 检查通过后切换 Nginx，保留旧 8663 worker。当前本地 AK 的只读模型查询确认提供 GPT Image 2 / 2.5 Flare / 2.5 Sunburst。
+
+## 2026-09-20 · 触控板画布手势与服务器发布
+
+双指上下左右滑动平移画布，双指捏合缩放并保持指针处画布坐标不变；卡片上同样生效，画布缩放不再受卡片编辑租约拦截。保留 Ctrl+滚轮及底栏缩放按钮，更新操作提示。
+
+验证：平移方向、双向缩放、缩放锚点与边界逻辑检查通过，JavaScript 语法检查通过；同步与云端网关 23 项测试通过。候选与正式 HTTPS 各 109 项检查通过，64 文件 manifest 校验通过，切流前待处理对话为 0。未进行物理触控板人工实测。
+
+发布镜像 `xialiwei-api:0.19.1-director-trackpad`，端口 **8665**，基于原生产镜像只替换 Director runtime。保留旧 8664 worker `xialiwei-api-before-trackpad-20260920`；回滚配置 `/home/ubuntu/director-trackpad-20260920/nginx-before-trackpad.conf`。客户端使用共享源码，无需构建安装包。
