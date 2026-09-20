@@ -198,6 +198,41 @@
   function rememberRef(d,asset){(d.ref_info ||= {})[asset.id]={mime:asset.mime,name:asset.name};}
   function checkRefCount(card,d,mime){const kind=mime.split('/')[0];if(!acceptsReference(card,mime))throw Error('当前模型不支持此参考类型');if(d.refs.length>=referenceLimit(card))throw Error(`最多 ${referenceLimit(card)} 项参考素材`);if(kind!=='image'&&d.refs.filter(r=>refKind(d,r)===kind).length>=3)throw Error('视频和音频各最多 3 项');}
   function refPreview(d,id){const kind=refKind(d,id),url='/api/assets/'+esc(id);return kind==='image'?`<img src="${url}" alt="参考图片">`:`<${kind} src="${url}" controls preload="metadata"></${kind}>`;}
+  const promptSelections=new WeakMap();
+  function rememberPromptSelection(event){
+    const input=event.target;
+    if(!input.matches?.('textarea[data-field="prompt"]'))return;
+    const card=cardById(input.closest('[data-card]')?.dataset.card);if(!card)return;
+    promptSelections.set(card,{model:card.model,mode:card.mode,value:input.value,start:input.selectionStart,end:input.selectionEnd});
+  }
+  function insertReferenceMention(card,el,token){
+    if(window.directorPublicShare||state.project?.permission&&!['owner','editor','admin'].includes(state.project.permission.role))return;
+    const input=el.querySelector('textarea[data-field="prompt"]');if(!input)return;
+    const saved=promptSelections.get(card);
+    const valid=saved&&saved.model===card.model&&saved.mode===card.mode&&saved.value===input.value;
+    const start=valid?saved.start:input.value.length,end=valid?saved.end:start;
+    input.setRangeText(token,start,end,'end');
+    input.focus({preventScroll:true});
+    input.dispatchEvent(new Event('input',{bubbles:true}));
+    rememberPromptSelection({target:input});
+  }
+  function localReferenceToken(d,index){
+    const kind=refKind(d,d.refs[index]);
+    return '@'+({image:'Image',video:'Video',audio:'Audio'}[kind]||'Image')+d.refs.slice(0,index+1).filter(id=>refKind(d,id)===kind).length;
+  }
+  function cloudReferenceMentions(d,key){
+    const kind=key==='video_urls'?'Video':key==='audio_urls'?'Audio':'Image';
+    return String(d[key]||'').split(/\s+/).filter(Boolean).map((url,index)=>{
+      const token='@'+kind+(key==='last_frame'?2:index+1);
+      const safe=/^https?:\/\//i.test(url);
+      const preview=kind==='Image'&&safe?`<img src="${esc(url)}" alt="${token} 参考图片" loading="lazy" draggable="false">`:`<span class="reference-media-kind">${kind==='Video'?'视频':kind==='Audio'?'音频':'图片'}</span>`;
+      return `<button type="button" class="reference-mention quiet" data-ref-mention="${token}" title="插入 ${token} · ${esc(url)}">${preview}<strong>${token}</strong></button>`;
+    }).join('');
+  }
+  function refreshReferenceMentions(card,el,key){
+    const list=el.querySelector(`[data-reference-field="${key}"]`);
+    if(list)list.innerHTML=cloudReferenceMentions(draft(card),key);
+  }
   function historyMaterials(body){
     const refs=body.refs || [],counts={image:0,video:0,audio:0};
     if(!refs.length)return '<p class="history-materials-empty">本次未使用参考素材</p>';
@@ -330,7 +365,7 @@
     }
     const d = draft(card), unsupported = model?.available===false||!model?.modes.includes(card.mode);
     const tabLabels = card.type === 'image' ? ['文生图','图生图','参考图'] : ['文生视频','图生视频','多元素参考'];
-    el.innerHTML = `<header class="card-heading"><span class="card-grip">⠿</span><strong title="${esc(cardName(card))}">${esc(cardName(card))}</strong><button class="quiet rename-card" title="重命名卡片" aria-label="重命名卡片">✎</button><small>${card.id.slice(0,6).toUpperCase()}</small><button class="quiet remove-card" title="移除卡片">✕</button></header><div class="card-progress"></div><div class="card-content"><section class="card-results"></section><details class="imported-library" open></details>${(model?.provider==='service-inference'||credentials.keys.length||card.credential_id)?`<label class="model-picker">生成 AK<select data-credential><option value="">请选择生成 AK</option>${credentials.keys.map(p=>`<option value="${esc(p.id)}" ${p.id===card.credential_id?'selected':''}>${esc(p.name)}</option>`).join('')}${card.credential_id&&!credentials.keys.some(p=>p.id===card.credential_id)?'<option selected disabled>原 AK 在当前账号不可用，请重新选择</option>':''}</select></label>`:''}<label class="model-picker">模型<select data-field="model" ${available.length?'':'disabled'}>${available.map(m=>`<option value="${m.id}" ${m.available===false?'disabled':''} ${m.id===d.model?'selected':''}>${esc(m.name)}${m.available===false?'（所选 AK 不可用）':''}</option>`).join('') || '<option>暂无可用模型</option>'}</select></label><div class="generation-tabs" role="tablist">${['text','image','reference','edit','series'].map((m,i)=>model?.modes.includes(m)?`<button role="tab" aria-selected="${m===card.mode}" data-mode="${m}">${model?.type==='image'&&model?.provider==='service-inference'?({text:'文生图',image:'图片编辑',reference:'多图融合',edit:'交互编辑',series:'组图生成'}[m]):tabLabels[i]}</button>`:'').join('')}</div><div class="generation-settings">${model?.note?`<p class="mode-note">${esc(model.note)}</p>`:''}<label>提示词<textarea data-field="prompt" rows="3" placeholder="描述画面、镜头、光线与情绪…">${esc(d.prompt)}</textarea></label>${d.model==='z-image'?`<label>反向提示词<textarea data-field="negative_prompt" rows="2" placeholder="希望避免的内容…">${esc(d.negative_prompt)}</textarea></label>`:''}${card.mode!=='text' ? `<div class="ref-zone" tabindex="0"><span>${card.mode==='reference'?'参考素材（按类型编号）':card.type==='video'?(referenceLimit(card)>1?'首帧 / 尾帧（可选）':'首帧图片'):'输入图片'}</span><button class="quiet choose-ref">＋ 添加${model?.ref_types?'素材':'图片'} · 拖入 / 粘贴</button><input hidden class="ref-upload" type="file" accept="${model?.ref_types?'image/png,image/jpeg,image/webp,video/mp4,video/webm,audio/*':'image/png,image/jpeg,image/webp'}" ${card.type==='video'||card.mode==='reference'?'multiple':''}></div><div class="ref-list">${d.refs.map((r,i)=>`<div>${refPreview(d,r)}<button class="quiet" data-remove-ref="${i}" title="移除参考素材">✕</button><small>${referenceLabel(card,i)}</small></div>`).join('')}</div>`:''}${sizeHelp(card,model)}<div class="parameter-grid"><label>宽度<input data-field="width" type="number" min="256" max="1536" step="${model?.dimension_step || (card.type==='image'?16:32)}" value="${d.width}"></label><label>高度<input data-field="height" type="number" min="256" max="1536" step="${model?.dimension_step || (card.type==='image'?16:32)}" value="${d.height}"></label><label>步数<input data-field="steps" type="number" min="1" max="${d.model==='z-image'?60:40}" value="${d.steps}" ${model?.fixed_steps?'readonly':''}></label>${d.model==='z-image'?`<label>CFG / 提示词引导<input data-field="cfg" type="number" min="1" max="20" step="0.5" value="${d.cfg}"></label>`:''}${card.type==='video'?`<label>时长 / 秒<input data-field="duration" type="number" min="1" max="15" step="1" value="${d.duration}"></label>`:`<label>重绘强度<input data-field="denoise" type="number" min="0.01" max="1" step="0.05" value="${d.denoise}" ${card.mode==='text'?'disabled':''}></label>`}</div><label>种子 <small>−1 为随机</small><input data-field="seed" type="number" min="-1" max="9007199254740991" value="${d.seed}"></label><button class="generate" ${unsupported?'disabled':''}>${unsupported?'当前模式暂不可生成':'生成'+(card.type==='image'?'图片':'视频')+' ↗'}</button><p class="card-feedback" role="status"></p></div></div>${['n','s','e','w','ne','nw','se','sw'].map(dir=>`<div class="resize-handle resize-${dir}" data-resize="${dir}"></div>`).join('')}`;
+    el.innerHTML = `<header class="card-heading"><span class="card-grip">⠿</span><strong title="${esc(cardName(card))}">${esc(cardName(card))}</strong><button class="quiet rename-card" title="重命名卡片" aria-label="重命名卡片">✎</button><small>${card.id.slice(0,6).toUpperCase()}</small><button class="quiet remove-card" title="移除卡片">✕</button></header><div class="card-progress"></div><div class="card-content"><section class="card-results"></section><details class="imported-library" open></details>${(model?.provider==='service-inference'||credentials.keys.length||card.credential_id)?`<label class="model-picker">生成 AK<select data-credential><option value="">请选择生成 AK</option>${credentials.keys.map(p=>`<option value="${esc(p.id)}" ${p.id===card.credential_id?'selected':''}>${esc(p.name)}</option>`).join('')}${card.credential_id&&!credentials.keys.some(p=>p.id===card.credential_id)?'<option selected disabled>原 AK 在当前账号不可用，请重新选择</option>':''}</select></label>`:''}<label class="model-picker">模型<select data-field="model" ${available.length?'':'disabled'}>${available.map(m=>`<option value="${m.id}" ${m.available===false?'disabled':''} ${m.id===d.model?'selected':''}>${esc(m.name)}${m.available===false?'（所选 AK 不可用）':''}</option>`).join('') || '<option>暂无可用模型</option>'}</select></label><div class="generation-tabs" role="tablist">${['text','image','reference','edit','series'].map((m,i)=>model?.modes.includes(m)?`<button role="tab" aria-selected="${m===card.mode}" data-mode="${m}">${model?.type==='image'&&model?.provider==='service-inference'?({text:'文生图',image:'图片编辑',reference:'多图融合',edit:'交互编辑',series:'组图生成'}[m]):tabLabels[i]}</button>`:'').join('')}</div><div class="generation-settings">${model?.note?`<p class="mode-note">${esc(model.note)}</p>`:''}<label>提示词<textarea data-field="prompt" rows="3" placeholder="描述画面、镜头、光线与情绪…">${esc(d.prompt)}</textarea></label>${d.model==='z-image'?`<label>反向提示词<textarea data-field="negative_prompt" rows="2" placeholder="希望避免的内容…">${esc(d.negative_prompt)}</textarea></label>`:''}${card.mode!=='text' ? `<div class="ref-zone" tabindex="0"><span>${card.mode==='reference'?'参考素材（按类型编号）':card.type==='video'?(referenceLimit(card)>1?'首帧 / 尾帧（可选）':'首帧图片'):'输入图片'}</span><button class="quiet choose-ref">＋ 添加${model?.ref_types?'素材':'图片'} · 拖入 / 粘贴</button><input hidden class="ref-upload" type="file" accept="${model?.ref_types?'image/png,image/jpeg,image/webp,video/mp4,video/webm,audio/*':'image/png,image/jpeg,image/webp'}" ${card.type==='video'||card.mode==='reference'?'multiple':''}></div><div class="ref-list">${d.refs.map((r,i)=>`<div>${refKind(d,r)==='image'?`<button type="button" class="local-reference-mention" data-ref-mention="${localReferenceToken(d,i)}" title="插入 ${localReferenceToken(d,i)}">${refPreview(d,r)}</button>`:refPreview(d,r)}<button class="quiet" data-remove-ref="${i}" title="移除参考素材">✕</button><small>${referenceLabel(card,i)}</small><button type="button" class="quiet reference-token" data-ref-mention="${localReferenceToken(d,i)}">${localReferenceToken(d,i)}</button></div>`).join('')}</div>`:''}${sizeHelp(card,model)}<div class="parameter-grid"><label>宽度<input data-field="width" type="number" min="256" max="1536" step="${model?.dimension_step || (card.type==='image'?16:32)}" value="${d.width}"></label><label>高度<input data-field="height" type="number" min="256" max="1536" step="${model?.dimension_step || (card.type==='image'?16:32)}" value="${d.height}"></label><label>步数<input data-field="steps" type="number" min="1" max="${d.model==='z-image'?60:40}" value="${d.steps}" ${model?.fixed_steps?'readonly':''}></label>${d.model==='z-image'?`<label>CFG / 提示词引导<input data-field="cfg" type="number" min="1" max="20" step="0.5" value="${d.cfg}"></label>`:''}${card.type==='video'?`<label>时长 / 秒<input data-field="duration" type="number" min="1" max="15" step="1" value="${d.duration}"></label>`:`<label>重绘强度<input data-field="denoise" type="number" min="0.01" max="1" step="0.05" value="${d.denoise}" ${card.mode==='text'?'disabled':''}></label>`}</div><label>种子 <small>−1 为随机</small><input data-field="seed" type="number" min="-1" max="9007199254740991" value="${d.seed}"></label><button class="generate" ${unsupported?'disabled':''}>${unsupported?'当前模式暂不可生成':'生成'+(card.type==='image'?'图片':'视频')+' ↗'}</button><p class="card-feedback" role="status"></p></div></div>${['n','s','e','w','ne','nw','se','sw'].map(dir=>`<div class="resize-handle resize-${dir}" data-resize="${dir}"></div>`).join('')}`;
     el.insertAdjacentHTML('beforeend',cardPorts());
     if(model?.provider==='service-inference')el.querySelector('.generation-settings').innerHTML=cloudFields(card,model,d);
     renderResults(card);renderLibrary(card);updateSizeFeedback(card);
@@ -341,6 +376,9 @@
     const refs=(key,label,rows=2)=>`<div class="cloud-ref-zone" data-cloud-field="${key}"><label>${label}<textarea data-field="${key}" rows="${rows}" placeholder="https://…">${esc(d[key]||'')}</textarea></label><button class="quiet" data-cloud-upload="${key}">＋ 选择文件直传 · 拖入 / 粘贴</button>${cloudRetries.get(card.id+':'+key)?.model===card.model&&cloudRetries.get(card.id+':'+key)?.mode===card.mode?`<button class="quiet" data-cloud-retry="${key}">重试上次直传 / 确认</button>`:''}<input hidden class="cloud-upload" data-cloud-field="${key}" type="file" accept="${key==='video_urls'?'video/mp4,video/webm':key==='audio_urls'?'audio/*':'image/png,image/jpeg,image/webp'}" ${rows>1?'multiple':''}></div>`;
     let html=`${model.available===false?'<p class="mode-note">当前 Key 的模型列表不包含此模型，请在设置中切换 Key 或重新选择模型。</p>':''}<p class="mode-note">${esc(model.note)}</p><label>提示词<textarea data-field="prompt" rows="3" placeholder="描述画面、镜头、光线与情绪…">${esc(d.prompt)}</textarea></label>`;
     if(card.mode!=='text'){
+      const referenceKeys=model.type==='video'&&model.api_version==='v2'&&card.mode==='image'?['first_frame','last_frame']:['image_urls'];
+      if(model.type==='video'&&card.mode==='reference')referenceKeys.push('video_urls','audio_urls');
+      html+='<p class="reference-mention-help">选中提示词文字后点击素材替换为编号；也可在光标处插入。</p><div class="reference-mentions">'+referenceKeys.map(key=>`<div data-reference-field="${key}">${cloudReferenceMentions(d,key)}</div>`).join('')+'</div>';
       html+='<p class="mode-note">填写公网直链（每行一项），或选择文件直传到已配置的云存储。</p>';
       if(model.type==='video'&&model.api_version==='v2'&&card.mode==='image')html+=refs('first_frame','首帧图片 URL',1)+refs('last_frame','尾帧图片 URL（可选）',1);
       else html+=refs('image_urls',`参考图片 URL · 最多 ${model.ref_limit} 张（依填写顺序编号）`);
@@ -635,9 +673,17 @@
     const card={id:uid(),type,mode:'text',x:nextX,y:cards()[0]?.y ?? (40-v.y)/v.zoom,w:480,h:Math.max(520,Math.min(860,($('#canvas').clientHeight-80)/v.zoom)),drafts:{},pins:[],pinLimit:2};
     cards().push(card);draft(card);renderCanvas();changed();
   }
+  for(const type of ['select','focusout','keyup','pointerup','input'])$('#canvas-world').addEventListener(type,rememberPromptSelection,true);
+  $('#canvas-world').addEventListener('pointerdown',event=>{
+    if(event.button!==0||!event.target.closest('[data-ref-mention]'))return;
+    const input=document.activeElement;
+    if(input?.matches('textarea[data-field="prompt"]')&&input.closest('[data-card]')===event.target.closest('[data-card]')){
+      rememberPromptSelection({target:input});event.preventDefault();
+    }
+  },true);
   $('#canvas-world').addEventListener('input',event=>{
     const el=event.target.closest('[data-card]');if(!el)return;const card=cardById(el.dataset.card);
-    if(event.target.dataset.field && event.target.dataset.field!=='model'){const key=event.target.dataset.field;draft(card)[key]=event.target.type==='checkbox'?event.target.checked:['model','prompt','negative_prompt','size','resolution','ratio','image_urls','video_urls','audio_urls','first_frame','last_frame','output_format','optimize_mode','quality','background'].includes(key)?event.target.value:Number(event.target.value);changed();if(['width','height'].includes(key))updateSizeFeedback(card);}
+    if(event.target.dataset.field && event.target.dataset.field!=='model'){const key=event.target.dataset.field;draft(card)[key]=event.target.type==='checkbox'?event.target.checked:['model','prompt','negative_prompt','size','resolution','ratio','image_urls','video_urls','audio_urls','first_frame','last_frame','output_format','optimize_mode','quality','background'].includes(key)?event.target.value:Number(event.target.value);changed();if(['image_urls','video_urls','audio_urls','first_frame','last_frame'].includes(key))refreshReferenceMentions(card,el,key);if(['width','height'].includes(key))updateSizeFeedback(card);}
   });
   $('#canvas-world').addEventListener('change',async event=>{
     const el=event.target.closest('[data-card]');if(!el)return;const card=cardById(el.dataset.card);
@@ -662,6 +708,7 @@
   $('#canvas-world').addEventListener('click',async event=>{
     const button=event.target.closest('button'),el=event.target.closest('[data-card]');if(!button||!el)return;
     const card=cardById(el.dataset.card);
+    if(button.dataset.refMention){insertReferenceMention(card,el,button.dataset.refMention);return;}
     if(button.classList.contains('copy-cloud-url')){try{await navigator.clipboard.writeText(card.url);tell('公网 URL 已复制');}catch(e){tell('复制失败：'+e.message);}return;}
     if(button.dataset.sizePreset){const [w,h]=button.dataset.sizePreset.split(',').map(Number);Object.assign(draft(card),{width:w,height:h});el.querySelector('[data-field=width]').value=w;el.querySelector('[data-field=height]').value=h;updateSizeFeedback(card);changed();return;}
     if(button.dataset.extractFrame){await extractFrame(card,button);return;}
@@ -760,6 +807,11 @@
   function zoom(factor,px,py){const v=state.project.body.canvas.viewport,old=v.zoom;v.zoom=Math.max(.15,Math.min(3,old*factor));v.x=px-(px-v.x)*v.zoom/old;v.y=py-(py-v.y)*v.zoom/old;transform();changed();}
   $('#canvas').addEventListener('wheel',event=>{
     if(!state.project)return;
+    if(event.target.closest('textarea')){
+      // Keep native text scrolling, including at its boundaries; never pan/zoom here.
+      if(event.ctrlKey||event.metaKey)event.preventDefault();
+      return;
+    }
     event.preventDefault();
     const canvas=$('#canvas'),r=canvas.getBoundingClientRect();
     const unit=event.deltaMode===1?16:event.deltaMode===2?canvas.clientHeight:1;

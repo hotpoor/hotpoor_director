@@ -755,3 +755,13 @@ JavaScript 语法及缩放/平移逻辑检查通过，候选与正式 HTTPS 各 
 验证覆盖默认与高低档位、保存恢复、非法/不可用存储、缩放锚点与边界、平移；隔离 Electron 检查控件、刷新恢复、1100/640px 布局与截图，以及客户端切换实际本地端口后的设置恢复。未进行物理触控板人工实测。
 
 发布 `xialiwei-api:0.19.3-director-zoom-settings` / **8667**；候选与正式 HTTPS 各 109 项检查通过，64 文件 manifest 校验通过。保留旧 8666 worker，回滚配置 `/home/ubuntu/director-zoom-settings-20260920/nginx-before-zoom-settings.conf`。
+
+## 2026-09-20 · 提示词素材编号与 textarea 滚动
+
+云端生成卡片在提示词下方显示已填写/引用素材的编号入口，图片展示缩略图，视频/音频展示类型。图片、视频、音频分别按输入顺序编号为 `@ImageN`、`@VideoN`、`@AudioN`；URL 编辑后即时刷新。选中文字后点击素材替换选区，无选区则在已记住的光标处插入；恢复提示词焦点与光标，走既有草稿与自动保存。局部参考列表也增加编号插入入口；只读卡片不修改提示词。
+
+画布 wheel 处理让出 textarea 的普通滚动，并以 overscroll containment 隔离文本滚动边界；textarea 内 Ctrl/触控板捏合不再缩放画布或页面。其他画布区域保留现有手势。
+
+新增 `scripts/smoke-reference-mentions.cjs`：隔离 PostgreSQL、模拟云端模型/图片与真实编辑租约，验证编号、选区替换、连续插入光标、保存重开、原生鼠标滚轮文本滚动、边界不带动画布/卡片、textarea 捏合隔离。JavaScript 语法、专项 Electron 验证和界面截图检查通过；未调用付费模型。
+
+发布 `xialiwei-api:0.19.4-director-reference-mentions` / **8668**；候选与正式 HTTPS 各 109 项检查通过，64 文件 manifest 校验通过，切流前待处理对话为 0。保留旧 8667 worker，回滚配置 `/home/ubuntu/director-reference-mentions-20260920/nginx-before-reference-mentions.conf`。

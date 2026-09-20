@@ -206,3 +206,14 @@ img[data-preview]{cursor:zoom-in}#image-preview{position:fixed;inset:0;width:100
 .canvas-bottom{flex-wrap:wrap}.canvas-bottom>span{min-width:0}
 #studio .zoom-sensitivity-control{display:flex;flex-shrink:0;gap:6px;margin:0;font-size:11px;white-space:nowrap}
 #studio #zoom-sensitivity{width:auto;min-width:78px;padding:5px 6px;font-size:11px;margin:0}
+
+/* Text editing owns scrolling; canvas gestures remain outside text areas. */
+#canvas textarea{overscroll-behavior:contain;touch-action:pan-x pan-y}
+.reference-mentions{display:flex;flex-wrap:wrap;gap:8px;min-width:0}
+#studio .reference-mention{display:flex;flex-direction:column;align-items:center;gap:5px;width:92px;padding:6px;white-space:normal}
+.reference-mention img{display:block;width:78px;height:60px;object-fit:contain;background:#111;border-radius:3px}
+.reference-mention strong{font-size:11px}.reference-media-kind{display:grid;place-items:center;width:78px;height:60px;font-size:13px;color:#ccc}
+#studio .ref-list .local-reference-mention{position:static;display:block;width:100%;padding:0;margin:0;background:transparent;border:0}
+#studio .ref-list .reference-token{position:static;padding:3px 5px;margin-top:4px;font-size:10px}
+
+.reference-mentions>[data-reference-field]{display:contents}.reference-mention-help{font-size:11px;line-height:1.6;color:#aaa;margin:6px 0}
