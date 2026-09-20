@@ -18,7 +18,10 @@ def main():
     mode = os.environ.get('DIRECTOR_TEST_MODE', 'image')
     standard = model == 'z-image'
     video = model in ('minimax-h3-ref2va', 'ltx-2.5')
+    turbo = model == 'minimax-h3-ref2va' and os.environ.get('DIRECTOR_TEST_TURBO') == '1'
     suffix = '-'+model+'-'+mode if video else '-standard-' + mode if standard else ''
+    if turbo:
+        suffix += '-turbo'
     env = {**os.environ, 'DIRECTOR_DATA_DIR': str(DIRECTORY)}
     with (DIRECTORY / 'generation-backend.log').open('w') as errors:
         process = subprocess.Popen([sys.executable, '-m', 'backend', 'serve', '--port', '0', '--desktop'],
@@ -45,6 +48,11 @@ def main():
                 payload = {'request_id':uuid.uuid4().hex,'card_id':card_id,'mode':mode,'model':model,
                            'prompt':'A monochrome cinema emblem on a dark background','width':512 if standard else 256,'height':512 if standard else 256,'steps':11 if model=='ltx-2.5' else 20 if video else 30 if standard else 4,'duration':1,'seed':42,'denoise':.5,'refs':[asset], 'negative_prompt':'blurry, low quality', 'cfg':4}
                 if model=='minimax-h3-ref2va':
+                    payload['turbo_mode'] = turbo
+                    if turbo:
+                        payload['steps'] = 4
+                        for invalid in [{'steps':20}, {'turbo_mode':'true'}]:
+                            assert client.post(path+'/generate',json={**payload,**invalid}).status_code == 400
                     payload['prompt']='A ceramic cup next to the cinema emblem. Use <Picture 1> and <Picture 2> as visual references. Slow camera movement.'
                     extra=client.post('/api/assets',files={'file':('second.png',(ROOT/'.test-data/studio-smoke/generated.png').read_bytes(),'image/png')});extra.raise_for_status();payload['refs'].append(extra.json()['id'])
                 if os.environ.get('DIRECTOR_TEST_MULTIMODAL'):
@@ -84,6 +92,9 @@ def main():
                         print('Real sampling progress:', progress, flush=True)
                     if record['body']['status'] in ('completed','failed'):
                         assert record['body']['status'] == 'completed', record['body'].get('error')
+                        if turbo:
+                            assert record['body']['params']['turbo_mode'] is True
+                            assert record['body']['params']['steps'] == 4
                         if standard:
                             assert record['body']['model'] == model
                             assert record['body']['params']['negative_prompt'] == payload['negative_prompt']

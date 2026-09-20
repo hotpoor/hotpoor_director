@@ -78,9 +78,11 @@ def validate_project(data):
             if not isinstance(draft.get('negative_prompt', ''), str) or len(draft.get('negative_prompt', '')) > 12000:
                 raise ValueError('反向提示词格式不正确')
             refs = draft.get('refs', [])
+            if 'turbo_mode' in draft and not isinstance(draft['turbo_mode'], bool):
+                raise ValueError('加速模式参数必须为布尔值')
             if not isinstance(refs, list) or len(refs) > 8 or any(not isinstance(ref, str) or not ID.fullmatch(ref) for ref in refs):
                 raise ValueError('参考图片列表不正确')
-            for key in ('width', 'height', 'steps', 'seed', 'denoise', 'duration', 'cfg'):
+            for key in ('width', 'height', 'steps', 'seed', 'denoise', 'duration', 'cfg', 'standard_steps'):
                 if key in draft and not finite(draft[key], -1, 2**53 - 1):
                     raise ValueError('卡片数值参数不正确')
         hidden = card.get('hiddenJobs', [])

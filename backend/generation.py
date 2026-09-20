@@ -28,7 +28,7 @@ MODELS = [
     dict(id='minimax-h3', name='MiniMax H3 · 本地', type='video', modes=['text', 'image'],
          note='图生视频支持首帧和可选尾帧；多图参考请选择 H3-Base-Ref2VA。'),
     dict(id='minimax-h3-ref2va', name='H3-Base-Ref2VA · 多元素参考', type='video', modes=['reference'],
-         ref_limit=8, ref_types=["image", "video", "audio"], default_steps=20, default_duration=5, default_width=512, default_height=320,
+         ref_limit=8, ref_types=["image", "video", "audio"], supports_turbo=True, default_steps=20, default_duration=5, default_width=512, default_height=320,
          note='混合参考共 1–8 项，视频、音频各最多 3 项。用 <Picture 1> / <Video 1> / <Audio 1> 引用；视频取开头并转 24 fps（仅画面），声音请单独添加音频。参考片段截至生成时长，建议至少 5 秒。'),
     dict(id='ltx-2.5', name='LTX-2.5 22B 蒸馏版 · 本地', type='video', modes=['text', 'image'],
          ref_limit=1, default_steps=11, fixed_steps=True, default_width=512, default_height=320, dimension_step=64,
@@ -122,9 +122,13 @@ def workflow(kind, mode, p, refs, job_id):
     if reference:
         graph['1']['inputs']['unet_name'] = 'minimax_h3_ref2va_pruned_fp8_scaled.safetensors'
         graph['5'] = node('MiniMaxH3ReferenceToVideo', clip=['2', 0], vae=['3', 0], audio_vae=['4', 0], prompt=p['prompt'], width=width, height=height, length=length, ref_image_size='match')
-        del graph['6']
-        graph['7']['inputs']['model'] = ['1', 0]
-        graph['10']['inputs']['model'] = ['1', 0]
+        if p.get('turbo_mode', False):
+            graph['6']['inputs']['lora_name'] = 'minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors'
+            graph['10']['inputs']['steps'] = 4
+        else:
+            del graph['6']
+            graph['7']['inputs']['model'] = ['1', 0]
+            graph['10']['inputs']['model'] = ['1', 0]
     counts = {'image': 0, 'video': 0, 'audio': 0}
     for i, ref in enumerate(refs):
         media = ref if isinstance(ref, dict) else {'name': ref, 'kind': 'image'}
@@ -213,6 +217,13 @@ class GenerateHandler(PrivateHandler):
             p = dict(prompt=prompt, width=int(data['width']), height=int(data['height']), steps=int(data['steps']),
                      seed=int(data.get('seed', -1)), denoise=float(data.get('denoise', .65)), duration=float(data.get('duration', 2)))
             p['model'] = expected_model
+            turbo = data.get('turbo_mode', False)
+            if not isinstance(turbo, bool) or (turbo and expected_model != 'minimax-h3-ref2va'):
+                raise ValueError()
+            if expected_model == 'minimax-h3-ref2va':
+                p['turbo_mode'] = turbo
+                if turbo and p['steps'] != 4:
+                    raise tornado.web.HTTPError(400, reason='Ref2VA Turbo 加速模式固定使用 4 步')
             if expected_model == 'z-image':
                 p['negative_prompt'] = data.get('negative_prompt', '')
                 p['cfg'] = float(data.get('cfg', 4))

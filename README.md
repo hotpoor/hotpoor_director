@@ -149,6 +149,8 @@ python3 scripts/service-inference-cli.py cost --period 24h
 
 双击 `Start_Dev.bat`，或在项目根目录执行 `npm run dev`（`npm start` 也直接运行源码）。Electron 启动 `.venv` 中的 Python 读取 `backend` 源码，无需生成应用 EXE 或重新打包。
 
+Windows 一键重启：双击 `Restart_Dev.bat`。脚本先请求关闭当前源码目录的 Electron，等待后端和数据库正常退出；165 秒后仍未退出则结束该目录的残留 Electron / 后端，再通过 `pg_ctl` 正常停止所选数据目录的内置数据库。随后复用应用启动流程，按数据库 → 后端 → 桌面窗口顺序启动，等待就绪后显示地址。外部数据库不由脚本停止；ComfyUI 独立运行。启动日志保存在 `.local/restart-logs/`。可先执行 `Restart_Dev.bat -DryRun` 查看匹配范围而不重启。重启前保存正在编辑的内容，并等待应用内正在执行的命令结束。
+
 - 修改 `backend/web` 下的 HTML、CSS、页面 JS 和图片，保存后窗口自动刷新。
 - F12 打开/关闭开发者工具。
 - 修改 Python 文件或 `desktop/main.cjs` 后，关闭窗口再启动。
@@ -273,14 +275,14 @@ PyInstaller 将 Python/Tornado 打包为独立后端；Electron Builder 将后�
 | Z Image 标准版 BF16 | 文生图、单图 VAE 重绘；反向提示词、CFG（默认 40 步 / CFG 4） | 独立参考图条件模型/工作流 |
 | MiniMax H3 fl2va | 文生视频；首帧、可选尾帧图生视频，带原生音频，使用已安装的 8-step Turbo LoRA | 多图参考请选择 Ref2VA 模型 |
 
-| H3-Base-Ref2VA FP8 | 图片、视频、音频混合参考共 1–8 项，视频/音频各最多 3 项，默认 20 步；生成带音轨 | 视频参考仅取画面，声音需独立音频输入；默认使用素材开头 |
+| H3-Base-Ref2VA FP8 | 图片、视频、音频混合参考共 1–8 项，视频/音频各最多 3 项，默认 20 步，可选 Turbo 4 步；生成带音轨 | 视频参考仅取画面，声音需独立音频输入；默认使用素材开头 |
 | LTX-2.5 22B 蒸馏版 INT8 | 文生视频、单首帧图生视频；固定 8＋3 步、2 倍潜空间放大，带音频 | 尾帧/多元素参考暂未接入 |
 
 先选择模型，再显示其支持的模式 tab；未接入的参考模式隐藏，原有草稿保留。Z Image 的图生图是原图重绘，不等同于人物身份保持或多图参考。H3 时长按 24fps 和模型帧数网格向上对齐，实际时长可能略长于输入值。
 
 标准版使用 `diffusion_models/z_image_bf16.safetensors`，与 Turbo 共用 `text_encoders/qwen_3_4b.safetensors` 和 `vae/ae.safetensors`。步数范围 1–60，CFG 范围 1–20；[官方建议](https://blog.comfy.org/p/z-image-day-0-support-in-comfyui)为 30–50 步、CFG 3–5。
 
-LTX 的宽高是最终输出尺寸，须为 64 的倍数，默认 512×320；帧数按 24fps、8k+1 对齐。H3 Ref2VA 默认 512×320、5 秒，建议先用少量参考图；这版不混用 fl2va 的 Turbo LoRA。上游连线的生成图片也可添加到 Ref2VA 的参考列表。
+LTX 的宽高是最终输出尺寸，须为 64 的倍数，默认 512×320；帧数按 24fps、8k+1 对齐。H3 Ref2VA 默认 512×320、5 秒，建议先用少量参考图；可开启「Turbo 加速 · 4 步」，使用专用 `minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors`（放入 ComfyUI 的 `loras` 目录，强度 1），不混用 fl2va 的 LoRA。开启后固定 4 步，关闭恢复先前标准步数；旧草稿和旧历史默认标准模式。Turbo 可能改变细节、动作与音频效果。上游连线的生成图片也可添加到 Ref2VA 的参考列表。
 
 本地 ComfyUI 不返回 token 计费用量，历史中 `usage.tokens` 为 `null`，界面显示“未提供”，并保留模型、提示词、seed、尺寸、步数及实际返回的耗时。输出文件由 ComfyUI 持有，播放/查看时仍需 ComfyUI 运行；工作台通过已认证的接口访问相应任务输出。
 
@@ -546,3 +548,11 @@ ComfyUI 默认没有账号保护，只向可信局域网开放，不需要路由
 新图片/视频生成卡片默认 920px 宽：左侧预览、历史与引入素材，右侧模型、提示词与参数，各自滚动；底部固定输出尺寸/比例/时长和生成按钮。点击「调整尺寸」定位到参数。已有窄卡片可在标题栏点击「左右布局」展开，「上下布局」恢复 480px；拖窄至 760px 以下也会自动上下排列。只调整卡片显示，不修改生成尺寸，宽度随项目保存。
 
 service-inference 设置使用用户提供的 [TokenMart Logo](https://console.service-inference.ai/tokenmart-cart.png)，点击 Logo 可打开 [TokenMart 控制台](https://console.service-inference.ai/)。窗口分为左侧「管理 AK」和右侧「应用 AK」两个 Tab，默认管理 AK；应用 AK 用于生成和对话，管理 AK 用于费用与用量查询。切换 Tab 保留未保存输入并隐藏已显示密钥，查询绑定管理 AK 的费用会自动切换到管理 Tab。客户端需重启一次以载入系统浏览器跳转支持。
+
+### 在线 H3 人物与音色参考（桌面 / 网页共用）
+
+选择 MiniMax H3 · 云端 → 多元素参考，上传人物图和独立 MP3/WAV，再设置 4–15 秒。图片最多9张，视频/音频各最多3段，混合最多12项；音频须搭配图片或视频。视频、音频单段2–15秒，各类合计最多15秒；音频单文件≤15MB。远程媒体格式与时长最终由服务商校验。
+
+声音参考示例：`<Audio 1> is the voice-timbre reference for the presenter in <Picture 1>. Reference the timbre only; speak the new dialogue without copying the original words.` 图片和音频均作为独立 content 项传给服务商，音频使用 `type: audio_url`、`role: reference_audio`。普通图生视频模式保持原行为；含音频的请求必须使用多元素参考，防止音频被忽略。
+
+字段依据：[MiniMax 官方 H3 API](https://platform.minimax.io/docs/api-reference/video-generation-v2-create)；提示词依据：[官方 H3 Prompt Writing](https://github.com/MiniMax-AI/MiniMax-H3/tree/main/skills/h3-prompt-writing)。服务商沿用 `/v1/video/generate` 和 `minimax-h3`。接收任务并不代表音色效果已验证。

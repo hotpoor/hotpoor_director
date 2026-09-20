@@ -21,6 +21,34 @@ KEY='fake-test-key-only'
 PNG=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jV3sAAAAASUVORK5CYII=')
 
 
+def test_h3_voice_reference_is_forwarded_with_complete_fifteen_second_request():
+    payload=payload_for(BY_ID['si:minimax-h3'],'reference',dict(
+        prompt='<Audio 1> is the voice timbre reference for the woman in <Picture 1>.',
+        image_urls='https://a.example/person.jpg',audio_urls='https://a.example/voice.mp3',
+        duration=15,resolution='768P',ratio='16:9'))
+    assert payload['duration']==15 and payload['model']=='minimax-h3'
+    assert payload['content'][2]=={'type':'audio_url','audio_url':{'url':'https://a.example/voice.mp3'},'role':'reference_audio'}
+    assert 'generate_audio' not in payload  # v1 provider uses native audio, no v2 toggle.
+
+
+@pytest.mark.parametrize('mode,fields',[
+    ('reference',{'audio_urls':'https://a.example/voice.mp3'}),
+    ('reference',{'image_urls':'\n'.join(['https://a.example/i.jpg']*10)}),
+    ('reference',{'image_urls':'https://a.example/i.jpg','audio_urls':'\n'.join(['https://a.example/a.wav']*4)}),
+    ('reference',{'image_urls':'\n'.join(['https://a.example/i.jpg']*9),'video_urls':'\n'.join(['https://a.example/v.mp4']*3),'audio_urls':'https://a.example/a.wav'}),
+    ('image',{'image_urls':'https://a.example/i.jpg','audio_urls':'https://a.example/a.wav'}),
+    ('text',{'audio_urls':'https://a.example/a.wav'}),
+])
+def test_h3_invalid_or_silently_ignored_audio_is_rejected(mode,fields):
+    with pytest.raises(ValueError):payload_for(BY_ID['si:minimax-h3'],mode,dict(prompt='presenter',**fields))
+
+
+def test_h3_video_and_audio_reference_without_image_is_allowed():
+    payload=payload_for(BY_ID['si:minimax-h3'],'reference',dict(prompt='presenter',
+        video_urls='https://a.example/v.mp4',audio_urls='https://a.example/a.wav'))
+    assert [c.get('role') for c in payload['content']]==[None,'reference_video','reference_audio']
+
+
 @pytest.mark.parametrize('model',list(BY_ID.values()),ids=list(BY_ID))
 def test_all_documented_models_send_remote_ids_without_local_sampler_parameters(model):
     payload=payload_for(model,'text',{'prompt':'a film scene','duration':5})

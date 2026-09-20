@@ -219,6 +219,7 @@ __marimo__/
 
 # Local credentials, database files and platform builds
 .local/
+.restart-dev.lock
 .test-data/
 .secrets/
 runtime/

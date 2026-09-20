@@ -327,7 +327,7 @@ def payload_for(model, mode, data):
     if mode not in model['modes']:
         raise ValueError('模型不支持此模式')
     p = {'model': model['remote_model'], 'prompt': prompt}
-    images = urls(data, 'image_urls', model['ref_limit']) if mode != 'text' else []
+    images = urls(data, 'image_urls', model.get('image_ref_limit',model['ref_limit'])) if mode != 'text' else []
     if model['type'] == 'image':
         size = data.get('size', model['sizes'][0])
         if size not in model['sizes']:
@@ -375,7 +375,16 @@ def payload_for(model, mode, data):
     def add(kind, values, role):
         for value in values:
             content.append({'type':kind+'_url', kind+'_url':{'url':value}, 'role':role})
-    if model['api_version'] == 'v1':
+    if mode == 'reference':
+        videos, audios = urls(data,'video_urls',3), urls(data,'audio_urls',3)
+        if not 1 <= len(images)+len(videos)+len(audios) <= model['ref_limit']:
+            raise ValueError(f"请填写 1–{model['ref_limit']} 项参考素材")
+        if model['remote_model']=='minimax-h3' and audios and not (images or videos):
+            raise ValueError('H3 音频参考须搭配至少一张图片或一段视频')
+        add('image',images,'reference_image'); add('video',videos,'reference_video'); add('audio',audios,'reference_audio')
+    elif model['api_version'] == 'v1':
+        if data.get('audio_urls','').strip() or data.get('video_urls','').strip():
+            raise ValueError('视频或音频参考请选择多元素参考模式')
         if mode != 'text' and not images:
             raise ValueError('请填写参考图片 URL')
         add('image', images, 'reference_image')
@@ -385,11 +394,6 @@ def payload_for(model, mode, data):
         if not first:
             raise ValueError('请填写首帧图片 URL')
         add('image',first,'first_frame'); add('image',last,'last_frame')
-    elif mode == 'reference':
-        videos, audios = urls(data,'video_urls',3), urls(data,'audio_urls',3)
-        if not 1 <= len(images)+len(videos)+len(audios) <= model['ref_limit']:
-            raise ValueError('请填写 1–12 项参考素材')
-        add('image',images,'reference_image'); add('video',videos,'reference_video'); add('audio',audios,'reference_audio')
     p = dict(model=model['remote_model'], content=content, duration=int(duration), resolution=resolution, ratio=ratio)
     if model['api_version']=='v2':
         if not isinstance(data.get('generate_audio',True), bool):

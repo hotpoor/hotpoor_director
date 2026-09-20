@@ -36,6 +36,7 @@ for family, label in [('doubao', '豆包'), ('dreamina', 'Dreamina')]:
             default_duration=5, min_duration=4, max_duration=30 if suffix.startswith('2-5-') else 15, ref_limit=12, api_version='v2',
             note='service-inference · 首尾帧或多元素参考；用 @Image1 / @Video1 引用按顺序填写的公网素材。'))
 MODELS.append(dict(id='si:minimax-h3', remote_model='minimax-h3', name='MiniMax H3 · 云端', provider=PROVIDER,
-    type='video', modes=['text','image'], resolutions=['768P','2K'], default_duration=5,
-    ref_limit=5, api_version='v1', note='service-inference · 4–15 秒，768P / 2K；参考图使用公网 URL。'))
+    type='video', modes=['text','image','reference'], resolutions=['768P','2K'], default_duration=5,
+    min_duration=4, max_duration=15, ref_limit=12, image_ref_limit=9, api_version='v1',
+    note='service-inference · 4–15 秒，768P / 2K。多元素参考支持图片、视频、音频；用 <Picture 1> / <Video 1> / <Audio 1> 引用。音频须搭配图片或视频。'))
 BY_ID = {model['id']: model for model in MODELS}
