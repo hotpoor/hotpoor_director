@@ -105,9 +105,9 @@
       "ui_commit": "working-tree",
       "environment": "macOS Electron; isolated PostgreSQL; simulated model and command output; no personal data",
       "width": 3000,
-      "height": 1946,
-      "bytes": 288417,
-      "sha256": "326fb02e89fe958eb57da8e696558591b76d18d1d6ab40b5cda3612d32fd838c"
+      "height": 1942,
+      "bytes": 285968,
+      "sha256": "7cbe053905185b41f3a9574b9207ca23a8a71ba03f29016c6e02302b837724de"
     },
     {
       "file": "dialogue-settings.png",
@@ -117,9 +117,9 @@
       "ui_commit": "working-tree",
       "environment": "macOS Electron; isolated PostgreSQL; simulated model and command output; no personal data",
       "width": 3000,
-      "height": 1946,
-      "bytes": 143079,
-      "sha256": "ba5472c0321ded66a6ceed0f1a5076c986c5c72ae1523103cc90b24ac5bee350"
+      "height": 1942,
+      "bytes": 145525,
+      "sha256": "8c0389f00edaa1444ecbb408bbe8a0de780b62206a647534f21497a1a8772228"
     },
     {
       "file": "dialogue-agent-approval.png",
@@ -129,9 +129,9 @@
       "ui_commit": "working-tree",
       "environment": "macOS Electron; isolated PostgreSQL; simulated model and command output; no personal data",
       "width": 3000,
-      "height": 1946,
-      "bytes": 196739,
-      "sha256": "eb305b336f060cb7b14f44c2b39440080d772ca156e9d2abdf15d5469e6a82ae"
+      "height": 1942,
+      "bytes": 196745,
+      "sha256": "cf958da07bbe3a3b53b4f0177c6881f6eb4de954668515fc3b8a79aba1ef8ecb"
     },
     {
       "file": "dialogue-agent-output.png",
@@ -141,9 +141,9 @@
       "ui_commit": "working-tree",
       "environment": "macOS Electron; isolated PostgreSQL; simulated model and command output; no personal data",
       "width": 3000,
-      "height": 1946,
-      "bytes": 211144,
-      "sha256": "58725b63e466c286abf192183359d0fd9a33c2517831c12b56ffcb7bf6585ce3"
+      "height": 1942,
+      "bytes": 211136,
+      "sha256": "0842df75ed9989c9f6db205e83326bd79e37c18f7b08fe788df7c4033d83b43a"
     },
     {
       "file": "dialogue-connection.png",
@@ -153,9 +153,9 @@
       "ui_commit": "working-tree",
       "environment": "macOS Electron; isolated PostgreSQL; simulated model and command output; no personal data",
       "width": 3000,
-      "height": 1946,
-      "bytes": 87418,
-      "sha256": "f946e106e9a6b601371db1bf9304b295029c026581aa67d3181708693f0717f0"
+      "height": 1942,
+      "bytes": 89652,
+      "sha256": "978bf47357bafad4e5f2275d70061128cb9273f383ebf6c6b0013f39a5048a2c"
     },
     {
       "file": "dialogue-workspace.png",
@@ -165,9 +165,9 @@
       "ui_commit": "working-tree",
       "environment": "macOS Electron; isolated PostgreSQL; simulated model and command output; no personal data",
       "width": 3000,
-      "height": 1946,
-      "bytes": 270254,
-      "sha256": "f1e0c3fc119acc81e10a67c224a0008980fe112f561296fb51cd1447ecb20a3d"
+      "height": 1942,
+      "bytes": 270416,
+      "sha256": "abbad2e83f0f26cf4371a5ebf2da8fdc87446a267fcee884034215f2ca03a9ab"
     },
     {
       "file": "dialogue-model-picker.png",
@@ -177,9 +177,21 @@
       "ui_commit": "working-tree",
       "environment": "macOS Electron; isolated PostgreSQL; simulated model and command output; no personal data",
       "width": 3000,
-      "height": 1946,
-      "bytes": 250013,
-      "sha256": "d575ac0beac985ae87e6a34ef250ca31d883cb572f048f91cb6d5c556421b906"
+      "height": 1942,
+      "bytes": 250165,
+      "sha256": "e397fadd81fa5decd5bc07fb46c4ebec1d6b534d6764ba5e6809e3aeae2c1b42"
+    },
+    {
+      "file": "dialogue-wiki.png",
+      "source_script": "scripts/capture-dialogue-readme.cjs",
+      "source_output": "dialogue-wiki.png",
+      "captured_on": "2026-09-23",
+      "ui_commit": "working-tree",
+      "environment": "macOS Electron; isolated PostgreSQL; simulated model and command output; no personal data",
+      "width": 3000,
+      "height": 1942,
+      "bytes": 122886,
+      "sha256": "3a660f2fbb3b4075f8a969ca0f5c958e3df01709417705190be2d8bbfad3d35f"
     }
   ],
   "last_updated": "2026-09-23"

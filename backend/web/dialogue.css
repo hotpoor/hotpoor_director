@@ -305,3 +305,44 @@
 
 #dialogue-question:empty::before,#dialogue-question:has(>br:only-child)::before{content:attr(data-placeholder);color:#858585;pointer-events:none}
 #dialogue-question[aria-disabled=true]{opacity:.5;cursor:wait}
+
+/* Wiki knowledge base panel */
+#dialogue-wiki{position:absolute;z-index:36;top:0;right:0;bottom:0;width:min(460px,94%);box-sizing:border-box;padding:18px;background:#171717;border-left:1px solid #4b4b4b;box-shadow:-18px 0 50px #0009;overflow:auto}
+#dialogue-wiki[hidden]{display:none}
+#dialogue-wiki>header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}
+#dialogue-wiki>header strong{font-size:14px}
+#dialogue-wiki p{font-size:12px;color:#aaa}
+.dialogue-wiki-config{display:grid;gap:10px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid #333}
+.dialogue-wiki-config label{display:grid;gap:5px;font-size:12px;margin:0}
+.dialogue-wiki-config input[type=text],.dialogue-wiki-config input:not([type=checkbox]){width:100%;box-sizing:border-box;height:34px;padding:6px 8px;background:#101010;color:#eee;border:1px solid #444;border-radius:6px}
+#dialogue-wiki .dialogue-wiki-enable{display:flex;justify-content:flex-start;align-items:center;gap:8px;font-size:13px}
+#dialogue-wiki .dialogue-wiki-enable input[type=checkbox]{flex:0 0 auto;width:15px;height:15px;min-width:15px;margin:0;padding:0;accent-color:#8ab0d8}
+.dialogue-wiki-config-actions{display:flex;gap:10px}
+#dialogue-wiki .dialogue-wiki-config-actions button{height:34px;padding:6px 14px}
+.dialogue-wiki-browse{display:grid;gap:10px}
+.dialogue-wiki-selections{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.dialogue-wiki-selections strong{font-size:13px}
+.dialogue-wiki-tree-toolbar{display:flex;align-items:center;gap:10px}
+.dialogue-wiki-tree-toolbar span{color:#999;font-size:11px}
+.dialogue-wiki-tree{display:block;max-height:min(58vh,520px);overflow:auto;padding:8px;border:1px solid #333;border-radius:8px;background:#101010}
+.dialogue-wiki-node-wrap{display:block;margin:1px 0}
+.dialogue-wiki-children{margin-left:18px;padding-left:6px;border-left:1px solid #2a2a2a}
+.dialogue-wiki-node{display:flex;align-items:center;gap:6px;font-size:12px;padding:3px 4px;border-radius:5px;min-width:0}
+.dialogue-wiki-node:hover{background:#1f1f1f}
+.dialogue-wiki-toggle{width:24px;min-width:24px;padding:2px;font-size:11px;line-height:1}
+.dialogue-wiki-kind{font-size:10px;color:#9fb6cf;border:1px solid #3a4a5a;border-radius:4px;padding:0 5px}
+#dialogue-wiki .dialogue-wiki-name{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
+#dialogue-wiki .dialogue-wiki-node input[type=checkbox]{flex:0 0 auto;width:15px;height:15px;min-width:15px;padding:0;margin:0;accent-color:#8ab0d8}
+#dialogue-wiki .dialogue-wiki-node span{flex:0 0 auto}
+#dialogue-wiki-confirm{width:min(460px,94vw);border:1px solid #505050;border-radius:12px;background:#171717;color:#eee;padding:0}
+#dialogue-wiki-confirm::backdrop{background:rgba(0,0,0,.6)}
+#dialogue-wiki-confirm form{display:grid;gap:12px;padding:18px}
+#dialogue-wiki-confirm header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+#dialogue-wiki-confirm header strong{font-size:15px}
+#dialogue-wiki-confirm p{font-size:13px;color:#bbb;margin:0}
+#dialogue-wiki-confirm ul{margin:0;padding-left:20px;max-height:42vh;overflow:auto;font-size:12px;color:#ddd;display:grid;gap:4px}
+.dialogue-wiki-confirm-actions{display:flex;justify-content:flex-end;gap:8px}
+@media(max-width:760px){#dialogue-wiki{position:fixed;left:8px!important;right:8px!important;top:8px;bottom:8px;width:auto}}
+
+#dialogue-settings-page #dialogue-wiki{position:static;inset:auto!important;width:100%;max-width:none;height:auto;overflow:visible;border:0;padding:0;background:transparent;box-shadow:none}
+#dialogue-settings-page #dialogue-wiki>header{display:none}

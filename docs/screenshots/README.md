@@ -61,6 +61,7 @@ Windows 对应入口为 `node_modules/.bin/electron.cmd`。两个脚本各自创
 
 | 文件 | 内容 |
 | --- | --- |
+| `dialogue-wiki.png` | 合并远端知识库后，统一设置中的知识库服务与选取范围 |
 | `dialogue-model-picker.png` | 搜索模型、当前选中标记和 AK 来源 |
 | `dialogue-workspace.png` | 收起目录的默认阅读布局、底部上传与模型选择、左下角设置 |
 | `dialogue-connection.png` | 设置页中的模型与连接配置 |

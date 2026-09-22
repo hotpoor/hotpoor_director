@@ -34,7 +34,10 @@ app.whenReady().then(async()=>{
   await js("document.querySelector('#dialogue-model-trigger').click()");
   await js("document.querySelector('#dialogue-toggle-connection').click()");
   await capture('dialogue-connection.png');
-  await js("document.querySelector('#dialogue-toggle-connection').click()");
+  await js("document.querySelector('[data-settings-page=wiki]').click()");
+  await wait("document.querySelector('#wiki-base-url').value.length>0");
+  await capture('dialogue-wiki.png');
+  await js("document.querySelector('#dialogue-settings-page [data-close]').click()");
   await js("document.querySelector('#dialogue-toggle-preferences').click()");
   await capture('dialogue-settings.png');
   await js("document.querySelector('#dialogue-toggle-preferences').click();document.querySelector('#new-dialogue').click()");

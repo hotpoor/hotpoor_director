@@ -11,6 +11,7 @@ from tornado.web import HTTPError
 from backend.workspace import PrivateHandler, owned, ID
 from backend import inference
 from backend import dialogue_context
+from backend import wiki
 from backend.dialogue_files import attachment_ids, file_for, public_file, prepare_messages
 
 MAX_CONTEXT = 120000
@@ -382,7 +383,7 @@ class DialoguesHandler(PrivateHandler):
         conversation_id = uuid.uuid4().hex
         body = {'kind': 'dialogue', 'owner_id': self.owner, 'title': '新对话', 'description': '',
                 'category_id': None, 'archived': False, 'first_id': None, 'last_id': None,
-                'turn_count': 0, 'pending_id': None, **dialogue_options(self.data())}
+                'turn_count': 0, 'pending_id': None, 'wiki_selections': [], **dialogue_options(self.data())}
         async with self.projects.connection() as conn:
             row = await (await conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s) RETURNING *', (conversation_id, Jsonb(body)), block_id=conversation_id)).fetchone()
         self.finish({**row, 'body': {**row['body'], 'turns': [], 'pack_id': None, 'prev_id': None, 'next_id': None}})
@@ -510,6 +511,28 @@ class DialogueHandler(PrivateHandler):
                 result = await view_row(conn, row, self.owner)
             self.finish(result)
             return
+        if data.get('action') == 'wiki_update':
+            selections = data.get('selections')
+            if not isinstance(selections, list) or len(selections) > 50:
+                raise HTTPError(400, reason='知识库勾选范围需为不超过 50 项的列表')
+            cleaned = []
+            for item in selections:
+                if not isinstance(item, dict):
+                    continue
+                path = item.get('path')
+                if not isinstance(path, str) or not 1 <= len(path.strip()) <= 1000:
+                    continue
+                title = item.get('title')
+                cleaned.append({'path': path.strip(), 'title': (title if isinstance(title, str) else path.strip())[:200]})
+            async with self.projects.connection() as conn:
+                row = await row_for(conn, conversation_id, self.owner)
+                if row['body'].get('pending_id'):
+                    raise HTTPError(409, reason='请等待当前回答完成后再修改知识库范围')
+                row['body']['wiki_selections'] = cleaned
+                row = await store(conn, conversation_id, row['body'])
+                result = await view_row(conn, row, self.owner)
+            self.finish(result)
+            return
         if data.get('action') == 'metadata':
             metadata = conversation_metadata(data)
             async with self.projects.connection() as conn:
@@ -589,6 +612,16 @@ class DialogueHandler(PrivateHandler):
             await prepare_messages(conn, [messages[-1]], self.settings['config'], self.owner, conversation_id, path)
             raw_messages = messages
             messages = await prepare_messages(conn, messages, self.settings['config'], self.owner, conversation_id, path, enforce_limits=False)
+            if data.get('use_wiki'):
+                wiki_cfg = wiki.load_config(self.settings['config'])
+                selections = (body.get('wiki_selections') or []) if wiki_cfg.get('enabled') else []
+                if selections:
+                    supplement = await wiki.fetch_supplement(wiki_cfg, selections)
+                    if supplement:
+                        index = 0
+                        while index < len(messages) and messages[index].get('role') == 'system':
+                            index += 1
+                        messages.insert(index, {'role': 'system', 'content': supplement})
             submission = submission_stats(raw_messages, messages, model, path, agent, folders)
             if saved_summary:
                 submission['summarized'] = True
