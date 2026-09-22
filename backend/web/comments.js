@@ -13,7 +13,7 @@
         let value=el.getAttribute(attr);
         if(apiBase && /^\/api\//.test(value)){value=apiBase+value;el.setAttribute(attr,value);}
         const local=apiBase&&value.startsWith(apiBase+'/')?value.slice(apiBase.length):value;
-        if(!/^https?:\/\//i.test(value)&&!/^\/api\/(assets|outputs)\//.test(local))el.removeAttribute(attr);
+        if(!/^https?:\/\//i.test(value)&&!/^\/api\/(assets|outputs)\//.test(local)&&!/^file:\/\//i.test(value))el.removeAttribute(attr);
       }
       if(el.tagName==='A'){el.target='_blank';el.rel='noopener noreferrer';}
       if(el.tagName==='VIDEO'){el.controls=true;el.preload='metadata';}

@@ -128,12 +128,13 @@ def application(config, pool, entities):
     from backend.progress import ProgressTracker
     from backend.comfy_settings import load_connection, connection_url
     from backend.inference import InferenceManager
+    from backend.wiki import wiki_routes
     connection = load_connection(config)
     return tornado.web.Application([
         (r'/', IndexHandler), (r'/api/login', LoginHandler), (r'/api/setup', SetupHandler),
         (r'/favicon.ico', tornado.web.RedirectHandler, {'url': '/static/brand/favicon.ico'}),
         (r'/api/me', MeHandler), (r'/api/logout', LogoutHandler),
-        *workspace_routes(), *sync_routes(),
+        *workspace_routes(), *sync_routes(), *wiki_routes(),
         (r'/static/(.*)', tornado.web.StaticFileHandler, {'path': str(WEB)}),
     ], sync_lock=asyncio.Lock(), storage_lock=asyncio.Lock(), inference_manager=InferenceManager(config, entities), comfy_connection=connection, comfy_lock=asyncio.Lock(), progress_tracker=ProgressTracker(connection_url(connection)), pool=pool, entities=entities, config=config,
        cookie_secret=config['cookie_secret'], xsrf_cookies=True,

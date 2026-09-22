@@ -284,3 +284,5 @@ img[data-preview]{cursor:zoom-in}#image-preview{position:fixed;inset:0;width:100
 #inference-dialog [role=tabpanel]{min-width:0}
 
 .generation-workbench>.edit-lock-badge{top:-22px;right:12px}
+a[href^="file://"]{color:#e0a458;text-decoration:underline dotted;cursor:pointer}
+a[href^="file://"]:hover{color:#f4c078}

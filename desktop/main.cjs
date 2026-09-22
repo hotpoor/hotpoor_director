@@ -119,6 +119,16 @@ else app.whenReady().then(async () => {
     ipcMain.handle('director:agent-folders',event=>{if(event.sender!==window.webContents||event.senderFrame?.url!==origin+'/')throw Error('Invalid sender');return readAgentFolders();});
     ipcMain.handle('director:add-agent-folder',async event=>{if(event.sender!==window.webContents||event.senderFrame?.url!==origin+'/')throw Error('Invalid sender');const result=await dialog.showOpenDialog(window,{title:'选择允许代理执行命令的文件夹',properties:['openDirectory','createDirectory']});if(result.canceled||!result.filePaths[0])return readAgentFolders();const folders=[...new Set([...readAgentFolders(),fs.realpathSync(result.filePaths[0])])];writeAgentFolders(folders);return folders;});
     ipcMain.handle('director:remove-agent-folder',(event,value)=>{if(event.sender!==window.webContents||event.senderFrame?.url!==origin+'/')throw Error('Invalid sender');if(typeof value!=='string')throw Error('Invalid folder');const target=fs.existsSync(value)?fs.realpathSync(value):value,folders=readAgentFolders().filter(folder=>folder!==target);writeAgentFolders(folders);return folders;});
+    ipcMain.handle('director:reveal-file', (event, value) => {
+      if (event.sender !== window.webContents || event.senderFrame?.url !== origin + '/') throw Error('Invalid sender');
+      if (typeof value !== 'string' || !value) return false;
+      let target = value;
+      if (target.startsWith('file://')) {
+        try { target = decodeURIComponent(new URL(target).pathname); } catch { target = target.slice('file://'.length); }
+      }
+      if (!/^\/(Volumes|Users|home|tmp|mnt|media|data|Applications)\//.test(target)) return false;
+      try { shell.showItemInFolder(target); return true; } catch { return false; }
+    });
     window.webContents.setWindowOpenHandler(({url}) => {
       if(url==='https://console.service-inference.ai/')void shell.openExternal(url).catch(()=>{});
       return {action:'deny'};

@@ -19,5 +19,6 @@ contextBridge.exposeInMainWorld('directorDesktop',Object.freeze({
   removeCredential:name=>ipcRenderer.invoke('director:credentials-remove',name),
   agentFolders:()=>ipcRenderer.invoke('director:agent-folders'),
   addAgentFolder:()=>ipcRenderer.invoke('director:add-agent-folder'),
-  removeAgentFolder:path=>ipcRenderer.invoke('director:remove-agent-folder',path)
+  removeAgentFolder:path=>ipcRenderer.invoke('director:remove-agent-folder',path),
+  revealFile:path=>ipcRenderer.invoke('director:reveal-file',path)
 }));
