@@ -21,19 +21,51 @@ app.whenReady().then(async()=>{
   await wait("document.querySelector('#dialogue-model').value==='gpt-6-astra'");
   if(!await js("(()=>{const r=document.querySelector('#dialogue-mode').getBoundingClientRect();return r.width>=innerWidth-1&&r.height>=innerHeight-1&&r.left===0&&r.top===0})()"))throw Error('Dialogue is not full viewport');
   if(!await js("document.querySelector('#dialogue-transcript').clientHeight>=300"))throw Error('Desktop transcript too short '+await js("document.querySelector('#dialogue-transcript').clientHeight"));
-  if(!await js("document.querySelector('#dialogue-preferences-panel').hidden&&document.querySelector('#dialogue-toggle-preferences').getAttribute('aria-expanded')==='false'"))throw Error('Dialogue preferences are not collapsed by default');
-  if(!await js("document.querySelector('#dialogue-toggle-preferences').parentElement.classList.contains('dialogue-controls')"))throw Error('Dialogue settings button is not in the controls row');
-  await js("document.querySelector('#dialogue-toggle-preferences').click()");
-  if(!await js("(()=>{const p=document.querySelector('#dialogue-preferences-panel'),b=document.querySelector('#dialogue-toggle-preferences');return !p.hidden&&b.getAttribute('aria-expanded')==='true'&&getComputedStyle(p).position==='absolute'&&p.getBoundingClientRect().top>=b.getBoundingClientRect().bottom})()"))throw Error('Dialogue preferences did not open as an anchored popover');
-  await js("document.querySelector('#dialogue-transcript').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}))");
-  if(!await js("document.querySelector('#dialogue-preferences-panel').hidden"))throw Error('Dialogue preferences did not collapse');
+  if(!await js("document.querySelector('#dialogue-settings-page').hidden&&document.querySelector('#dialogue-model-trigger').textContent.includes('gpt-6-astra')"))throw Error('Settings should start closed with selected model on trigger');
+  if(!await js("[...document.querySelector('.dialogue-controls').children].filter(n=>n.getBoundingClientRect().width>0).every(n=>['dialogue-add-file','dialogue-model-trigger','dialogue-send'].includes(n.id))"))throw Error('Composer contains controls other than files/model/send');
+  await js("document.querySelector('#dialogue-model-trigger').click()");
+  await wait("!document.querySelector('#dialogue-model-panel').hidden&&document.activeElement.matches('#dialogue-model-panel input')");
+  if(!await js("document.querySelector('#dialogue-model-results [aria-selected=true]').dataset.model==='gpt-6-astra'"))throw Error('Selected model checkmark missing');
+  await js("(()=>{const p=document.querySelector('#dialogue-model-panel'),q=p.querySelector('input');q.value='no-such-model';q.dispatchEvent(new Event('input'))})()");
+  if(!await js("!document.querySelector('#dialogue-model-results [role=option]')&&document.querySelector('.dialogue-model-notice').textContent.includes('没有匹配')"))throw Error('Model search empty state missing');
+  await js("(()=>{const p=document.querySelector('#dialogue-model-panel'),s=p.querySelector('select');s.value='second';s.dispatchEvent(new Event('change'));p.querySelector('input').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}))})()");
+  if(!await js("document.querySelector('#dialogue-model').value==='fixture-chat'&&document.querySelector('#dialogue-key').dataset.id==='second'&&document.querySelector('#dialogue-model-panel').hidden&&document.activeElement.id==='dialogue-model-trigger'"))throw Error('Keyboard model selection did not update model and AK');
+  await js("document.querySelector('#dialogue-model-trigger').click();(()=>{const s=document.querySelector('#dialogue-model-panel select');s.value='first';s.dispatchEvent(new Event('change'))})();document.querySelector('#dialogue-model-results [role=option]').click()");
+  await js("document.querySelector('#dialogue-settings-launcher').click()");
+  if(!await js("!document.querySelector('#dialogue-settings-page').hidden&&!document.querySelector('[data-settings-section=general]').hidden&&document.querySelector('.dialogue-layout').inert"))throw Error('Settings workspace did not open');
+  await js("document.querySelector('[data-settings-page=models]').click()");
+  if(!await js("!document.querySelector('[data-settings-section=models]').hidden&&document.querySelector('[data-settings-section=models]').contains(document.querySelector('#dialogue-key'))"))throw Error('Model settings are not inside settings');
+  await js("document.querySelector('[data-settings-page=access]').click()");
+  if(!await js("document.querySelector('[data-settings-section=access]').textContent.includes('永久授权')"))throw Error('Authorization controls missing');
+  win.webContents.sendInputEvent({type:'keyDown',keyCode:'Escape'});win.webContents.sendInputEvent({type:'keyUp',keyCode:'Escape'});
+  await wait("document.querySelector('#dialogue-settings-page').hidden&&document.querySelector('#dialogue-mode').open&&!document.querySelector('.dialogue-layout').inert");
+  await js("document.querySelector('#dialogue-toggle-sidebar').click()");
+  if(!await js("getComputedStyle(document.querySelector('#dialogue-sidebar')).display==='none'&&document.querySelector('#dialogue-settings-shortcut').getBoundingClientRect().width>0"))throw Error('Collapsed sidebar has no settings entry');
+  await js("document.querySelector('#dialogue-settings-shortcut').click()");
+  if(!await js("!document.querySelector('#dialogue-settings-page').hidden"))throw Error('Settings shortcut failed');
+  await js("document.querySelector('#dialogue-settings-page [data-close]').click();document.querySelector('#dialogue-toggle-sidebar').click()");
   if(!await js("(()=>{const box=document.querySelector('.dialogue-composer-box'),q=document.querySelector('#dialogue-question'),files=document.querySelector('#dialogue-draft-files'),add=document.querySelector('#dialogue-add-file');return box?.contains(q)&&box.contains(files)&&box.contains(add)&&add.getBoundingClientRect().height>=38})()"))throw Error('Composer attachments are not integrated into the input box');
   if(await js("[...document.querySelector('#dialogue-model-options').options].some(o=>o.value==='fixture-image')"))throw Error('Image advertised for dialogue');
-  await js("document.querySelector('#dialogue-question').value='帮我构思一段开场';document.querySelector('#dialogue-compose').requestSubmit();");
+  if(!await js("document.querySelector('#dialogue-question').getAttribute('contenteditable')==='plaintext-only'&&document.querySelector('#dialogue-question').getAttribute('aria-multiline')==='true'"))throw Error('Composer is not a multiline plaintext editor');
+  await js("document.querySelector('#dialogue-question').focus();document.querySelector('#dialogue-compose').requestSubmit()");
+  if(!await js("document.querySelector('#dialogue-status').textContent==='请输入问题'&&!document.querySelector('.dialogue-turn')"))throw Error('Empty contenteditable submitted');
+  await js("document.querySelector('#dialogue-question').textContent='x'.repeat(20001);document.querySelector('#dialogue-compose').requestSubmit()");
+  if(!await js("document.querySelector('#dialogue-status').textContent.includes('20000')&&!document.querySelector('.dialogue-turn')"))throw Error('Oversized contenteditable submitted');
+  await js("document.querySelector('#dialogue-question').replaceChildren();document.querySelector('#dialogue-question').focus()");
+  await win.webContents.insertText('帮我构思一段开场');
+  win.webContents.sendInputEvent({type:'keyDown',keyCode:'Enter'});win.webContents.sendInputEvent({type:'char',keyCode:'\r'});win.webContents.sendInputEvent({type:'keyUp',keyCode:'Enter'});
+  await win.webContents.insertText('保留换行');
+  if(!await js("document.querySelector('#dialogue-question').innerText.includes(String.fromCharCode(10))"))throw Error('Enter did not preserve newline: '+await js("document.querySelector('#dialogue-question').outerHTML"));
+  await js("(()=>{const dt=new DataTransfer();dt.setData('text/plain','粘贴纯文本');dt.setData('text/html','<b>粘贴纯文本</b>');document.querySelector('#dialogue-question').dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}))})()");
+  if(!await js("document.querySelector('#dialogue-question').textContent.includes('粘贴纯文本')&&!document.querySelector('#dialogue-question b')"))throw Error('Rich paste was not converted to plain text');
+  await js("document.querySelector('#dialogue-question').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',ctrlKey:true,isComposing:true,bubbles:true,cancelable:true}))");
+  if(await js("Boolean(document.querySelector('.dialogue-turn'))"))throw Error('IME confirmation submitted a message');
+  await js("document.querySelector('#dialogue-question').textContent='帮我构思一段开场'+String.fromCharCode(10)+'保留换行';document.querySelector('#dialogue-question').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',ctrlKey:true,bubbles:true,cancelable:true}))");
+
   await wait("document.querySelector('.dialogue-answer')?.textContent.includes('模型 gpt-6-astra')");
   if(!await js("(()=>{const q=document.querySelector('.dialogue-question').getBoundingClientRect(),t=document.querySelector('#dialogue-transcript').getBoundingClientRect();return Math.abs(q.right-t.right)<12&&q.width>=120&&q.width<t.width*.82})()"))throw Error('User question is not a right-aligned content-width bubble');
   if(await js("Boolean(document.querySelector('#dialogue-transcript script'))"))throw Error('Unsafe HTML');
-  await js("document.querySelector('#dialogue-key').value='second';document.querySelector('#dialogue-key').dispatchEvent(new Event('change'));document.querySelector('#dialogue-question').value='继续，换一个模型';document.querySelector('#dialogue-compose').requestSubmit();");
+  await js("document.querySelector('#dialogue-key').value='second';document.querySelector('#dialogue-key').dispatchEvent(new Event('change'));document.querySelector('#dialogue-question').textContent='继续，换一个模型';document.querySelector('#dialogue-compose').requestSubmit();");
   await wait("[...document.querySelectorAll('.dialogue-answer')].some(n=>n.textContent.includes('模型 fixture-chat · 上下文 3'))");
   await wait("!document.querySelector('#dialogue-send').disabled");
   if(!await js("[...document.querySelectorAll('.dialogue-context summary')].some(n=>n.textContent.includes('历史 1 轮')&&n.textContent.includes('3 条消息')&&n.textContent.includes('请求'))"))throw Error('Submission summary missing');
@@ -95,7 +127,7 @@ app.whenReady().then(async()=>{
   await js("document.querySelector('#dialogue-older').click()");
   await wait("document.querySelectorAll('.dialogue-turn').length===27");
   fs.writeFileSync(path.join(directory,'dialogue.png'),(await win.webContents.capturePage()).toPNG());
-  await js("document.querySelector('#dialogue-question').value='FAIL';document.querySelector('#dialogue-compose').requestSubmit();");
+  await js("document.querySelector('#dialogue-question').textContent='FAIL';document.querySelector('#dialogue-compose').requestSubmit();");
   await wait("document.querySelector('#dialogue-transcript').textContent.includes('余额不足')");
   const verify=spawnSync(path.join(root,'.venv/bin/python'),['tests/verify_dialogue_store.py',directory,origin],{cwd:root,env:{...process.env,DIRECTOR_DATA_DIR:directory},encoding:'utf8'});
   if(verify.status!==0)throw Error(verify.stderr+' '+verify.stdout);
@@ -105,7 +137,7 @@ app.whenReady().then(async()=>{
   await wait("!document.querySelector('#dialogue-acknowledge').hidden");
   await js("document.querySelector('#dialogue-acknowledge').click()");
   await wait("document.querySelector('#dialogue-transcript').textContent.includes('连接中断')");
-  await js("document.querySelector('#dialogue-question').value='中断之后继续';document.querySelector('#dialogue-compose').requestSubmit();");
+  await js("document.querySelector('#dialogue-question').textContent='中断之后继续';document.querySelector('#dialogue-compose').requestSubmit();");
   await wait("document.querySelector('#dialogue-transcript').textContent.includes('回答：中断之后继续')");
   await js("document.querySelector('#dialogue-key').value='first';document.querySelector('#dialogue-key').dispatchEvent(new Event('change'));");
   const png=fs.readFileSync(path.join(root,'assets/icon.png')).toString('base64');
@@ -116,7 +148,7 @@ app.whenReady().then(async()=>{
   await js("document.querySelector('.dialogue-draft-file img').click()");
   await wait("document.querySelector('#image-preview').open && document.querySelector('#image-preview img').naturalWidth>0");
   await js("document.querySelector('#image-preview [data-action=close]').click()");
-  await js("document.querySelector('#dialogue-question').value='请结合这些附件回答';document.querySelector('#dialogue-compose').requestSubmit();");
+  await js("document.querySelector('#dialogue-question').textContent='请结合这些附件回答';document.querySelector('#dialogue-compose').requestSubmit();");
   await wait("document.querySelector('#dialogue-transcript').textContent.includes('附件类型 input_text,input_image,input_file')");
   if(!await js("document.querySelector('#dialogue-transcript').textContent.includes('文件里的导演提示')"))throw Error('Attachment text not sent');
   await js(`(async()=>{const r=await testApi('/api/dialogue/conversations/'+conversationId);window.attachmentId=r.body.turns.at(-1).attachments[0].id;const response=await fetch('/api/dialogue/files/'+attachmentId);if(!response.ok||(await response.text())!=='文件里的导演提示：雨夜开场')throw Error('Download mismatch');})();`);
@@ -125,7 +157,7 @@ app.whenReady().then(async()=>{
   await wait("document.querySelectorAll('.dialogue-turn-files a').length===3");
   await wait("document.querySelector('.dialogue-turn-files img')?.naturalWidth>0");
   await js("document.querySelector('#dialogue-font').value='4';document.querySelector('#dialogue-font').dispatchEvent(new Event('input'));");
-  if(!await js("getComputedStyle(document.querySelector('.dialogue-answer')).fontSize==='24px'&&document.querySelector('#dialogue-font-label').value==='较大'&&getComputedStyle(document.querySelector('.dialogue-main')).fontSize==='22px'"))throw Error('Font size not applied');
+  if(!await js("getComputedStyle(document.querySelector('.dialogue-answer')).fontSize==='24px'&&document.querySelector('#dialogue-font-label').value==='较大'&&getComputedStyle(document.querySelector('.dialogue-main')).fontSize==='13px'"))throw Error('Font size not applied');
   await js("document.querySelector('.dialogue-answer-font-button').click()");
   if(!await js("!document.querySelector('.dialogue-answer-font-popover').hidden&&document.querySelector('.dialogue-answer-font-button').getAttribute('aria-expanded')==='true'"))throw Error('Per-answer font slider did not open');
   await js("(()=>{const r=document.querySelector('.dialogue-answer-font-popover input');r.value='0';r.dispatchEvent(new Event('input'))})()");
@@ -140,7 +172,7 @@ app.whenReady().then(async()=>{
   if(!await js("(()=>{const a=document.querySelector('.dialogue-answer'),id=a.id.replace('dialogue-answer-',''),v=JSON.parse(localStorage.getItem('dialogue-collapsed-answers'));return !v.includes(conversationId+':'+id)})()"))throw Error('Expanded state was not persisted');
   // An attachment owned by this account still cannot be attached to a different conversation.
   await js(`(async()=>{const second=await testApi('/api/dialogue/conversations',{});await testApi('/api/dialogue/conversations/'+second.block_id,{request_id:crypto.randomUUID().replaceAll('-',''),question:'wrong conversation file',credential_id:'first',model:'gpt-6-astra',attachments:[attachmentId]},404);})();`);
-  await js("document.querySelector('#dialogue-key').value='second';document.querySelector('#dialogue-key').dispatchEvent(new Event('change'));document.querySelector('#dialogue-question').value='继续根据附件讨论';document.querySelector('#dialogue-compose').requestSubmit();");
+  await js("document.querySelector('#dialogue-key').value='second';document.querySelector('#dialogue-key').dispatchEvent(new Event('change'));document.querySelector('#dialogue-question').textContent='继续根据附件讨论';document.querySelector('#dialogue-compose').requestSubmit();");
   await wait("document.querySelector('#dialogue-transcript').textContent.includes('历史附件类型 text,image_url,file')");
   await js(`(()=>{const dt=new DataTransfer();dt.items.add(new File([Uint8Array.from(atob('${png}'),c=>c.charCodeAt(0))],'pasted.png',{type:'image/png'}));document.querySelector('#dialogue-question').dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}));})()`);
   await wait("document.querySelectorAll('.dialogue-draft-file').length===1 && !document.querySelector('#dialogue-add-file').disabled");
@@ -150,7 +182,7 @@ app.whenReady().then(async()=>{
   await js("document.querySelector('.dialogue-draft-file button').click()");
   await js("document.querySelector('#dialogue-context-turns').value='0';document.querySelector('#dialogue-pack-size').value='1';document.querySelector('#dialogue-save-options').click()");
   await wait("document.querySelector('#dialogue-status').textContent.includes('配置已保存')");
-  await js("document.querySelector('#dialogue-question').value='零历史轮次';document.querySelector('#dialogue-compose').requestSubmit()");
+  await js("document.querySelector('#dialogue-question').textContent='零历史轮次';document.querySelector('#dialogue-compose').requestSubmit()");
   await wait("document.querySelector('#dialogue-transcript').textContent.includes('回答：零历史轮次')");
   if(!await js("document.querySelector('#dialogue-transcript').textContent.includes('上下文 1')"))throw Error('Zero context ignored');
   await js(`(async()=>{const r=await testApi('/api/dialogue/conversations/'+conversationId);if(r.body.context_turns!==0||r.body.pack_size!==1||r.body.turns.length!==1||!r.body.prev_id)throw Error('Configured storage failed');await testApi('/api/dialogue/conversations/'+conversationId,{action:'configure',context_turns:-1,pack_size:1},400);const prev=await testApi('/api/dialogue/conversations/'+conversationId+'?cursor='+r.body.prev_id);if(prev.body.next_id!==r.body.pack_id)throw Error('Configured chain broken');})();`);
@@ -162,6 +194,10 @@ app.whenReady().then(async()=>{
   if(await js("document.querySelector('#dialogue-mode').scrollWidth>document.querySelector('#dialogue-mode').clientWidth"))throw Error('Mobile overflow');
   if(!await js("(()=>{const d=document.querySelector('#dialogue-mode').getBoundingClientRect(),t=document.querySelector('#dialogue-transcript');return d.width>=innerWidth-1&&d.height>=innerHeight-1&&t.clientHeight>=220})()"))throw Error('Mobile full-screen transcript too short '+await js("document.querySelector('#dialogue-transcript').clientHeight"));
   fs.writeFileSync(path.join(directory,'dialogue-narrow.png'),(await win.webContents.capturePage()).toPNG());
+  await js("document.querySelector('#dialogue-settings-shortcut').click();document.querySelector('[data-settings-page=models]').click()");
+  if(!await js("(()=>{const p=document.querySelector('#dialogue-settings-page'),k=document.querySelector('#dialogue-key').getBoundingClientRect();return p.scrollWidth<=p.clientWidth&&k.width>0&&k.right<=innerWidth&&k.left>=0})()"))throw Error('Narrow settings overflow');
+  fs.writeFileSync(path.join(directory,'dialogue-settings-narrow.png'),(await win.webContents.capturePage()).toPNG());
+
   console.log('Dialogue UI verified: model switch/context, safe markdown, UUID sharding, linked packs, deduplication, provider failure, interruption recovery, history reopen, narrow layout. Artifacts:',directory);
  }catch(e){failed=true;console.error(e);if(win){console.error(await win.webContents.executeJavaScript("document.querySelector('#dialogue-status')?.textContent"));fs.writeFileSync(path.join(directory,'failure.png'),(await win.webContents.capturePage()).toPNG());}}
  finally{if(win)win.destroy();if(backend.exitCode===null){backend.stdin.end('shutdown\n');await new Promise(r=>backend.once('exit',r));}app.exit(failed?1:0);}

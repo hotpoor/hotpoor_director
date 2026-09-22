@@ -1,6 +1,6 @@
 # README 截图来源
 
-画布截图采集日期：2026-09-15；新增对话截图：2026-09-19。界面代码版本：[685e857](https://github.com/hotpoor/hotpoor_director/commit/685e857)；截图脚本与 README 在本次提交中一起更新。
+画布截图采集日期：2026-09-15；对话截图更新：2026-09-23。界面代码版本：[685e857](https://github.com/hotpoor/hotpoor_director/commit/685e857)；截图脚本与 README 在本次提交中一起更新。
 
 7 张截图覆盖 README 的 8 个特色，并展示 service-inference 多 Key 管理。截图来自当前源码在 macOS Electron 中的实际渲染，由 `webContents.capturePage()` 直接保存为 PNG，保留原始分辨率，未做图像后期合成。脚本在测试项目中配置卡片、连线和视口，实际点击模式、固定结果、播放视频并绘制标注。
 
@@ -55,14 +55,17 @@ Windows 对应入口为 `node_modules/.bin/electron.cmd`。两个脚本各自创
 
 - `timeline-pin-quad.png`：2026-09-18，真实 Electron 独立测试项目，展示多轴重叠错层与 PIN 四宫格、声音选择。四路均使用 6 秒程序生成测试视频，非生产媒体；复现脚本 `scripts/smoke-timeline.cjs`。
 
-## 对话与代理截图（2026-09-19）
+## 对话与代理截图（2026-09-23）
 
-基于 `a2f36f4` 界面源码，运行 `node_modules/.bin/electron scripts/capture-dialogue-readme.cjs` 生成：
+基于本次对话布局改造后的工作区源码，运行 `node_modules/.bin/electron scripts/capture-dialogue-readme.cjs` 生成：
 
 | 文件 | 内容 |
 | --- | --- |
+| `dialogue-model-picker.png` | 搜索模型、当前选中标记和 AK 来源 |
+| `dialogue-workspace.png` | 收起目录的默认阅读布局、底部上传与模型选择、左下角设置 |
+| `dialogue-connection.png` | 设置页中的模型与连接配置 |
 | `dialogue-overview.png` | 分类、自动保存标题、Markdown 目录和表格 |
-| `dialogue-settings.png` | 字号、历史轮次、记录包容量及卡片尺寸设置浮窗 |
+| `dialogue-settings.png` | 设置页中的运行模式、字号、历史轮次及卡片尺寸 |
 | `dialogue-agent-approval.png` | 执行前命令、目录、原因与确认按钮 |
 | `dialogue-agent-output.png` | 执行中输出、耗时与停止按钮 |
 

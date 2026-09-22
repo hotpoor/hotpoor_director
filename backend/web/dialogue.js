@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   const dialog=document.createElement('dialog');dialog.id='dialogue-mode';
-  dialog.innerHTML=`<header class="dialogue-heading"><div><small>SERVICE-INFERENCE / 对话模式</small><h2>把问题，交给你选择的模型。</h2></div><button type="button" class="quiet" id="close-dialogue">返回工作台</button></header><div class="dialogue-layout"><aside class="dialogue-sidebar"><div class="dialogue-sidebar-actions"><button type="button" id="new-dialogue">＋ 新对话</button><button type="button" id="new-dialogue-category" class="quiet">＋ 分类</button><button type="button" id="toggle-archived" class="quiet" aria-pressed="false">归档</button></div><div id="dialogue-list" aria-label="我的对话"></div></aside><section class="dialogue-main"><section id="dialogue-info" aria-label="对话信息"><div class="dialogue-info-row"><label class="dialogue-editor-label" data-label="标题">标题<div id="dialogue-title" class="dialogue-inline-edit" contenteditable="true" role="textbox" data-placeholder="输入对话标题" data-maxlength="120" aria-label="对话标题"></div></label><label>分类<input id="dialogue-category" list="dialogue-category-options" autocomplete="off" placeholder="点击或输入搜索分类"><datalist id="dialogue-category-options"></datalist></label></div><div class="dialogue-info-row"><label class="dialogue-editor-label" data-label="描述">描述<div id="dialogue-description" class="dialogue-inline-edit" contenteditable="true" role="textbox" data-placeholder="补充这组对话的主题或用途" data-maxlength="1000" aria-label="对话描述"></div></label><button type="button" id="dialogue-archive" class="quiet">归档对话</button></div></section><div class="dialogue-controls"><label>使用 AK<input id="dialogue-key" list="dialogue-key-options" autocomplete="off" placeholder="点击或输入搜索 AK"><datalist id="dialogue-key-options"></datalist></label><label>回答模型<input id="dialogue-model" list="dialogue-model-options" autocomplete="off" placeholder="点击或输入搜索模型"><datalist id="dialogue-model-options"></datalist></label><label>运行模式<select id="dialogue-run-mode"><option value="chat">对话模式</option><option value="agent">代理模式</option></select></label><button type="button" class="quiet" id="dialogue-agent-folders-button" aria-expanded="false" aria-controls="dialogue-agent-folders">执行目录</button><label>接口<select id="dialogue-protocol"><option value="auto">自动选择</option><option value="responses">Responses</option><option value="chat">Chat Completions</option></select></label><button type="button" class="quiet" id="dialogue-refresh">刷新可用模型</button><button type="button" class="quiet" id="dialogue-settings">配置 AK</button><button type="button" class="quiet" id="dialogue-toggle-preferences" aria-expanded="false" aria-controls="dialogue-preferences-panel">对话设置</button></div><div id="dialogue-preferences-panel" hidden><div class="dialogue-preferences"><label class="dialogue-font-control">字体大小<div><input id="dialogue-font" type="range" min="0" max="4" step="1" value="2" list="dialogue-font-stops" aria-label="对话字体大小"><output id="dialogue-font-label" for="dialogue-font">中</output></div><datalist id="dialogue-font-stops"><option value="0" label="较小"></option><option value="1" label="小"></option><option value="2" label="中"></option><option value="3" label="大"></option><option value="4" label="较大"></option></datalist></label><label>历史轮次<input id="dialogue-context-turns" type="number" min="0" max="100" value="20"></label><label>每包轮次<input id="dialogue-pack-size" type="number" min="1" max="100" value="25"></label><label>折叠最小宽度<input id="dialogue-card-width" type="number" min="240" max="1600" value="520"></label><label>折叠最小高度<input id="dialogue-card-height" type="number" min="120" max="900" value="240"></label><button type="button" class="quiet" id="dialogue-save-options">保存对话配置</button></div><p class="dialogue-note">历史轮次决定每次发送给模型的历史问答数量（含失败记录），0 表示只发送当前问题；接近 8 万字符时自动分段总结历史并保存，后续携带摘要和新记录继续；0 轮不携带摘要。每包轮次决定记录包容量，每轮都会立即保存。修改容量不重排旧记录。</p></div><button type="button" class="quiet" id="dialogue-older" hidden>加载更早记录</button><div id="dialogue-transcript" aria-live="polite"></div><p id="dialogue-status" role="status"></p><button type="button" class="quiet" id="dialogue-acknowledge" hidden>已核对中断请求，继续对话</button><form id="dialogue-compose"><label for="dialogue-question">你的问题</label><div class="dialogue-composer-box"><textarea id="dialogue-question" rows="3" maxlength="20000" placeholder="选择模型，开始提问…" required></textarea><div id="dialogue-draft-files"></div><div class="dialogue-attachment-tools"><button type="button" id="dialogue-add-file" class="quiet">＋ 添加文件</button><input type="file" id="dialogue-file-input" multiple hidden accept=".png,.jpg,.jpeg,.webp,.pdf,.docx,.txt,.md,.markdown,.csv,.tsv,.json,.yaml,.yml,.xml,.html,.css,.js,.ts,.jsx,.tsx,.py,.sh,.sql,.log,.toml,.ini,.c,.cpp,.h,.java,.go,.rs,.vue"><small>可拖入文件或粘贴图片 · 最多 5 个，每个 10 MB · 图片 / PDF 需模型支持</small></div></div><div class="dialogue-send-row"><small>Enter 换行 · Ctrl / ⌘ + Enter 发送</small><button id="dialogue-send" type="submit">发送问题</button></div></form><aside id="dialogue-agent-folders" hidden aria-label="代理执行目录"><header><div><strong>允许执行的文件夹</strong><small>命令只能在这些目录及其子目录运行</small></div><button type="button" class="quiet" id="dialogue-agent-folders-close" aria-label="关闭执行目录">✕</button></header><div id="dialogue-agent-folder-list"></div><button type="button" id="dialogue-agent-folder-add">＋ 添加文件夹</button><p>目录权限仅保存在本机。每条命令仍需单独确认。</p></aside></section></div>`;
+  dialog.innerHTML=`<header class="dialogue-heading"><div><button type="button" class="quiet" id="dialogue-toggle-sidebar" aria-expanded="true" aria-controls="dialogue-sidebar" aria-label="收起对话列表">☰</button><strong>Director</strong><span>对话</span></div><button type="button" class="quiet" id="close-dialogue">返回工作台</button></header><div class="dialogue-layout"><aside class="dialogue-sidebar" id="dialogue-sidebar" aria-label="对话列表"><div class="dialogue-sidebar-actions"><button type="button" id="new-dialogue">＋ 新对话</button><button type="button" id="new-dialogue-category" class="quiet">＋ 分类</button><button type="button" id="toggle-archived" class="quiet" aria-pressed="false">归档</button></div><div id="dialogue-list" aria-label="我的对话"></div></aside><section class="dialogue-main"><section id="dialogue-info" aria-label="对话信息"><div class="dialogue-info-row"><label class="dialogue-editor-label" data-label="标题">标题<div id="dialogue-title" class="dialogue-inline-edit" contenteditable="true" role="textbox" data-placeholder="输入对话标题" data-maxlength="120" aria-label="对话标题"></div></label><label>分类<input id="dialogue-category" list="dialogue-category-options" autocomplete="off" placeholder="点击或输入搜索分类"><datalist id="dialogue-category-options"></datalist></label></div><div class="dialogue-info-row"><label class="dialogue-editor-label" data-label="描述">描述<div id="dialogue-description" class="dialogue-inline-edit" contenteditable="true" role="textbox" data-placeholder="补充这组对话的主题或用途" data-maxlength="1000" aria-label="对话描述"></div></label><button type="button" id="dialogue-archive" class="quiet">归档对话</button></div></section><div class="dialogue-controls"><label>使用 AK<input id="dialogue-key" list="dialogue-key-options" autocomplete="off" placeholder="点击或输入搜索 AK"><datalist id="dialogue-key-options"></datalist></label><label>回答模型<input id="dialogue-model" list="dialogue-model-options" autocomplete="off" placeholder="点击或输入搜索模型"><datalist id="dialogue-model-options"></datalist></label><label>运行模式<select id="dialogue-run-mode"><option value="chat">对话模式</option><option value="agent">代理模式</option></select></label><button type="button" class="quiet" id="dialogue-agent-folders-button" aria-expanded="false" aria-controls="dialogue-agent-folders">执行目录</button><label>接口<select id="dialogue-protocol"><option value="auto">自动选择</option><option value="responses">Responses</option><option value="chat">Chat Completions</option></select></label><button type="button" class="quiet" id="dialogue-refresh">刷新可用模型</button><button type="button" class="quiet" id="dialogue-settings">配置 AK</button><button type="button" class="quiet" id="dialogue-toggle-preferences" aria-expanded="false" aria-controls="dialogue-preferences-panel">对话设置</button></div><div id="dialogue-preferences-panel" hidden><div class="dialogue-preferences"><label class="dialogue-font-control">字体大小<div><input id="dialogue-font" type="range" min="0" max="4" step="1" value="2" list="dialogue-font-stops" aria-label="对话字体大小"><output id="dialogue-font-label" for="dialogue-font">中</output></div><datalist id="dialogue-font-stops"><option value="0" label="较小"></option><option value="1" label="小"></option><option value="2" label="中"></option><option value="3" label="大"></option><option value="4" label="较大"></option></datalist></label><label>历史轮次<input id="dialogue-context-turns" type="number" min="0" max="100" value="20"></label><label>每包轮次<input id="dialogue-pack-size" type="number" min="1" max="100" value="25"></label><label>折叠最小宽度<input id="dialogue-card-width" type="number" min="240" max="1600" value="520"></label><label>折叠最小高度<input id="dialogue-card-height" type="number" min="120" max="900" value="240"></label><button type="button" class="quiet" id="dialogue-save-options">保存对话配置</button></div><p class="dialogue-note">历史轮次决定每次发送给模型的历史问答数量（含失败记录），0 表示只发送当前问题；接近 8 万字符时自动分段总结历史并保存，后续携带摘要和新记录继续；0 轮不携带摘要。每包轮次决定记录包容量，每轮都会立即保存。修改容量不重排旧记录。</p></div><button type="button" class="quiet" id="dialogue-older" hidden>加载更早记录</button><div id="dialogue-transcript" aria-live="polite"></div><p id="dialogue-status" role="status"></p><button type="button" class="quiet" id="dialogue-acknowledge" hidden>已核对中断请求，继续对话</button><form id="dialogue-compose"><label for="dialogue-question">你的问题</label><div class="dialogue-composer-box"><div id="dialogue-question" contenteditable="plaintext-only" role="textbox" aria-label="你的问题" aria-multiline="true" data-placeholder="描述你想完成的事…" spellcheck="true"></div><div id="dialogue-draft-files"></div><div class="dialogue-attachment-tools"><button type="button" id="dialogue-add-file" class="quiet">＋ 添加文件</button><input type="file" id="dialogue-file-input" multiple hidden accept=".png,.jpg,.jpeg,.webp,.pdf,.docx,.txt,.md,.markdown,.csv,.tsv,.json,.yaml,.yml,.xml,.html,.css,.js,.ts,.jsx,.tsx,.py,.sh,.sql,.log,.toml,.ini,.c,.cpp,.h,.java,.go,.rs,.vue"><small>可拖入文件或粘贴图片 · 最多 5 个，每个 10 MB · 图片 / PDF 需模型支持</small></div></div><div class="dialogue-send-row"><small>Enter 换行 · Ctrl / ⌘ + Enter 发送</small><button id="dialogue-send" type="submit">发送问题</button></div></form><aside id="dialogue-agent-folders" hidden aria-label="代理执行目录"><header><div><strong>允许执行的文件夹</strong><small>命令只能在这些目录及其子目录运行</small></div><button type="button" class="quiet" id="dialogue-agent-folders-close" aria-label="关闭执行目录">✕</button></header><div id="dialogue-agent-folder-list"></div><button type="button" id="dialogue-agent-folder-add">＋ 添加文件夹</button><p>目录权限仅保存在本机。每条命令仍需单独确认。</p></aside></section></div>`;
   document.querySelector('#studio').append(dialog);
   const $=selector=>dialog.querySelector(selector),key=$('#dialogue-key'),model=$('#dialogue-model'),status=$('#dialogue-status'),question=$('#dialogue-question');
   const credentialButton=document.createElement('button');credentialButton.type='button';credentialButton.className='quiet';credentialButton.textContent='凭据';$('.dialogue-controls').append(credentialButton);
@@ -22,14 +22,54 @@
     }return entries;
   }
 
-  credentialButton.onclick=async()=>{if(!window.directorDesktop?.credentialNames){status.textContent='凭据管理需使用更新后的 Electron 客户端';return;}showAgentFolders(false);credentialPanel.hidden=false;try{await renderCredentials();}catch(e){credentialNotice.textContent=e.message;}};
+  credentialButton.onclick=async()=>{if(!window.directorDesktop?.credentialNames){status.textContent='凭据管理需使用更新后的 Electron 客户端';return;}showAgentFolders(false);credentialPanel.hidden=false;if(dialogueSettings)dialogueSettings.open('credentials');try{await renderCredentials();}catch(e){credentialNotice.textContent=e.message;}};
   credentialPanel.querySelector('[data-close]').onclick=()=>{credentialPanel.hidden=true;credentialSecret.value='';setCredentialVisible(false);};
   credentialPanel.querySelector('form').onsubmit=async event=>{event.preventDefault();const form=event.target,secret=form.elements.secret.value;form.elements.secret.value='';setCredentialVisible(false);try{await window.directorDesktop.saveCredential({name:form.elements.name.value.trim(),secret,description:form.elements.description.value});await renderCredentials();credentialNotice.textContent='已加密保存；同名保存会更新密码';}catch(e){credentialNotice.textContent=e.message;}};
+  let dialogueSettings=null;
   let inventory={keys:[]},categories=[],showArchived=false,currentBody=null,metadataTimer=null,metadataSaving=false,metadataQueued=false,current='',turns=[],older=null,timer=null,generation=0,busy=false,pending=false,requestId='',requestQuestion='',draftFiles=[],agentFolders=[];
   const authorizationButton=document.createElement('button');authorizationButton.type='button';authorizationButton.className='quiet';authorizationButton.textContent='□ 完全访问 · 永久授权';authorizationButton.setAttribute('aria-pressed','false');$('.dialogue-controls').append(authorizationButton);
+  // Keep frequent choices beside the composer; connection and permission tools live in one disclosure.
+  const connectionPanel=document.createElement('section');connectionPanel.id='dialogue-connection-panel';connectionPanel.hidden=true;connectionPanel.setAttribute('aria-label','连接与权限');
+  const connectionHeading=document.createElement('header');connectionHeading.innerHTML='<strong>连接与权限</strong><button type="button" class="quiet" aria-label="关闭连接与权限">×</button>';
+  connectionPanel.append(connectionHeading);
+  const connectionFields=document.createElement('div');connectionFields.className='dialogue-connection-fields';connectionPanel.append(connectionFields);
+  const toolbar=$('.dialogue-controls');
+  for(const item of [...toolbar.children]){
+    if(item.contains(model)||item.contains($('#dialogue-run-mode'))||item.id==='dialogue-toggle-preferences')continue;
+    connectionFields.append(item);
+  }
+  $('.dialogue-main').append(connectionPanel);
+  connectionFields.append(key.closest('label'),$('#dialogue-protocol').closest('label'),$('#dialogue-refresh'),$('#dialogue-settings'),$('#dialogue-agent-folders-button'),credentialButton,authorizationButton);
+  const connectionButton=document.createElement('button');connectionButton.type='button';connectionButton.id='dialogue-toggle-connection';connectionButton.className='quiet';connectionButton.textContent='连接与权限';connectionButton.setAttribute('aria-expanded','false');connectionButton.setAttribute('aria-controls',connectionPanel.id);
+  toolbar.insertBefore(connectionButton,$('#dialogue-toggle-preferences'));
+  const permissionIndicator=document.createElement('span');permissionIndicator.className='dialogue-permission-indicator';permissionIndicator.setAttribute('role','status');toolbar.append(permissionIndicator);
+  for(const selector of ['#dialogue-model','#dialogue-run-mode']){
+    const input=$(selector),label=input.closest('label');input.setAttribute('aria-label',selector==='#dialogue-model'?'回答模型':'运行模式');
+    for(const node of [...label.childNodes])if(node.nodeType===Node.TEXT_NODE){const caption=document.createElement('span');caption.className='dialogue-sr-only';node.replaceWith(caption);caption.append(node);}
+  }
+  $('.dialogue-composer-box').append(toolbar);
+  toolbar.prepend($('#dialogue-add-file'));toolbar.append($('#dialogue-send'));$('.dialogue-attachment-tools').hidden=true;
+  $('#dialogue-send').textContent='↑';$('#dialogue-send').title='发送问题（Ctrl / ⌘ + Enter）';$('#dialogue-send').setAttribute('aria-label','发送问题');
+  $('#dialogue-add-file').textContent='＋';$('#dialogue-add-file').title='添加文件 · 可拖入或粘贴 · 最多 5 个，每个 10 MB';$('#dialogue-add-file').setAttribute('aria-label','添加文件');
+  function showConnection(open){
+    if(dialogueSettings){if(open)dialogueSettings.open('models');else if(dialogueSettings.current()==='models')dialogueSettings.close();return;}
+    connectionPanel.hidden=!open;connectionButton.setAttribute('aria-expanded',String(open));
+    if(open){dialog.dispatchEvent(new CustomEvent('dialogue-overlay-open',{detail:'connection'}));showPreferences(false);showAgentFolders(false);credentialPanel.hidden=true;requestAnimationFrame(positionConnection);}
+  }
+  function positionConnection(){if(dialogueSettings||connectionPanel.hidden)return;const main=$('.dialogue-main').getBoundingClientRect(),button=connectionButton.getBoundingClientRect();connectionPanel.style.bottom=Math.round(main.bottom-button.top+8)+'px';connectionPanel.style.right=Math.max(12,Math.round(main.right-button.right))+'px';}
+  connectionButton.onclick=()=>showConnection(dialogueSettings?dialogueSettings.current()!=='models':connectionPanel.hidden);
+  connectionHeading.querySelector('button').onclick=()=>{showConnection(false);connectionButton.focus();};
+  document.addEventListener('pointerdown',event=>{if(!connectionPanel.hidden&&!connectionPanel.contains(event.target)&&!connectionButton.contains(event.target))showConnection(false);});
+  dialog.addEventListener('cancel',event=>{if(!dialogueSettings&&(!connectionPanel.hidden||!$('#dialogue-preferences-panel').hidden)){event.preventDefault();const connection=!connectionPanel.hidden;showConnection(false);showPreferences(false);(connection?connectionButton:$('#dialogue-toggle-preferences')).focus();}});
+  window.addEventListener('resize',positionConnection);
+  const sidebarButton=$('#dialogue-toggle-sidebar'),narrowLayout=window.matchMedia('(max-width:760px)');
+  function showSidebar(open){dialog.classList.toggle('dialogue-sidebar-hidden',!open);sidebarButton.setAttribute('aria-expanded',String(open));sidebarButton.setAttribute('aria-label',open?'收起对话列表':'展开对话列表');}
+  sidebarButton.onclick=()=>showSidebar(sidebarButton.getAttribute('aria-expanded')!=='true');
+  narrowLayout.addEventListener('change',event=>showSidebar(!event.matches));showSidebar(!narrowLayout.matches);
+  dialog.addEventListener('close',()=>{showConnection(false);showPreferences(false);});
   let authorizationState={conversation:'',active:false,permanent:false};
   const autoCountdowns=new Map(),autoCancelled=new Set();
-  function paintAuthorization(){const active=authorizationState.conversation===current&&authorizationState.active;authorizationButton.textContent=active?'☑ 完全访问 · 点击撤销':'□ 完全访问 · 永久授权';authorizationButton.setAttribute('aria-pressed',String(active));authorizationButton.title=active?'永久有效，直到手动撤销；允许自动执行和使用授权时已有凭据':'当前对话永久授权；3秒倒计时自动执行，并允许使用现有凭据';}
+  function paintAuthorization(){const active=authorizationState.conversation===current&&authorizationState.active;authorizationButton.textContent=active?'☑ 完全访问 · 点击撤销':'□ 完全访问 · 永久授权';authorizationButton.setAttribute('aria-pressed',String(active));const permissionText=active?'完全访问已开启':'命令执行需确认';if(permissionIndicator.textContent!==permissionText)permissionIndicator.textContent=permissionText;permissionIndicator.classList.toggle('active',active);authorizationButton.title=active?'永久有效，直到手动撤销；允许自动执行和使用授权时已有凭据':'当前对话永久授权；3秒倒计时自动执行，并允许使用现有凭据';}
   async function refreshAuthorization(){const id=current;if(!id||!window.directorDesktop?.authorizationStatus){authorizationState={conversation:id,active:false,permanent:false};paintAuthorization();return;}try{const value=await window.directorDesktop.authorizationStatus(id);if(current!==id)return;const changed=authorizationState.conversation!==id||authorizationState.active!==value.active||authorizationState.permanent!==value.permanent;authorizationState={conversation:id,...value};paintAuthorization();if(changed)render();}catch(e){authorizationState={conversation:id,active:false,permanent:false};paintAuthorization();}}
   authorizationButton.onclick=async()=>{if(!current){status.textContent='请先创建或打开对话';return;}if(!window.directorDesktop?.setAuthorization){status.textContent='请重启更新后的 Electron 客户端';return;}const id=current;authorizationButton.disabled=true;try{const value=await window.directorDesktop.setAuthorization({conversationId:id,enabled:!(authorizationState.conversation===id&&authorizationState.active)});if(current===id){authorizationState={conversation:id,...value};if(!value.active)autoCountdowns.clear();paintAuthorization();render();}}catch(e){status.textContent=e.message;}finally{authorizationButton.disabled=false;}};
   setInterval(()=>{
@@ -45,7 +85,7 @@
   const makeId=()=>crypto.randomUUID().replaceAll('-','');
   function renderAgentFolders(){const list=$('#dialogue-agent-folder-list');list.replaceChildren();if(!agentFolders.length){const empty=document.createElement('p');empty.textContent='尚未允许任何文件夹';list.append(empty);}for(const path of agentFolders){const row=document.createElement('div');row.className='dialogue-agent-folder';const value=document.createElement('code');value.textContent=path;const remove=document.createElement('button');remove.type='button';remove.className='quiet';remove.textContent='移除';remove.onclick=async()=>{try{agentFolders=await window.directorDesktop.removeAgentFolder(path);renderAgentFolders();status.textContent='执行目录权限已更新';}catch(e){status.textContent=e.message;}};row.append(value,remove);list.append(row);}}
   async function loadAgentFolders(){agentFolders=window.directorDesktop?.agentFolders?await window.directorDesktop.agentFolders():[];renderAgentFolders();}
-  function showAgentFolders(open){const panel=$('#dialogue-agent-folders'),button=$('#dialogue-agent-folders-button');panel.hidden=!open;button.setAttribute('aria-expanded',String(open));}
+  function showAgentFolders(open){if(dialogueSettings){if(open)dialogueSettings.open('folders');return;}const panel=$('#dialogue-agent-folders'),button=$('#dialogue-agent-folders-button');panel.hidden=!open;button.setAttribute('aria-expanded',String(open));}
   $('#dialogue-agent-folders-button').onclick=async()=>{if(!window.directorDesktop?.agentFolders){status.textContent='执行目录只能在 Electron 客户端配置';return;}await loadAgentFolders();showAgentFolders(true);};
   $('#dialogue-agent-folders-close').onclick=()=>showAgentFolders(false);
   $('#dialogue-agent-folder-add').onclick=async()=>{try{agentFolders=await window.directorDesktop.addAgentFolder();renderAgentFolders();status.textContent='执行目录权限已保存';}catch(e){status.textContent=e.message;}};
@@ -62,7 +102,7 @@
   }
   function controls(){
     for(const button of $('#dialogue-list').querySelectorAll('button'))button.disabled=busy;
-    $('#dialogue-save-options').disabled=busy||pending;$('#dialogue-send').disabled=busy||pending||!model.value;$('#new-dialogue').disabled=busy;$('#new-dialogue-category').disabled=busy;$('#close-dialogue').disabled=busy;question.disabled=busy;$('#dialogue-add-file').disabled=busy;for(const b of $('#dialogue-draft-files').querySelectorAll('button'))b.disabled=busy;
+    $('#dialogue-save-options').disabled=busy||pending;$('#dialogue-send').disabled=busy||pending||!model.value;$('#new-dialogue').disabled=busy;$('#new-dialogue-category').disabled=busy;$('#close-dialogue').disabled=busy;question.contentEditable=busy?'false':'plaintext-only';question.setAttribute('aria-disabled',String(busy));$('#dialogue-add-file').disabled=busy;for(const b of $('#dialogue-draft-files').querySelectorAll('button'))b.disabled=busy;
     for(const item of [key,model,$('#dialogue-run-mode'),$('#dialogue-protocol'),$('#dialogue-refresh'),$('#dialogue-settings'),$('#dialogue-agent-folders-button'),$('#dialogue-context-turns'),$('#dialogue-pack-size'),$('#dialogue-card-width'),$('#dialogue-card-height'),$('#dialogue-save-options')])item.disabled=busy||(pending&&item.id==='dialogue-save-options');
     for(const item of [$('#dialogue-category'),$('#dialogue-archive')])item.disabled=busy||!current;
     for(const item of [$('#dialogue-title'),$('#dialogue-description')]){item.contentEditable=String(Boolean(current&&!busy));item.setAttribute('aria-disabled',String(Boolean(busy||!current)));}
@@ -83,8 +123,8 @@
     return {context_turns,pack_size,card_width,card_height};
   }
   const fontSizes=[13,15,18,21,24],fontLabels=['较小','小','中','大','较大'],savedFont=localStorage.getItem('dialogue-font');
-  const savedFontIndex=fontSizes.indexOf(Number(savedFont));$('#dialogue-font').value=/^[0-4]$/.test(savedFont||'')?savedFont:String(savedFontIndex>=0?savedFontIndex:2);
-  function font(){const level=Number($('#dialogue-font').value),size=fontSizes[level];dialog.style.setProperty('--dialogue-answer-font',size+'px');dialog.style.setProperty('--dialogue-ui-font',Math.max(12,size-2)+'px');$('#dialogue-font-label').value=fontLabels[level];localStorage.setItem('dialogue-font',String(level));}
+  const savedFontIndex=fontSizes.indexOf(Number(savedFont));$('#dialogue-font').value=/^[0-4]$/.test(savedFont||'')?savedFont:String(savedFontIndex>=0?savedFontIndex:1);
+  function font(){const level=Number($('#dialogue-font').value),size=fontSizes[level];dialog.style.setProperty('--dialogue-answer-font',size+'px');dialog.style.setProperty('--dialogue-ui-font','13px');$('#dialogue-font-label').value=fontLabels[level];localStorage.setItem('dialogue-font',String(level));}
   $('#dialogue-font').oninput=font;font();
   $('#dialogue-card-width').value=localStorage.getItem('dialogue-card-width')||'520';$('#dialogue-card-height').value=localStorage.getItem('dialogue-card-height')||'240';
   const cardSizes=()=>{try{return JSON.parse(localStorage.getItem('dialogue-card-sizes')||'{}');}catch{return {};}};
@@ -98,11 +138,11 @@
   function applyAnswerFont(response,turnId){const level=answerFonts()[turnKey(turnId)];response.style.fontSize=Number.isInteger(level)?fontSizes[level]+'px':'';}
   function setAnswerFont(response,turnId,level,button,output){const fonts=answerFonts(),key=turnKey(turnId);fonts[key]=level;localStorage.setItem('dialogue-answer-fonts',JSON.stringify(fonts));applyAnswerFont(response,turnId);button.title='调整此回答字号（当前：'+fontLabels[level]+'）';button.setAttribute('aria-label',button.title);output.value=fontLabels[level];status.textContent='此回答字号已保存：'+fontLabels[level];}
   const preferenceButton=$('#dialogue-toggle-preferences'),preferencePanel=$('#dialogue-preferences-panel');
-  function positionPreferences(){if(preferencePanel.hidden)return;const main=$('.dialogue-main').getBoundingClientRect(),button=preferenceButton.getBoundingClientRect();preferencePanel.style.top=Math.round(button.bottom-main.top+8)+'px';preferencePanel.style.right=Math.max(0,Math.round(main.right-button.right))+'px';}
-  function showPreferences(expanded){preferencePanel.hidden=!expanded;preferenceButton.setAttribute('aria-expanded',String(expanded));preferenceButton.textContent=expanded?'收起设置':'对话设置';if(expanded)requestAnimationFrame(positionPreferences);}
-  preferenceButton.onclick=()=>showPreferences(preferencePanel.hidden);
-  document.addEventListener('pointerdown',event=>{if(!preferencePanel.hidden&&!preferencePanel.contains(event.target)&&event.target!==preferenceButton)showPreferences(false);});
-  document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!preferencePanel.hidden){showPreferences(false);preferenceButton.focus();}});
+  function positionPreferences(){if(dialogueSettings||preferencePanel.hidden)return;const main=$('.dialogue-main').getBoundingClientRect(),button=preferenceButton.getBoundingClientRect();preferencePanel.style.bottom=Math.round(main.bottom-button.top+8)+'px';preferencePanel.style.right=Math.max(0,Math.round(main.right-button.right))+'px';}
+  function showPreferences(expanded){if(dialogueSettings){if(expanded)dialogueSettings.open('general');else if(dialogueSettings.current()==='general')dialogueSettings.close();return;}preferencePanel.hidden=!expanded;preferenceButton.setAttribute('aria-expanded',String(expanded));preferenceButton.textContent=expanded?'收起设置':'对话设置';if(expanded){dialog.dispatchEvent(new CustomEvent('dialogue-overlay-open',{detail:'preferences'}));showConnection(false);requestAnimationFrame(positionPreferences);}}
+  preferenceButton.onclick=()=>showPreferences(dialogueSettings?dialogueSettings.current()!=='general':preferencePanel.hidden);
+  document.addEventListener('pointerdown',event=>{if(!dialogueSettings&&!preferencePanel.hidden&&!preferencePanel.contains(event.target)&&event.target!==preferenceButton)showPreferences(false);});
+  document.addEventListener('keydown',event=>{if(!dialogueSettings&&event.key==='Escape'&&!preferencePanel.hidden){event.preventDefault();showPreferences(false);preferenceButton.focus();}});
   window.addEventListener('resize',positionPreferences);
   $('#dialogue-save-options').onclick=async()=>{
     if(busy||pending)return;busy=true;controls();
@@ -135,7 +175,7 @@
   function models(preferred=model.value,fallback=true){
     const profile=keyProfile();key.dataset.id=profile?.id||'';if(profile&&key.value!==profile.name)key.value=profile.name;
     const values=(profile?.models||[]).map(item=>item.id),options=$('#dialogue-model-options');options.replaceChildren();for(const value of values)options.append(new Option(value,value));
-    model.value=values.includes(preferred)?preferred:fallback?(values[0]||''):'';model.placeholder=values.length?'点击或输入搜索模型':'此 AK 暂无可用语言模型';controls();
+    model.value=values.includes(preferred)?preferred:fallback?(values[0]||''):'';model.placeholder=values.length?'点击或输入搜索模型':'此 AK 暂无可用语言模型';controls();model.dispatchEvent(new Event('change'));
   }
   function restoreSelection(body,quiet=false){
     const wantedKey=body?.last_credential_id||localStorage.getItem('dialogue-key-id'),wantedModel=body?.last_model||localStorage.getItem('dialogue-model');
@@ -152,8 +192,34 @@
     inventory=await api('models'+(refresh?'?refresh=1':''));const options=$('#dialogue-key-options');options.replaceChildren();for(const profile of inventory.keys){const option=new Option(profile.name,profile.name);option.dataset.id=profile.id;options.append(option);}
     if(previous&&inventory.keys.some(profile=>profile.id===previous)){const profile=inventory.keys.find(item=>item.id===previous);key.value=profile.name;key.dataset.id=profile.id;models(model.value);}else restoreSelection(currentBody,true);
     if(!keyProfile()&&!currentBody?.last_credential_id&&!localStorage.getItem('dialogue-key-id')&&inventory.keys.length){key.value=inventory.keys[0].name;key.dataset.id=inventory.keys[0].id;models(inventory.keys[0].models[0]?.id||'');}
+    modelPicker.sync();
     status.textContent=inventory.errors.map(e=>e.message).join('；')||(!inventory.keys.length?'请先配置并启用 service-inference AK':!model.value?'请选择可用的 AK 和模型':'可用模型已加载');
   }
+  const modelPicker=window.createDirectorModelPicker({
+    root:dialog,input:model,getProfiles:()=>inventory.keys,getKey:()=>keyProfile()?.id||'',
+    onSelect:(keyId,modelId)=>{const profile=inventory.keys.find(p=>p.id===keyId);if(!profile||busy)return;key.value=profile.name;models(modelId,false);localStorage.setItem('dialogue-key-id',keyId);localStorage.setItem('dialogue-model',modelId);status.textContent='已选择 '+modelId+' · '+profile.name;},
+    onRefresh:()=>loadModels(true),onManage:()=>showConnection(true)
+  });
+  dialog.addEventListener('dialogue-overlay-open',event=>{if(event.detail==='models'){if(dialogueSettings)dialogueSettings.close();else{showConnection(false);showPreferences(false);showAgentFolders(false);credentialPanel.hidden=true;}}});
+  const modelSettings=document.createElement('div');modelSettings.className='dialogue-settings-fields';
+  modelSettings.append(key.closest('label'),$('#dialogue-protocol').closest('label'),$('#dialogue-refresh'),$('#dialogue-settings'));
+  const generalSettings=document.createElement('div');generalSettings.className='dialogue-settings-fields';
+  const modeLabel=$('#dialogue-run-mode').closest('label');modeLabel.querySelector('.dialogue-sr-only').classList.remove('dialogue-sr-only');generalSettings.append(modeLabel);
+  const accessSettings=document.createElement('div');accessSettings.className='dialogue-settings-access';
+  const accessDescription=document.createElement('p');accessDescription.textContent='永久授权仅对当前对话生效，直到你手动撤销。开启后命令倒计时 3 秒自动执行；你可以在倒计时内取消。';accessSettings.append(permissionIndicator,accessDescription,authorizationButton);
+  preferencePanel.hidden=false;credentialPanel.hidden=false;$('#dialogue-agent-folders').hidden=false;
+  $('#dialogue-agent-folders-close').hidden=true;credentialPanel.querySelector('[data-close]').hidden=true;
+  connectionButton.hidden=true;preferenceButton.hidden=true;$('#dialogue-agent-folders-button').hidden=true;credentialButton.hidden=true;
+  dialogueSettings=window.createDirectorDialogueSettings({root:dialog,sections:[
+    {id:'general',title:'对话与显示',description:'调整运行模式、阅读字号和对话历史。',nodes:[generalSettings,preferencePanel]},
+    {id:'models',title:'模型与连接',description:'管理模型来源和接口。具体回答模型可随时在输入框下方选择。',nodes:[modelSettings]},
+    {id:'folders',title:'执行目录',description:'选择允许代理运行命令的工作目录。',nodes:[$('#dialogue-agent-folders')]},
+    {id:'credentials',title:'本机凭据',description:'为代理保存可按名称引用的凭据。',nodes:[credentialPanel]},
+    {id:'access',title:'访问权限',description:'管理当前对话的命令执行授权。',nodes:[accessSettings]}
+  ],onEnter:async page=>{
+    if(page==='credentials'){if(!window.directorDesktop?.credentialNames){credentialNotice.textContent='凭据管理需使用 Electron 客户端';return;}try{await renderCredentials();}catch(e){credentialNotice.textContent=e.message;}}
+    if(page==='folders'){try{await loadAgentFolders();}catch(e){status.textContent=e.message;}}
+  }});
   async function loadList(){
     const result=await api('conversations');categories=result.categories||[];const list=$('#dialogue-list');list.replaceChildren();
     const categoryInput=$('#dialogue-category'),categoryOptions=$('#dialogue-category-options');categoryOptions.replaceChildren();for(const category of categories)categoryOptions.append(new Option(category.body.name,category.body.name));
@@ -334,12 +400,12 @@
     if(pending&&dialog.open&&token===generation)timer=setTimeout(()=>poll(token),2000);
   }
   async function openConversation(id){
-    if(busy)return;autoCountdowns.clear();const token=++generation;clearTimeout(timer);current=id;question.value='';requestId='';clearDraft();status.textContent='读取对话…';
+    if(busy)return;autoCountdowns.clear();const token=++generation;clearTimeout(timer);current=id;question.replaceChildren();requestId='';clearDraft();status.textContent='读取对话…';
     try{const result=await api('conversations/'+id);if(token!==generation||!dialog.open)return;apply(result,true);if(!result.body.interrupted&&!status.textContent.includes('已不存在')&&!status.textContent.includes('已不可用'))status.textContent=pending?'模型正在回答…':'历史记录已加载';await loadList();poll(token);}
     catch(e){if(token===generation)status.textContent=e.message;}
   }
   async function newConversation(){
-    autoCountdowns.clear();++generation;clearTimeout(timer);const result=await api('conversations',options());apply(result,true);question.value='';requestId='';clearDraft();status.textContent='新对话已创建';await loadList();question.focus();
+    autoCountdowns.clear();++generation;clearTimeout(timer);const result=await api('conversations',options());apply(result,true);question.replaceChildren();requestId='';clearDraft();status.textContent='新对话已创建';await loadList();question.focus();
   }
   async function renameCategory(category){
     const name=await window.directorDialogs.prompt('输入分类名称',{title:'重命名分类',value:category.body.name});
@@ -366,7 +432,7 @@
   }
   $('#dialogue-category').addEventListener('change',()=>{if(current)saveMetadata('分类已自动保存');});
   document.querySelector('#open-dialogue').onclick=async()=>{
-    ++generation;current='';currentBody=null;turns=[];older=null;pending=false;requestId='';question.value='';clearDraft();$('#dialogue-acknowledge').hidden=true;render();dialog.showModal();
+    ++generation;current='';currentBody=null;turns=[];older=null;pending=false;requestId='';question.replaceChildren();clearDraft();$('#dialogue-list').replaceChildren();setEditText('#dialogue-title','新对话');setEditText('#dialogue-description','');$('#dialogue-title').dataset.description='';$('#dialogue-category').value='';$('#dialogue-acknowledge').hidden=true;render();dialog.showModal();
     try{await loadAgentFolders();await loadModels();await loadList();controls();}catch(e){status.textContent=e.message;}
   };
   $('#close-dialogue').onclick=()=>dialog.close();dialog.addEventListener('cancel',e=>{if(busy)e.preventDefault();});dialog.addEventListener('close',()=>{autoCountdowns.clear();++generation;clearTimeout(timer);});
@@ -380,8 +446,9 @@
   };
   $('#dialogue-acknowledge').onclick=async()=>{try{apply(await api('conversations/'+current,{action:'acknowledge'}));status.textContent='中断状态已记录，可以继续提问';}catch(e){status.textContent=e.message;}};
   $('#dialogue-compose').onsubmit=async e=>{
-    e.preventDefault();const profile=keyProfile();if(busy||pending||!profile||!profile.models.some(item=>item.id===model.value)||!question.value.trim()){if(!busy&&!pending)status.textContent='请从搜索结果选择可用的 AK 和模型';return;}
-    const selectedKey=profile.id,selectedModel=model.value,protocol=$('#dialogue-protocol').value,mode=$('#dialogue-run-mode').value,text=question.value.trim();
+    e.preventDefault();const profile=keyProfile();if(busy||pending||!profile||!profile.models.some(item=>item.id===model.value)){if(!busy&&!pending)status.textContent='请从搜索结果选择可用的 AK 和模型';return;}
+    const selectedKey=profile.id,selectedModel=model.value,protocol=$('#dialogue-protocol').value,mode=$('#dialogue-run-mode').value,text=question.innerText.replace(/\r\n?/g,'\n').trim();
+    if(!text){status.textContent='请输入问题';question.focus();return;}if(text.length>20000){status.textContent='问题最多 20000 个字符，请缩短后发送';question.focus();return;}
     if(mode==='agent'&&!window.directorDesktop?.runCommand){status.textContent='代理模式只能在 Hotpoor Director Electron 客户端中使用';return;}
     busy=true;controls();
     try{
@@ -390,9 +457,10 @@
       status.textContent='提交问题…';
       if(mode==='agent'&&!agentFolders.length)throw Error('请先在“执行目录”侧边栏添加允许的文件夹');
       const result=await api('conversations/'+current,{request_id:requestId,question:text,credential_id:selectedKey,model:selectedModel,protocol,mode,credential_names:mode==='agent'&&window.directorDesktop.credentialNames?await window.directorDesktop.credentialNames():[],credential_descriptions:mode==='agent'&&window.directorDesktop.credentialEntries?await window.directorDesktop.credentialEntries():[],allowed_paths:mode==='agent'?agentFolders:[],attachments:draftFiles.map(f=>f.id)});localStorage.setItem('dialogue-key-id',selectedKey);localStorage.setItem('dialogue-model',selectedModel);localStorage.setItem('dialogue-run-mode',mode);
-      apply(result);question.value='';requestId='';clearDraft();status.textContent='模型正在回答，记录已保存';await loadList();poll();
+      apply(result);question.replaceChildren();requestId='';clearDraft();status.textContent='模型正在回答，记录已保存';await loadList();poll();
     }catch(e){status.textContent=e.message+'；若连接中断，请重新打开此对话检查已保存记录';}
     finally{busy=false;controls();}
   };
-  question.onkeydown=e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();$('#dialogue-compose').requestSubmit();}};
+  question.addEventListener('paste',event=>{if(event.clipboardData.files.length)return;event.preventDefault();const text=event.clipboardData.getData('text/plain');if(text)document.execCommand('insertText',false,text);});
+  question.onkeydown=e=>{if(e.isComposing||e.keyCode===229)return;if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();$('#dialogue-compose').requestSubmit();}};
 })();

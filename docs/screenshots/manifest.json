@@ -101,50 +101,86 @@
       "file": "dialogue-overview.png",
       "source_script": "scripts/capture-dialogue-readme.cjs",
       "source_output": "dialogue-overview.png",
-      "captured_on": "2026-09-19",
-      "ui_commit": "a2f36f4",
+      "captured_on": "2026-09-23",
+      "ui_commit": "working-tree",
       "environment": "macOS Electron; isolated PostgreSQL; simulated model and command output; no personal data",
       "width": 3000,
-      "height": 1938,
-      "bytes": 330461,
-      "sha256": "ec6bdea1cd0385f4190c046d8ffda54b6938be6743b7bea35a7743d19f655a3d"
+      "height": 1946,
+      "bytes": 288417,
+      "sha256": "326fb02e89fe958eb57da8e696558591b76d18d1d6ab40b5cda3612d32fd838c"
     },
     {
       "file": "dialogue-settings.png",
       "source_script": "scripts/capture-dialogue-readme.cjs",
       "source_output": "dialogue-settings.png",
-      "captured_on": "2026-09-19",
-      "ui_commit": "a2f36f4",
+      "captured_on": "2026-09-23",
+      "ui_commit": "working-tree",
       "environment": "macOS Electron; isolated PostgreSQL; simulated model and command output; no personal data",
       "width": 3000,
-      "height": 1938,
-      "bytes": 337283,
-      "sha256": "621114078c5269c9a1c346330be6e415185e383fdf9595da3fe39731ce81a589"
+      "height": 1946,
+      "bytes": 143079,
+      "sha256": "ba5472c0321ded66a6ceed0f1a5076c986c5c72ae1523103cc90b24ac5bee350"
     },
     {
       "file": "dialogue-agent-approval.png",
       "source_script": "scripts/capture-dialogue-readme.cjs",
       "source_output": "dialogue-agent-approval.png",
-      "captured_on": "2026-09-19",
-      "ui_commit": "a2f36f4",
+      "captured_on": "2026-09-23",
+      "ui_commit": "working-tree",
       "environment": "macOS Electron; isolated PostgreSQL; simulated model and command output; no personal data",
       "width": 3000,
-      "height": 1938,
-      "bytes": 276485,
-      "sha256": "2592a1aa1923ad6719aa2229b20f108e4beba5b5e34d4921895f98e2c8238979"
+      "height": 1946,
+      "bytes": 196739,
+      "sha256": "eb305b336f060cb7b14f44c2b39440080d772ca156e9d2abdf15d5469e6a82ae"
     },
     {
       "file": "dialogue-agent-output.png",
       "source_script": "scripts/capture-dialogue-readme.cjs",
       "source_output": "dialogue-agent-output.png",
-      "captured_on": "2026-09-19",
-      "ui_commit": "a2f36f4",
+      "captured_on": "2026-09-23",
+      "ui_commit": "working-tree",
       "environment": "macOS Electron; isolated PostgreSQL; simulated model and command output; no personal data",
       "width": 3000,
-      "height": 1938,
-      "bytes": 278411,
-      "sha256": "be967a851b0f109c621cf21eeb70747dd316b0d5e5c3727f8c297c8d72fac1ef"
+      "height": 1946,
+      "bytes": 211144,
+      "sha256": "58725b63e466c286abf192183359d0fd9a33c2517831c12b56ffcb7bf6585ce3"
+    },
+    {
+      "file": "dialogue-connection.png",
+      "source_script": "scripts/capture-dialogue-readme.cjs",
+      "source_output": "dialogue-connection.png",
+      "captured_on": "2026-09-23",
+      "ui_commit": "working-tree",
+      "environment": "macOS Electron; isolated PostgreSQL; simulated model and command output; no personal data",
+      "width": 3000,
+      "height": 1946,
+      "bytes": 87418,
+      "sha256": "f946e106e9a6b601371db1bf9304b295029c026581aa67d3181708693f0717f0"
+    },
+    {
+      "file": "dialogue-workspace.png",
+      "source_script": "scripts/capture-dialogue-readme.cjs",
+      "source_output": "dialogue-workspace.png",
+      "captured_on": "2026-09-23",
+      "ui_commit": "working-tree",
+      "environment": "macOS Electron; isolated PostgreSQL; simulated model and command output; no personal data",
+      "width": 3000,
+      "height": 1946,
+      "bytes": 270254,
+      "sha256": "f1e0c3fc119acc81e10a67c224a0008980fe112f561296fb51cd1447ecb20a3d"
+    },
+    {
+      "file": "dialogue-model-picker.png",
+      "source_script": "scripts/capture-dialogue-readme.cjs",
+      "source_output": "dialogue-model-picker.png",
+      "captured_on": "2026-09-23",
+      "ui_commit": "working-tree",
+      "environment": "macOS Electron; isolated PostgreSQL; simulated model and command output; no personal data",
+      "width": 3000,
+      "height": 1946,
+      "bytes": 250013,
+      "sha256": "d575ac0beac985ae87e6a34ef250ca31d883cb572f048f91cb6d5c556421b906"
     }
   ],
-  "last_updated": "2026-09-19"
+  "last_updated": "2026-09-23"
 }
