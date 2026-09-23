@@ -1,7 +1,6 @@
 """Synchronize the chronological biography and daily counts from the development log."""
 import argparse
-import calendar
-from datetime import date
+from datetime import date, timedelta
 from html import escape
 from collections import Counter
 from pathlib import Path
@@ -41,63 +40,49 @@ def daily_summary(entries, reverse):
 
 
 def activity_chart(entries):
-    latest = max(re.match(r'## (\d{4}-\d{2}-\d{2})', entry)[1] for entry in entries)
+    latest = date.fromisoformat(max(re.match(r'## (\d{4}-\d{2}-\d{2})', entry)[1] for entry in entries))
+    start = latest - timedelta(days=364)
     return ('### 每日工作记录分布\n\n'
-            f'展示最新记录所在月份（{latest[:7]}）。绿色越深，当天开发记录越多；浅灰色表示没有日志记录，虚线表示晚于最新记录日期。数字为记录条数，并非 Git 提交数或工时。\n\n'
-            '![每日开发记录绿色活动日历](docs/charts/development-activity.svg)\n\n'
-            '完整日期与数量见上表，图表随日志自动更新。')
+            f'{start.isoformat()} 至 {latest.isoformat()}，最近 365 天。横向每列一周，纵向周日到周六，每格一天；绿色越深，开发记录越多。浅灰表示没有日志记录，并非 GitHub 账号的提交统计。\n\n'
+            '![过去一年开发记录贡献格](docs/charts/development-activity.svg)\n\n'
+            '完整日期与数量见上表，图表随最新日志日期自动更新。')
 
 
 def activity_svg(entries):
     counts = Counter(re.match(r'## (\d{4}-\d{2}-\d{2})', entry)[1] for entry in entries)
     latest = date.fromisoformat(max(counts))
-    weeks = calendar.Calendar(firstweekday=0).monthdatescalendar(latest.year, latest.month)
-    month = f'{latest.year:04d}-{latest.month:02d}'
-    month_counts = {day: count for day, count in counts.items() if day.startswith(month)}
-    total = sum(month_counts.values())
-    height = 166 + len(weeks) * 58
+    start = latest - timedelta(days=364)
+    grid_start = start - timedelta(days=(start.weekday() + 1) % 7)
+    period = {day: count for day, count in counts.items() if start.isoformat() <= day <= latest.isoformat()}
     colors = ['#ebedf0', '#9be9a8', '#40c463', '#30a14e', '#216e39']
     def level(count):
         return 0 if count == 0 else 1 if count <= 3 else 2 if count <= 7 else 3 if count <= 14 else 4
-    parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="820" height="{height}" viewBox="0 0 820 {height}" role="img" aria-labelledby="title desc">',
-             f'<title id="title">{month} 开发记录活动日历</title>',
-             '<desc id="desc">每天一个格子，绿色深浅表示开发记录条数，格子内显示日期和数量。统计来自开发日志，不代表 Git 提交数或工作时长。</desc>',
-             '<rect width="100%" height="100%" rx="12" fill="#ffffff" stroke="#d1d9e0"/>',
+    parts = ['<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="282" viewBox="0 0 1000 282" role="img" aria-labelledby="title desc">',
+             '<title id="title">过去一年开发记录贡献格</title>',
+             f'<desc id="desc">{start.isoformat()} 至 {latest.isoformat()}，共 {sum(period.values())} 条开发记录。每列一周，纵向按星期排列，颜色越深记录越多。不是 GitHub 账号提交数量。</desc>',
+             '<rect x="0.5" y="0.5" width="999" height="281" rx="10" fill="#ffffff" stroke="#d1d9e0"/>',
              '<g font-family="Arial, PingFang SC, Microsoft YaHei, sans-serif" fill="#1f2328">',
-             f'<text x="28" y="36" font-size="20" font-weight="600">{latest.year} 年 {latest.month} 月 · 开发活动</text>',
-             f'<text x="28" y="61" font-size="12" fill="#59636e">记录截至 {latest.isoformat()} · 每格一天</text>']
-    for column, label in enumerate(['一', '二', '三', '四', '五', '六', '日']):
-        parts.append(f'<text x="{54 + column * 68}" y="88" text-anchor="middle" font-size="12" fill="#59636e">周{label}</text>')
-    for row, week in enumerate(weeks):
-        for column, day in enumerate(week):
-            if day.month != latest.month:
-                continue
-            key = day.isoformat(); count = counts.get(key, 0)
-            x, y = 28 + column * 68, 101 + row * 58
-            future = day > latest
-            shade = level(count)
-            foreground = '#ffffff' if shade >= 3 else '#1f2328'
-            fill = '#ffffff' if future else colors[shade]
-            dash = ' stroke-dasharray="3 3"' if future else ''
-            hint = '晚于最新记录日期' if future else f'{count} 条开发记录'
-            parts += [f'<g><title>{key}：{hint}</title>',
-                      f'<rect x="{x}" y="{y}" width="54" height="48" rx="5" fill="{fill}" stroke="#d1d9e0"{dash}/>',
-                      f'<text x="{x + 7}" y="{y + 15}" font-size="11" fill="{foreground}">{day.day}</text>']
-            if count:
-                parts.append(f'<text x="{x + 27}" y="{y + 36}" text-anchor="middle" font-size="16" font-weight="600" fill="{foreground}">{count}</text>')
-            parts.append('</g>')
-    parts += [f'<text x="540" y="136" font-size="36" font-weight="600">{total}</text>',
-              '<text x="540" y="159" font-size="13" fill="#59636e">本月开发记录</text>',
-              f'<text x="540" y="207" font-size="28" font-weight="600">{len(month_counts)}</text>',
-              '<text x="540" y="230" font-size="13" fill="#59636e">有记录的日期</text>',
-              '<text x="540" y="272" font-size="12" fill="#59636e">格子上方：日期</text>',
-              '<text x="540" y="292" font-size="12" fill="#59636e">格子下方：记录条数</text>']
-    legend_y = height - 30
-    for i, (color, label) in enumerate(zip(colors, ['无记录', '1–3', '4–7', '8–14', '15+'])):
-        x = 28 + i * 94
-        parts += [f'<rect x="{x}" y="{legend_y - 13}" width="14" height="14" rx="3" fill="{color}" stroke="#d1d9e0"/>',
-                  f'<text x="{x + 20}" y="{legend_y - 2}" font-size="11" fill="#59636e">{label}</text>']
-    parts += ['</g>', '</svg>']
+             f'<text x="24" y="35" font-size="22" font-weight="600">{sum(period.values())} 条开发记录 · 过去一年</text>',
+             f'<text x="976" y="35" text-anchor="end" font-size="12" fill="#59636e">{start.isoformat()} — {latest.isoformat()}</text>']
+    for row, label in [(1, '周一'), (3, '周三'), (5, '周五')]:
+        parts.append(f'<text x="23" y="{94 + row * 17}" font-size="12" fill="#59636e">{label}</text>')
+    for offset in range(365):
+        day = start + timedelta(days=offset)
+        index = (day - grid_start).days
+        column, row = divmod(index, 7)
+        x, y = 70 + column * 17, 84 + row * 17
+        count = counts.get(day.isoformat(), 0)
+        if day.day == 1 or (offset == 0 and day.day <= 10):
+            parts.append(f'<text x="{x}" y="69" font-size="12" fill="#59636e">{day.month}月</text>')
+        parts += [f'<g><title>{day.isoformat()}：{count} 条开发记录</title>',
+                  f'<rect data-date="{day.isoformat()}" data-count="{count}" x="{x}" y="{y}" width="13" height="13" rx="2" fill="{colors[level(count)]}" stroke="#d1d9e0" stroke-width="0.5"/>', '</g>']
+    parts += [f'<text x="24" y="244" font-size="12" fill="#59636e">{len(period)} 个有记录日期 · 每格一天 · 数量来源于开发日志</text>',
+              '<text x="575" y="244" font-size="12" fill="#59636e">少</text>']
+    for i, (color, label) in enumerate(zip(colors, ['0', '1–3', '4–7', '8–14', '15+'])):
+        x = 600 + i * 69
+        parts += [f'<rect x="{x}" y="231" width="13" height="13" rx="2" fill="{color}" stroke="#d1d9e0" stroke-width="0.5"/>',
+                  f'<text x="{x + 18}" y="242" font-size="10" fill="#59636e">{label}</text>']
+    parts += ['<text x="960" y="244" font-size="12" fill="#59636e">多</text>', '</g>', '</svg>']
     return '\n'.join(parts) + '\n'
 
 

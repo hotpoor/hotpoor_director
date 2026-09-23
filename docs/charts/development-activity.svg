@@ -1,162 +1,1132 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="820" height="456" viewBox="0 0 820 456" role="img" aria-labelledby="title desc">
-<title id="title">2026-09 开发记录活动日历</title>
-<desc id="desc">每天一个格子，绿色深浅表示开发记录条数，格子内显示日期和数量。统计来自开发日志，不代表 Git 提交数或工作时长。</desc>
-<rect width="100%" height="100%" rx="12" fill="#ffffff" stroke="#d1d9e0"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="282" viewBox="0 0 1000 282" role="img" aria-labelledby="title desc">
+<title id="title">过去一年开发记录贡献格</title>
+<desc id="desc">2025-09-24 至 2026-09-23，共 106 条开发记录。每列一周，纵向按星期排列，颜色越深记录越多。不是 GitHub 账号提交数量。</desc>
+<rect x="0.5" y="0.5" width="999" height="281" rx="10" fill="#ffffff" stroke="#d1d9e0"/>
 <g font-family="Arial, PingFang SC, Microsoft YaHei, sans-serif" fill="#1f2328">
-<text x="28" y="36" font-size="20" font-weight="600">2026 年 9 月 · 开发活动</text>
-<text x="28" y="61" font-size="12" fill="#59636e">记录截至 2026-09-23 · 每格一天</text>
-<text x="54" y="88" text-anchor="middle" font-size="12" fill="#59636e">周一</text>
-<text x="122" y="88" text-anchor="middle" font-size="12" fill="#59636e">周二</text>
-<text x="190" y="88" text-anchor="middle" font-size="12" fill="#59636e">周三</text>
-<text x="258" y="88" text-anchor="middle" font-size="12" fill="#59636e">周四</text>
-<text x="326" y="88" text-anchor="middle" font-size="12" fill="#59636e">周五</text>
-<text x="394" y="88" text-anchor="middle" font-size="12" fill="#59636e">周六</text>
-<text x="462" y="88" text-anchor="middle" font-size="12" fill="#59636e">周日</text>
+<text x="24" y="35" font-size="22" font-weight="600">106 条开发记录 · 过去一年</text>
+<text x="976" y="35" text-anchor="end" font-size="12" fill="#59636e">2025-09-24 — 2026-09-23</text>
+<text x="23" y="111" font-size="12" fill="#59636e">周一</text>
+<text x="23" y="145" font-size="12" fill="#59636e">周三</text>
+<text x="23" y="179" font-size="12" fill="#59636e">周五</text>
+<g><title>2025-09-24：0 条开发记录</title>
+<rect data-date="2025-09-24" data-count="0" x="70" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-09-25：0 条开发记录</title>
+<rect data-date="2025-09-25" data-count="0" x="70" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-09-26：0 条开发记录</title>
+<rect data-date="2025-09-26" data-count="0" x="70" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-09-27：0 条开发记录</title>
+<rect data-date="2025-09-27" data-count="0" x="70" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-09-28：0 条开发记录</title>
+<rect data-date="2025-09-28" data-count="0" x="87" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-09-29：0 条开发记录</title>
+<rect data-date="2025-09-29" data-count="0" x="87" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-09-30：0 条开发记录</title>
+<rect data-date="2025-09-30" data-count="0" x="87" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<text x="87" y="69" font-size="12" fill="#59636e">10月</text>
+<g><title>2025-10-01：0 条开发记录</title>
+<rect data-date="2025-10-01" data-count="0" x="87" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-10-02：0 条开发记录</title>
+<rect data-date="2025-10-02" data-count="0" x="87" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-10-03：0 条开发记录</title>
+<rect data-date="2025-10-03" data-count="0" x="87" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-10-04：0 条开发记录</title>
+<rect data-date="2025-10-04" data-count="0" x="87" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-10-05：0 条开发记录</title>
+<rect data-date="2025-10-05" data-count="0" x="104" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-10-06：0 条开发记录</title>
+<rect data-date="2025-10-06" data-count="0" x="104" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-10-07：0 条开发记录</title>
+<rect data-date="2025-10-07" data-count="0" x="104" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-10-08：0 条开发记录</title>
+<rect data-date="2025-10-08" data-count="0" x="104" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-10-09：0 条开发记录</title>
+<rect data-date="2025-10-09" data-count="0" x="104" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-10-10：0 条开发记录</title>
+<rect data-date="2025-10-10" data-count="0" x="104" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-10-11：0 条开发记录</title>
+<rect data-date="2025-10-11" data-count="0" x="104" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-10-12：0 条开发记录</title>
+<rect data-date="2025-10-12" data-count="0" x="121" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-10-13：0 条开发记录</title>
+<rect data-date="2025-10-13" data-count="0" x="121" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-10-14：0 条开发记录</title>
+<rect data-date="2025-10-14" data-count="0" x="121" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-10-15：0 条开发记录</title>
+<rect data-date="2025-10-15" data-count="0" x="121" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-10-16：0 条开发记录</title>
+<rect data-date="2025-10-16" data-count="0" x="121" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-10-17：0 条开发记录</title>
+<rect data-date="2025-10-17" data-count="0" x="121" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-10-18：0 条开发记录</title>
+<rect data-date="2025-10-18" data-count="0" x="121" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-10-19：0 条开发记录</title>
+<rect data-date="2025-10-19" data-count="0" x="138" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-10-20：0 条开发记录</title>
+<rect data-date="2025-10-20" data-count="0" x="138" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-10-21：0 条开发记录</title>
+<rect data-date="2025-10-21" data-count="0" x="138" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-10-22：0 条开发记录</title>
+<rect data-date="2025-10-22" data-count="0" x="138" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-10-23：0 条开发记录</title>
+<rect data-date="2025-10-23" data-count="0" x="138" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-10-24：0 条开发记录</title>
+<rect data-date="2025-10-24" data-count="0" x="138" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-10-25：0 条开发记录</title>
+<rect data-date="2025-10-25" data-count="0" x="138" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-10-26：0 条开发记录</title>
+<rect data-date="2025-10-26" data-count="0" x="155" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-10-27：0 条开发记录</title>
+<rect data-date="2025-10-27" data-count="0" x="155" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-10-28：0 条开发记录</title>
+<rect data-date="2025-10-28" data-count="0" x="155" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-10-29：0 条开发记录</title>
+<rect data-date="2025-10-29" data-count="0" x="155" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-10-30：0 条开发记录</title>
+<rect data-date="2025-10-30" data-count="0" x="155" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-10-31：0 条开发记录</title>
+<rect data-date="2025-10-31" data-count="0" x="155" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<text x="155" y="69" font-size="12" fill="#59636e">11月</text>
+<g><title>2025-11-01：0 条开发记录</title>
+<rect data-date="2025-11-01" data-count="0" x="155" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-11-02：0 条开发记录</title>
+<rect data-date="2025-11-02" data-count="0" x="172" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-11-03：0 条开发记录</title>
+<rect data-date="2025-11-03" data-count="0" x="172" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-11-04：0 条开发记录</title>
+<rect data-date="2025-11-04" data-count="0" x="172" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-11-05：0 条开发记录</title>
+<rect data-date="2025-11-05" data-count="0" x="172" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-11-06：0 条开发记录</title>
+<rect data-date="2025-11-06" data-count="0" x="172" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-11-07：0 条开发记录</title>
+<rect data-date="2025-11-07" data-count="0" x="172" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-11-08：0 条开发记录</title>
+<rect data-date="2025-11-08" data-count="0" x="172" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-11-09：0 条开发记录</title>
+<rect data-date="2025-11-09" data-count="0" x="189" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-11-10：0 条开发记录</title>
+<rect data-date="2025-11-10" data-count="0" x="189" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-11-11：0 条开发记录</title>
+<rect data-date="2025-11-11" data-count="0" x="189" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-11-12：0 条开发记录</title>
+<rect data-date="2025-11-12" data-count="0" x="189" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-11-13：0 条开发记录</title>
+<rect data-date="2025-11-13" data-count="0" x="189" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-11-14：0 条开发记录</title>
+<rect data-date="2025-11-14" data-count="0" x="189" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-11-15：0 条开发记录</title>
+<rect data-date="2025-11-15" data-count="0" x="189" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-11-16：0 条开发记录</title>
+<rect data-date="2025-11-16" data-count="0" x="206" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-11-17：0 条开发记录</title>
+<rect data-date="2025-11-17" data-count="0" x="206" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-11-18：0 条开发记录</title>
+<rect data-date="2025-11-18" data-count="0" x="206" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-11-19：0 条开发记录</title>
+<rect data-date="2025-11-19" data-count="0" x="206" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-11-20：0 条开发记录</title>
+<rect data-date="2025-11-20" data-count="0" x="206" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-11-21：0 条开发记录</title>
+<rect data-date="2025-11-21" data-count="0" x="206" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-11-22：0 条开发记录</title>
+<rect data-date="2025-11-22" data-count="0" x="206" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-11-23：0 条开发记录</title>
+<rect data-date="2025-11-23" data-count="0" x="223" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-11-24：0 条开发记录</title>
+<rect data-date="2025-11-24" data-count="0" x="223" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-11-25：0 条开发记录</title>
+<rect data-date="2025-11-25" data-count="0" x="223" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-11-26：0 条开发记录</title>
+<rect data-date="2025-11-26" data-count="0" x="223" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-11-27：0 条开发记录</title>
+<rect data-date="2025-11-27" data-count="0" x="223" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-11-28：0 条开发记录</title>
+<rect data-date="2025-11-28" data-count="0" x="223" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-11-29：0 条开发记录</title>
+<rect data-date="2025-11-29" data-count="0" x="223" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-11-30：0 条开发记录</title>
+<rect data-date="2025-11-30" data-count="0" x="240" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<text x="240" y="69" font-size="12" fill="#59636e">12月</text>
+<g><title>2025-12-01：0 条开发记录</title>
+<rect data-date="2025-12-01" data-count="0" x="240" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-12-02：0 条开发记录</title>
+<rect data-date="2025-12-02" data-count="0" x="240" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-12-03：0 条开发记录</title>
+<rect data-date="2025-12-03" data-count="0" x="240" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-12-04：0 条开发记录</title>
+<rect data-date="2025-12-04" data-count="0" x="240" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-12-05：0 条开发记录</title>
+<rect data-date="2025-12-05" data-count="0" x="240" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-12-06：0 条开发记录</title>
+<rect data-date="2025-12-06" data-count="0" x="240" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-12-07：0 条开发记录</title>
+<rect data-date="2025-12-07" data-count="0" x="257" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-12-08：0 条开发记录</title>
+<rect data-date="2025-12-08" data-count="0" x="257" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-12-09：0 条开发记录</title>
+<rect data-date="2025-12-09" data-count="0" x="257" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-12-10：0 条开发记录</title>
+<rect data-date="2025-12-10" data-count="0" x="257" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-12-11：0 条开发记录</title>
+<rect data-date="2025-12-11" data-count="0" x="257" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-12-12：0 条开发记录</title>
+<rect data-date="2025-12-12" data-count="0" x="257" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-12-13：0 条开发记录</title>
+<rect data-date="2025-12-13" data-count="0" x="257" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-12-14：0 条开发记录</title>
+<rect data-date="2025-12-14" data-count="0" x="274" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-12-15：0 条开发记录</title>
+<rect data-date="2025-12-15" data-count="0" x="274" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-12-16：0 条开发记录</title>
+<rect data-date="2025-12-16" data-count="0" x="274" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-12-17：0 条开发记录</title>
+<rect data-date="2025-12-17" data-count="0" x="274" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-12-18：0 条开发记录</title>
+<rect data-date="2025-12-18" data-count="0" x="274" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-12-19：0 条开发记录</title>
+<rect data-date="2025-12-19" data-count="0" x="274" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-12-20：0 条开发记录</title>
+<rect data-date="2025-12-20" data-count="0" x="274" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-12-21：0 条开发记录</title>
+<rect data-date="2025-12-21" data-count="0" x="291" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-12-22：0 条开发记录</title>
+<rect data-date="2025-12-22" data-count="0" x="291" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-12-23：0 条开发记录</title>
+<rect data-date="2025-12-23" data-count="0" x="291" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-12-24：0 条开发记录</title>
+<rect data-date="2025-12-24" data-count="0" x="291" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-12-25：0 条开发记录</title>
+<rect data-date="2025-12-25" data-count="0" x="291" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-12-26：0 条开发记录</title>
+<rect data-date="2025-12-26" data-count="0" x="291" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-12-27：0 条开发记录</title>
+<rect data-date="2025-12-27" data-count="0" x="291" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-12-28：0 条开发记录</title>
+<rect data-date="2025-12-28" data-count="0" x="308" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-12-29：0 条开发记录</title>
+<rect data-date="2025-12-29" data-count="0" x="308" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-12-30：0 条开发记录</title>
+<rect data-date="2025-12-30" data-count="0" x="308" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2025-12-31：0 条开发记录</title>
+<rect data-date="2025-12-31" data-count="0" x="308" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<text x="308" y="69" font-size="12" fill="#59636e">1月</text>
+<g><title>2026-01-01：0 条开发记录</title>
+<rect data-date="2026-01-01" data-count="0" x="308" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-01-02：0 条开发记录</title>
+<rect data-date="2026-01-02" data-count="0" x="308" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-01-03：0 条开发记录</title>
+<rect data-date="2026-01-03" data-count="0" x="308" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-01-04：0 条开发记录</title>
+<rect data-date="2026-01-04" data-count="0" x="325" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-01-05：0 条开发记录</title>
+<rect data-date="2026-01-05" data-count="0" x="325" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-01-06：0 条开发记录</title>
+<rect data-date="2026-01-06" data-count="0" x="325" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-01-07：0 条开发记录</title>
+<rect data-date="2026-01-07" data-count="0" x="325" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-01-08：0 条开发记录</title>
+<rect data-date="2026-01-08" data-count="0" x="325" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-01-09：0 条开发记录</title>
+<rect data-date="2026-01-09" data-count="0" x="325" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-01-10：0 条开发记录</title>
+<rect data-date="2026-01-10" data-count="0" x="325" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-01-11：0 条开发记录</title>
+<rect data-date="2026-01-11" data-count="0" x="342" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-01-12：0 条开发记录</title>
+<rect data-date="2026-01-12" data-count="0" x="342" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-01-13：0 条开发记录</title>
+<rect data-date="2026-01-13" data-count="0" x="342" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-01-14：0 条开发记录</title>
+<rect data-date="2026-01-14" data-count="0" x="342" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-01-15：0 条开发记录</title>
+<rect data-date="2026-01-15" data-count="0" x="342" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-01-16：0 条开发记录</title>
+<rect data-date="2026-01-16" data-count="0" x="342" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-01-17：0 条开发记录</title>
+<rect data-date="2026-01-17" data-count="0" x="342" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-01-18：0 条开发记录</title>
+<rect data-date="2026-01-18" data-count="0" x="359" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-01-19：0 条开发记录</title>
+<rect data-date="2026-01-19" data-count="0" x="359" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-01-20：0 条开发记录</title>
+<rect data-date="2026-01-20" data-count="0" x="359" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-01-21：0 条开发记录</title>
+<rect data-date="2026-01-21" data-count="0" x="359" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-01-22：0 条开发记录</title>
+<rect data-date="2026-01-22" data-count="0" x="359" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-01-23：0 条开发记录</title>
+<rect data-date="2026-01-23" data-count="0" x="359" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-01-24：0 条开发记录</title>
+<rect data-date="2026-01-24" data-count="0" x="359" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-01-25：0 条开发记录</title>
+<rect data-date="2026-01-25" data-count="0" x="376" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-01-26：0 条开发记录</title>
+<rect data-date="2026-01-26" data-count="0" x="376" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-01-27：0 条开发记录</title>
+<rect data-date="2026-01-27" data-count="0" x="376" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-01-28：0 条开发记录</title>
+<rect data-date="2026-01-28" data-count="0" x="376" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-01-29：0 条开发记录</title>
+<rect data-date="2026-01-29" data-count="0" x="376" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-01-30：0 条开发记录</title>
+<rect data-date="2026-01-30" data-count="0" x="376" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-01-31：0 条开发记录</title>
+<rect data-date="2026-01-31" data-count="0" x="376" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<text x="393" y="69" font-size="12" fill="#59636e">2月</text>
+<g><title>2026-02-01：0 条开发记录</title>
+<rect data-date="2026-02-01" data-count="0" x="393" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-02-02：0 条开发记录</title>
+<rect data-date="2026-02-02" data-count="0" x="393" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-02-03：0 条开发记录</title>
+<rect data-date="2026-02-03" data-count="0" x="393" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-02-04：0 条开发记录</title>
+<rect data-date="2026-02-04" data-count="0" x="393" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-02-05：0 条开发记录</title>
+<rect data-date="2026-02-05" data-count="0" x="393" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-02-06：0 条开发记录</title>
+<rect data-date="2026-02-06" data-count="0" x="393" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-02-07：0 条开发记录</title>
+<rect data-date="2026-02-07" data-count="0" x="393" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-02-08：0 条开发记录</title>
+<rect data-date="2026-02-08" data-count="0" x="410" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-02-09：0 条开发记录</title>
+<rect data-date="2026-02-09" data-count="0" x="410" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-02-10：0 条开发记录</title>
+<rect data-date="2026-02-10" data-count="0" x="410" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-02-11：0 条开发记录</title>
+<rect data-date="2026-02-11" data-count="0" x="410" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-02-12：0 条开发记录</title>
+<rect data-date="2026-02-12" data-count="0" x="410" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-02-13：0 条开发记录</title>
+<rect data-date="2026-02-13" data-count="0" x="410" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-02-14：0 条开发记录</title>
+<rect data-date="2026-02-14" data-count="0" x="410" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-02-15：0 条开发记录</title>
+<rect data-date="2026-02-15" data-count="0" x="427" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-02-16：0 条开发记录</title>
+<rect data-date="2026-02-16" data-count="0" x="427" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-02-17：0 条开发记录</title>
+<rect data-date="2026-02-17" data-count="0" x="427" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-02-18：0 条开发记录</title>
+<rect data-date="2026-02-18" data-count="0" x="427" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-02-19：0 条开发记录</title>
+<rect data-date="2026-02-19" data-count="0" x="427" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-02-20：0 条开发记录</title>
+<rect data-date="2026-02-20" data-count="0" x="427" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-02-21：0 条开发记录</title>
+<rect data-date="2026-02-21" data-count="0" x="427" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-02-22：0 条开发记录</title>
+<rect data-date="2026-02-22" data-count="0" x="444" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-02-23：0 条开发记录</title>
+<rect data-date="2026-02-23" data-count="0" x="444" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-02-24：0 条开发记录</title>
+<rect data-date="2026-02-24" data-count="0" x="444" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-02-25：0 条开发记录</title>
+<rect data-date="2026-02-25" data-count="0" x="444" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-02-26：0 条开发记录</title>
+<rect data-date="2026-02-26" data-count="0" x="444" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-02-27：0 条开发记录</title>
+<rect data-date="2026-02-27" data-count="0" x="444" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-02-28：0 条开发记录</title>
+<rect data-date="2026-02-28" data-count="0" x="444" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<text x="461" y="69" font-size="12" fill="#59636e">3月</text>
+<g><title>2026-03-01：0 条开发记录</title>
+<rect data-date="2026-03-01" data-count="0" x="461" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-03-02：0 条开发记录</title>
+<rect data-date="2026-03-02" data-count="0" x="461" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-03-03：0 条开发记录</title>
+<rect data-date="2026-03-03" data-count="0" x="461" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-03-04：0 条开发记录</title>
+<rect data-date="2026-03-04" data-count="0" x="461" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-03-05：0 条开发记录</title>
+<rect data-date="2026-03-05" data-count="0" x="461" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-03-06：0 条开发记录</title>
+<rect data-date="2026-03-06" data-count="0" x="461" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-03-07：0 条开发记录</title>
+<rect data-date="2026-03-07" data-count="0" x="461" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-03-08：0 条开发记录</title>
+<rect data-date="2026-03-08" data-count="0" x="478" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-03-09：0 条开发记录</title>
+<rect data-date="2026-03-09" data-count="0" x="478" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-03-10：0 条开发记录</title>
+<rect data-date="2026-03-10" data-count="0" x="478" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-03-11：0 条开发记录</title>
+<rect data-date="2026-03-11" data-count="0" x="478" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-03-12：0 条开发记录</title>
+<rect data-date="2026-03-12" data-count="0" x="478" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-03-13：0 条开发记录</title>
+<rect data-date="2026-03-13" data-count="0" x="478" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-03-14：0 条开发记录</title>
+<rect data-date="2026-03-14" data-count="0" x="478" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-03-15：0 条开发记录</title>
+<rect data-date="2026-03-15" data-count="0" x="495" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-03-16：0 条开发记录</title>
+<rect data-date="2026-03-16" data-count="0" x="495" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-03-17：0 条开发记录</title>
+<rect data-date="2026-03-17" data-count="0" x="495" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-03-18：0 条开发记录</title>
+<rect data-date="2026-03-18" data-count="0" x="495" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-03-19：0 条开发记录</title>
+<rect data-date="2026-03-19" data-count="0" x="495" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-03-20：0 条开发记录</title>
+<rect data-date="2026-03-20" data-count="0" x="495" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-03-21：0 条开发记录</title>
+<rect data-date="2026-03-21" data-count="0" x="495" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-03-22：0 条开发记录</title>
+<rect data-date="2026-03-22" data-count="0" x="512" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-03-23：0 条开发记录</title>
+<rect data-date="2026-03-23" data-count="0" x="512" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-03-24：0 条开发记录</title>
+<rect data-date="2026-03-24" data-count="0" x="512" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-03-25：0 条开发记录</title>
+<rect data-date="2026-03-25" data-count="0" x="512" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-03-26：0 条开发记录</title>
+<rect data-date="2026-03-26" data-count="0" x="512" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-03-27：0 条开发记录</title>
+<rect data-date="2026-03-27" data-count="0" x="512" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-03-28：0 条开发记录</title>
+<rect data-date="2026-03-28" data-count="0" x="512" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-03-29：0 条开发记录</title>
+<rect data-date="2026-03-29" data-count="0" x="529" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-03-30：0 条开发记录</title>
+<rect data-date="2026-03-30" data-count="0" x="529" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-03-31：0 条开发记录</title>
+<rect data-date="2026-03-31" data-count="0" x="529" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<text x="529" y="69" font-size="12" fill="#59636e">4月</text>
+<g><title>2026-04-01：0 条开发记录</title>
+<rect data-date="2026-04-01" data-count="0" x="529" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-04-02：0 条开发记录</title>
+<rect data-date="2026-04-02" data-count="0" x="529" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-04-03：0 条开发记录</title>
+<rect data-date="2026-04-03" data-count="0" x="529" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-04-04：0 条开发记录</title>
+<rect data-date="2026-04-04" data-count="0" x="529" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-04-05：0 条开发记录</title>
+<rect data-date="2026-04-05" data-count="0" x="546" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-04-06：0 条开发记录</title>
+<rect data-date="2026-04-06" data-count="0" x="546" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-04-07：0 条开发记录</title>
+<rect data-date="2026-04-07" data-count="0" x="546" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-04-08：0 条开发记录</title>
+<rect data-date="2026-04-08" data-count="0" x="546" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-04-09：0 条开发记录</title>
+<rect data-date="2026-04-09" data-count="0" x="546" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-04-10：0 条开发记录</title>
+<rect data-date="2026-04-10" data-count="0" x="546" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-04-11：0 条开发记录</title>
+<rect data-date="2026-04-11" data-count="0" x="546" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-04-12：0 条开发记录</title>
+<rect data-date="2026-04-12" data-count="0" x="563" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-04-13：0 条开发记录</title>
+<rect data-date="2026-04-13" data-count="0" x="563" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-04-14：0 条开发记录</title>
+<rect data-date="2026-04-14" data-count="0" x="563" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-04-15：0 条开发记录</title>
+<rect data-date="2026-04-15" data-count="0" x="563" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-04-16：0 条开发记录</title>
+<rect data-date="2026-04-16" data-count="0" x="563" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-04-17：0 条开发记录</title>
+<rect data-date="2026-04-17" data-count="0" x="563" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-04-18：0 条开发记录</title>
+<rect data-date="2026-04-18" data-count="0" x="563" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-04-19：0 条开发记录</title>
+<rect data-date="2026-04-19" data-count="0" x="580" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-04-20：0 条开发记录</title>
+<rect data-date="2026-04-20" data-count="0" x="580" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-04-21：0 条开发记录</title>
+<rect data-date="2026-04-21" data-count="0" x="580" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-04-22：0 条开发记录</title>
+<rect data-date="2026-04-22" data-count="0" x="580" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-04-23：0 条开发记录</title>
+<rect data-date="2026-04-23" data-count="0" x="580" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-04-24：0 条开发记录</title>
+<rect data-date="2026-04-24" data-count="0" x="580" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-04-25：0 条开发记录</title>
+<rect data-date="2026-04-25" data-count="0" x="580" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-04-26：0 条开发记录</title>
+<rect data-date="2026-04-26" data-count="0" x="597" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-04-27：0 条开发记录</title>
+<rect data-date="2026-04-27" data-count="0" x="597" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-04-28：0 条开发记录</title>
+<rect data-date="2026-04-28" data-count="0" x="597" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-04-29：0 条开发记录</title>
+<rect data-date="2026-04-29" data-count="0" x="597" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-04-30：0 条开发记录</title>
+<rect data-date="2026-04-30" data-count="0" x="597" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<text x="597" y="69" font-size="12" fill="#59636e">5月</text>
+<g><title>2026-05-01：0 条开发记录</title>
+<rect data-date="2026-05-01" data-count="0" x="597" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-05-02：0 条开发记录</title>
+<rect data-date="2026-05-02" data-count="0" x="597" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-05-03：0 条开发记录</title>
+<rect data-date="2026-05-03" data-count="0" x="614" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-05-04：0 条开发记录</title>
+<rect data-date="2026-05-04" data-count="0" x="614" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-05-05：0 条开发记录</title>
+<rect data-date="2026-05-05" data-count="0" x="614" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-05-06：0 条开发记录</title>
+<rect data-date="2026-05-06" data-count="0" x="614" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-05-07：0 条开发记录</title>
+<rect data-date="2026-05-07" data-count="0" x="614" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-05-08：0 条开发记录</title>
+<rect data-date="2026-05-08" data-count="0" x="614" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-05-09：0 条开发记录</title>
+<rect data-date="2026-05-09" data-count="0" x="614" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-05-10：0 条开发记录</title>
+<rect data-date="2026-05-10" data-count="0" x="631" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-05-11：0 条开发记录</title>
+<rect data-date="2026-05-11" data-count="0" x="631" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-05-12：0 条开发记录</title>
+<rect data-date="2026-05-12" data-count="0" x="631" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-05-13：0 条开发记录</title>
+<rect data-date="2026-05-13" data-count="0" x="631" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-05-14：0 条开发记录</title>
+<rect data-date="2026-05-14" data-count="0" x="631" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-05-15：0 条开发记录</title>
+<rect data-date="2026-05-15" data-count="0" x="631" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-05-16：0 条开发记录</title>
+<rect data-date="2026-05-16" data-count="0" x="631" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-05-17：0 条开发记录</title>
+<rect data-date="2026-05-17" data-count="0" x="648" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-05-18：0 条开发记录</title>
+<rect data-date="2026-05-18" data-count="0" x="648" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-05-19：0 条开发记录</title>
+<rect data-date="2026-05-19" data-count="0" x="648" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-05-20：0 条开发记录</title>
+<rect data-date="2026-05-20" data-count="0" x="648" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-05-21：0 条开发记录</title>
+<rect data-date="2026-05-21" data-count="0" x="648" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-05-22：0 条开发记录</title>
+<rect data-date="2026-05-22" data-count="0" x="648" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-05-23：0 条开发记录</title>
+<rect data-date="2026-05-23" data-count="0" x="648" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-05-24：0 条开发记录</title>
+<rect data-date="2026-05-24" data-count="0" x="665" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-05-25：0 条开发记录</title>
+<rect data-date="2026-05-25" data-count="0" x="665" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-05-26：0 条开发记录</title>
+<rect data-date="2026-05-26" data-count="0" x="665" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-05-27：0 条开发记录</title>
+<rect data-date="2026-05-27" data-count="0" x="665" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-05-28：0 条开发记录</title>
+<rect data-date="2026-05-28" data-count="0" x="665" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-05-29：0 条开发记录</title>
+<rect data-date="2026-05-29" data-count="0" x="665" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-05-30：0 条开发记录</title>
+<rect data-date="2026-05-30" data-count="0" x="665" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-05-31：0 条开发记录</title>
+<rect data-date="2026-05-31" data-count="0" x="682" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<text x="682" y="69" font-size="12" fill="#59636e">6月</text>
+<g><title>2026-06-01：0 条开发记录</title>
+<rect data-date="2026-06-01" data-count="0" x="682" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-06-02：0 条开发记录</title>
+<rect data-date="2026-06-02" data-count="0" x="682" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-06-03：0 条开发记录</title>
+<rect data-date="2026-06-03" data-count="0" x="682" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-06-04：0 条开发记录</title>
+<rect data-date="2026-06-04" data-count="0" x="682" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-06-05：0 条开发记录</title>
+<rect data-date="2026-06-05" data-count="0" x="682" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-06-06：0 条开发记录</title>
+<rect data-date="2026-06-06" data-count="0" x="682" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-06-07：0 条开发记录</title>
+<rect data-date="2026-06-07" data-count="0" x="699" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-06-08：0 条开发记录</title>
+<rect data-date="2026-06-08" data-count="0" x="699" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-06-09：0 条开发记录</title>
+<rect data-date="2026-06-09" data-count="0" x="699" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-06-10：0 条开发记录</title>
+<rect data-date="2026-06-10" data-count="0" x="699" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-06-11：0 条开发记录</title>
+<rect data-date="2026-06-11" data-count="0" x="699" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-06-12：0 条开发记录</title>
+<rect data-date="2026-06-12" data-count="0" x="699" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-06-13：0 条开发记录</title>
+<rect data-date="2026-06-13" data-count="0" x="699" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-06-14：0 条开发记录</title>
+<rect data-date="2026-06-14" data-count="0" x="716" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-06-15：0 条开发记录</title>
+<rect data-date="2026-06-15" data-count="0" x="716" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-06-16：0 条开发记录</title>
+<rect data-date="2026-06-16" data-count="0" x="716" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-06-17：0 条开发记录</title>
+<rect data-date="2026-06-17" data-count="0" x="716" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-06-18：0 条开发记录</title>
+<rect data-date="2026-06-18" data-count="0" x="716" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-06-19：0 条开发记录</title>
+<rect data-date="2026-06-19" data-count="0" x="716" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-06-20：0 条开发记录</title>
+<rect data-date="2026-06-20" data-count="0" x="716" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-06-21：0 条开发记录</title>
+<rect data-date="2026-06-21" data-count="0" x="733" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-06-22：0 条开发记录</title>
+<rect data-date="2026-06-22" data-count="0" x="733" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-06-23：0 条开发记录</title>
+<rect data-date="2026-06-23" data-count="0" x="733" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-06-24：0 条开发记录</title>
+<rect data-date="2026-06-24" data-count="0" x="733" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-06-25：0 条开发记录</title>
+<rect data-date="2026-06-25" data-count="0" x="733" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-06-26：0 条开发记录</title>
+<rect data-date="2026-06-26" data-count="0" x="733" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-06-27：0 条开发记录</title>
+<rect data-date="2026-06-27" data-count="0" x="733" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-06-28：0 条开发记录</title>
+<rect data-date="2026-06-28" data-count="0" x="750" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-06-29：0 条开发记录</title>
+<rect data-date="2026-06-29" data-count="0" x="750" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-06-30：0 条开发记录</title>
+<rect data-date="2026-06-30" data-count="0" x="750" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<text x="750" y="69" font-size="12" fill="#59636e">7月</text>
+<g><title>2026-07-01：0 条开发记录</title>
+<rect data-date="2026-07-01" data-count="0" x="750" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-07-02：0 条开发记录</title>
+<rect data-date="2026-07-02" data-count="0" x="750" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-07-03：0 条开发记录</title>
+<rect data-date="2026-07-03" data-count="0" x="750" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-07-04：0 条开发记录</title>
+<rect data-date="2026-07-04" data-count="0" x="750" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-07-05：0 条开发记录</title>
+<rect data-date="2026-07-05" data-count="0" x="767" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-07-06：0 条开发记录</title>
+<rect data-date="2026-07-06" data-count="0" x="767" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-07-07：0 条开发记录</title>
+<rect data-date="2026-07-07" data-count="0" x="767" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-07-08：0 条开发记录</title>
+<rect data-date="2026-07-08" data-count="0" x="767" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-07-09：0 条开发记录</title>
+<rect data-date="2026-07-09" data-count="0" x="767" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-07-10：0 条开发记录</title>
+<rect data-date="2026-07-10" data-count="0" x="767" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-07-11：0 条开发记录</title>
+<rect data-date="2026-07-11" data-count="0" x="767" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-07-12：0 条开发记录</title>
+<rect data-date="2026-07-12" data-count="0" x="784" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-07-13：0 条开发记录</title>
+<rect data-date="2026-07-13" data-count="0" x="784" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-07-14：0 条开发记录</title>
+<rect data-date="2026-07-14" data-count="0" x="784" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-07-15：0 条开发记录</title>
+<rect data-date="2026-07-15" data-count="0" x="784" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-07-16：0 条开发记录</title>
+<rect data-date="2026-07-16" data-count="0" x="784" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-07-17：0 条开发记录</title>
+<rect data-date="2026-07-17" data-count="0" x="784" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-07-18：0 条开发记录</title>
+<rect data-date="2026-07-18" data-count="0" x="784" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-07-19：0 条开发记录</title>
+<rect data-date="2026-07-19" data-count="0" x="801" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-07-20：0 条开发记录</title>
+<rect data-date="2026-07-20" data-count="0" x="801" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-07-21：0 条开发记录</title>
+<rect data-date="2026-07-21" data-count="0" x="801" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-07-22：0 条开发记录</title>
+<rect data-date="2026-07-22" data-count="0" x="801" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-07-23：0 条开发记录</title>
+<rect data-date="2026-07-23" data-count="0" x="801" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-07-24：0 条开发记录</title>
+<rect data-date="2026-07-24" data-count="0" x="801" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-07-25：0 条开发记录</title>
+<rect data-date="2026-07-25" data-count="0" x="801" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-07-26：0 条开发记录</title>
+<rect data-date="2026-07-26" data-count="0" x="818" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-07-27：0 条开发记录</title>
+<rect data-date="2026-07-27" data-count="0" x="818" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-07-28：0 条开发记录</title>
+<rect data-date="2026-07-28" data-count="0" x="818" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-07-29：0 条开发记录</title>
+<rect data-date="2026-07-29" data-count="0" x="818" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-07-30：0 条开发记录</title>
+<rect data-date="2026-07-30" data-count="0" x="818" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-07-31：0 条开发记录</title>
+<rect data-date="2026-07-31" data-count="0" x="818" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<text x="818" y="69" font-size="12" fill="#59636e">8月</text>
+<g><title>2026-08-01：0 条开发记录</title>
+<rect data-date="2026-08-01" data-count="0" x="818" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-08-02：0 条开发记录</title>
+<rect data-date="2026-08-02" data-count="0" x="835" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-08-03：0 条开发记录</title>
+<rect data-date="2026-08-03" data-count="0" x="835" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-08-04：0 条开发记录</title>
+<rect data-date="2026-08-04" data-count="0" x="835" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-08-05：0 条开发记录</title>
+<rect data-date="2026-08-05" data-count="0" x="835" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-08-06：0 条开发记录</title>
+<rect data-date="2026-08-06" data-count="0" x="835" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-08-07：0 条开发记录</title>
+<rect data-date="2026-08-07" data-count="0" x="835" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-08-08：0 条开发记录</title>
+<rect data-date="2026-08-08" data-count="0" x="835" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-08-09：0 条开发记录</title>
+<rect data-date="2026-08-09" data-count="0" x="852" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-08-10：0 条开发记录</title>
+<rect data-date="2026-08-10" data-count="0" x="852" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-08-11：0 条开发记录</title>
+<rect data-date="2026-08-11" data-count="0" x="852" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-08-12：0 条开发记录</title>
+<rect data-date="2026-08-12" data-count="0" x="852" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-08-13：0 条开发记录</title>
+<rect data-date="2026-08-13" data-count="0" x="852" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-08-14：0 条开发记录</title>
+<rect data-date="2026-08-14" data-count="0" x="852" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-08-15：0 条开发记录</title>
+<rect data-date="2026-08-15" data-count="0" x="852" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-08-16：0 条开发记录</title>
+<rect data-date="2026-08-16" data-count="0" x="869" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-08-17：0 条开发记录</title>
+<rect data-date="2026-08-17" data-count="0" x="869" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-08-18：0 条开发记录</title>
+<rect data-date="2026-08-18" data-count="0" x="869" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-08-19：0 条开发记录</title>
+<rect data-date="2026-08-19" data-count="0" x="869" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-08-20：0 条开发记录</title>
+<rect data-date="2026-08-20" data-count="0" x="869" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-08-21：0 条开发记录</title>
+<rect data-date="2026-08-21" data-count="0" x="869" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-08-22：0 条开发记录</title>
+<rect data-date="2026-08-22" data-count="0" x="869" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-08-23：0 条开发记录</title>
+<rect data-date="2026-08-23" data-count="0" x="886" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-08-24：0 条开发记录</title>
+<rect data-date="2026-08-24" data-count="0" x="886" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-08-25：0 条开发记录</title>
+<rect data-date="2026-08-25" data-count="0" x="886" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-08-26：0 条开发记录</title>
+<rect data-date="2026-08-26" data-count="0" x="886" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-08-27：0 条开发记录</title>
+<rect data-date="2026-08-27" data-count="0" x="886" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-08-28：0 条开发记录</title>
+<rect data-date="2026-08-28" data-count="0" x="886" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-08-29：0 条开发记录</title>
+<rect data-date="2026-08-29" data-count="0" x="886" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-08-30：0 条开发记录</title>
+<rect data-date="2026-08-30" data-count="0" x="903" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<g><title>2026-08-31：0 条开发记录</title>
+<rect data-date="2026-08-31" data-count="0" x="903" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+</g>
+<text x="903" y="69" font-size="12" fill="#59636e">9月</text>
 <g><title>2026-09-01：0 条开发记录</title>
-<rect x="96" y="101" width="54" height="48" rx="5" fill="#ebedf0" stroke="#d1d9e0"/>
-<text x="103" y="116" font-size="11" fill="#1f2328">1</text>
+<rect data-date="2026-09-01" data-count="0" x="903" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
 </g>
 <g><title>2026-09-02：0 条开发记录</title>
-<rect x="164" y="101" width="54" height="48" rx="5" fill="#ebedf0" stroke="#d1d9e0"/>
-<text x="171" y="116" font-size="11" fill="#1f2328">2</text>
+<rect data-date="2026-09-02" data-count="0" x="903" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
 </g>
 <g><title>2026-09-03：0 条开发记录</title>
-<rect x="232" y="101" width="54" height="48" rx="5" fill="#ebedf0" stroke="#d1d9e0"/>
-<text x="239" y="116" font-size="11" fill="#1f2328">3</text>
+<rect data-date="2026-09-03" data-count="0" x="903" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
 </g>
 <g><title>2026-09-04：0 条开发记录</title>
-<rect x="300" y="101" width="54" height="48" rx="5" fill="#ebedf0" stroke="#d1d9e0"/>
-<text x="307" y="116" font-size="11" fill="#1f2328">4</text>
+<rect data-date="2026-09-04" data-count="0" x="903" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
 </g>
 <g><title>2026-09-05：0 条开发记录</title>
-<rect x="368" y="101" width="54" height="48" rx="5" fill="#ebedf0" stroke="#d1d9e0"/>
-<text x="375" y="116" font-size="11" fill="#1f2328">5</text>
+<rect data-date="2026-09-05" data-count="0" x="903" y="186" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
 </g>
 <g><title>2026-09-06：0 条开发记录</title>
-<rect x="436" y="101" width="54" height="48" rx="5" fill="#ebedf0" stroke="#d1d9e0"/>
-<text x="443" y="116" font-size="11" fill="#1f2328">6</text>
+<rect data-date="2026-09-06" data-count="0" x="920" y="84" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
 </g>
 <g><title>2026-09-07：0 条开发记录</title>
-<rect x="28" y="159" width="54" height="48" rx="5" fill="#ebedf0" stroke="#d1d9e0"/>
-<text x="35" y="174" font-size="11" fill="#1f2328">7</text>
+<rect data-date="2026-09-07" data-count="0" x="920" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
 </g>
 <g><title>2026-09-08：0 条开发记录</title>
-<rect x="96" y="159" width="54" height="48" rx="5" fill="#ebedf0" stroke="#d1d9e0"/>
-<text x="103" y="174" font-size="11" fill="#1f2328">8</text>
+<rect data-date="2026-09-08" data-count="0" x="920" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
 </g>
 <g><title>2026-09-09：0 条开发记录</title>
-<rect x="164" y="159" width="54" height="48" rx="5" fill="#ebedf0" stroke="#d1d9e0"/>
-<text x="171" y="174" font-size="11" fill="#1f2328">9</text>
+<rect data-date="2026-09-09" data-count="0" x="920" y="135" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
 </g>
 <g><title>2026-09-10：0 条开发记录</title>
-<rect x="232" y="159" width="54" height="48" rx="5" fill="#ebedf0" stroke="#d1d9e0"/>
-<text x="239" y="174" font-size="11" fill="#1f2328">10</text>
+<rect data-date="2026-09-10" data-count="0" x="920" y="152" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
 </g>
 <g><title>2026-09-11：0 条开发记录</title>
-<rect x="300" y="159" width="54" height="48" rx="5" fill="#ebedf0" stroke="#d1d9e0"/>
-<text x="307" y="174" font-size="11" fill="#1f2328">11</text>
+<rect data-date="2026-09-11" data-count="0" x="920" y="169" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
 </g>
 <g><title>2026-09-12：9 条开发记录</title>
-<rect x="368" y="159" width="54" height="48" rx="5" fill="#30a14e" stroke="#d1d9e0"/>
-<text x="375" y="174" font-size="11" fill="#ffffff">12</text>
-<text x="395" y="195" text-anchor="middle" font-size="16" font-weight="600" fill="#ffffff">9</text>
+<rect data-date="2026-09-12" data-count="9" x="920" y="186" width="13" height="13" rx="2" fill="#30a14e" stroke="#d1d9e0" stroke-width="0.5"/>
 </g>
 <g><title>2026-09-13：21 条开发记录</title>
-<rect x="436" y="159" width="54" height="48" rx="5" fill="#216e39" stroke="#d1d9e0"/>
-<text x="443" y="174" font-size="11" fill="#ffffff">13</text>
-<text x="463" y="195" text-anchor="middle" font-size="16" font-weight="600" fill="#ffffff">21</text>
+<rect data-date="2026-09-13" data-count="21" x="937" y="84" width="13" height="13" rx="2" fill="#216e39" stroke="#d1d9e0" stroke-width="0.5"/>
 </g>
 <g><title>2026-09-14：6 条开发记录</title>
-<rect x="28" y="217" width="54" height="48" rx="5" fill="#40c463" stroke="#d1d9e0"/>
-<text x="35" y="232" font-size="11" fill="#1f2328">14</text>
-<text x="55" y="253" text-anchor="middle" font-size="16" font-weight="600" fill="#1f2328">6</text>
+<rect data-date="2026-09-14" data-count="6" x="937" y="101" width="13" height="13" rx="2" fill="#40c463" stroke="#d1d9e0" stroke-width="0.5"/>
 </g>
 <g><title>2026-09-15：13 条开发记录</title>
-<rect x="96" y="217" width="54" height="48" rx="5" fill="#30a14e" stroke="#d1d9e0"/>
-<text x="103" y="232" font-size="11" fill="#ffffff">15</text>
-<text x="123" y="253" text-anchor="middle" font-size="16" font-weight="600" fill="#ffffff">13</text>
+<rect data-date="2026-09-15" data-count="13" x="937" y="118" width="13" height="13" rx="2" fill="#30a14e" stroke="#d1d9e0" stroke-width="0.5"/>
 </g>
 <g><title>2026-09-16：1 条开发记录</title>
-<rect x="164" y="217" width="54" height="48" rx="5" fill="#9be9a8" stroke="#d1d9e0"/>
-<text x="171" y="232" font-size="11" fill="#1f2328">16</text>
-<text x="191" y="253" text-anchor="middle" font-size="16" font-weight="600" fill="#1f2328">1</text>
+<rect data-date="2026-09-16" data-count="1" x="937" y="135" width="13" height="13" rx="2" fill="#9be9a8" stroke="#d1d9e0" stroke-width="0.5"/>
 </g>
 <g><title>2026-09-17：9 条开发记录</title>
-<rect x="232" y="217" width="54" height="48" rx="5" fill="#30a14e" stroke="#d1d9e0"/>
-<text x="239" y="232" font-size="11" fill="#ffffff">17</text>
-<text x="259" y="253" text-anchor="middle" font-size="16" font-weight="600" fill="#ffffff">9</text>
+<rect data-date="2026-09-17" data-count="9" x="937" y="152" width="13" height="13" rx="2" fill="#30a14e" stroke="#d1d9e0" stroke-width="0.5"/>
 </g>
 <g><title>2026-09-18：10 条开发记录</title>
-<rect x="300" y="217" width="54" height="48" rx="5" fill="#30a14e" stroke="#d1d9e0"/>
-<text x="307" y="232" font-size="11" fill="#ffffff">18</text>
-<text x="327" y="253" text-anchor="middle" font-size="16" font-weight="600" fill="#ffffff">10</text>
+<rect data-date="2026-09-18" data-count="10" x="937" y="169" width="13" height="13" rx="2" fill="#30a14e" stroke="#d1d9e0" stroke-width="0.5"/>
 </g>
 <g><title>2026-09-19：15 条开发记录</title>
-<rect x="368" y="217" width="54" height="48" rx="5" fill="#216e39" stroke="#d1d9e0"/>
-<text x="375" y="232" font-size="11" fill="#ffffff">19</text>
-<text x="395" y="253" text-anchor="middle" font-size="16" font-weight="600" fill="#ffffff">15</text>
+<rect data-date="2026-09-19" data-count="15" x="937" y="186" width="13" height="13" rx="2" fill="#216e39" stroke="#d1d9e0" stroke-width="0.5"/>
 </g>
 <g><title>2026-09-20：11 条开发记录</title>
-<rect x="436" y="217" width="54" height="48" rx="5" fill="#30a14e" stroke="#d1d9e0"/>
-<text x="443" y="232" font-size="11" fill="#ffffff">20</text>
-<text x="463" y="253" text-anchor="middle" font-size="16" font-weight="600" fill="#ffffff">11</text>
+<rect data-date="2026-09-20" data-count="11" x="954" y="84" width="13" height="13" rx="2" fill="#30a14e" stroke="#d1d9e0" stroke-width="0.5"/>
 </g>
 <g><title>2026-09-21：0 条开发记录</title>
-<rect x="28" y="275" width="54" height="48" rx="5" fill="#ebedf0" stroke="#d1d9e0"/>
-<text x="35" y="290" font-size="11" fill="#1f2328">21</text>
+<rect data-date="2026-09-21" data-count="0" x="954" y="101" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
 </g>
 <g><title>2026-09-22：0 条开发记录</title>
-<rect x="96" y="275" width="54" height="48" rx="5" fill="#ebedf0" stroke="#d1d9e0"/>
-<text x="103" y="290" font-size="11" fill="#1f2328">22</text>
+<rect data-date="2026-09-22" data-count="0" x="954" y="118" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
 </g>
-<g><title>2026-09-23：10 条开发记录</title>
-<rect x="164" y="275" width="54" height="48" rx="5" fill="#30a14e" stroke="#d1d9e0"/>
-<text x="171" y="290" font-size="11" fill="#ffffff">23</text>
-<text x="191" y="311" text-anchor="middle" font-size="16" font-weight="600" fill="#ffffff">10</text>
+<g><title>2026-09-23：11 条开发记录</title>
+<rect data-date="2026-09-23" data-count="11" x="954" y="135" width="13" height="13" rx="2" fill="#30a14e" stroke="#d1d9e0" stroke-width="0.5"/>
 </g>
-<g><title>2026-09-24：晚于最新记录日期</title>
-<rect x="232" y="275" width="54" height="48" rx="5" fill="#ffffff" stroke="#d1d9e0" stroke-dasharray="3 3"/>
-<text x="239" y="290" font-size="11" fill="#1f2328">24</text>
-</g>
-<g><title>2026-09-25：晚于最新记录日期</title>
-<rect x="300" y="275" width="54" height="48" rx="5" fill="#ffffff" stroke="#d1d9e0" stroke-dasharray="3 3"/>
-<text x="307" y="290" font-size="11" fill="#1f2328">25</text>
-</g>
-<g><title>2026-09-26：晚于最新记录日期</title>
-<rect x="368" y="275" width="54" height="48" rx="5" fill="#ffffff" stroke="#d1d9e0" stroke-dasharray="3 3"/>
-<text x="375" y="290" font-size="11" fill="#1f2328">26</text>
-</g>
-<g><title>2026-09-27：晚于最新记录日期</title>
-<rect x="436" y="275" width="54" height="48" rx="5" fill="#ffffff" stroke="#d1d9e0" stroke-dasharray="3 3"/>
-<text x="443" y="290" font-size="11" fill="#1f2328">27</text>
-</g>
-<g><title>2026-09-28：晚于最新记录日期</title>
-<rect x="28" y="333" width="54" height="48" rx="5" fill="#ffffff" stroke="#d1d9e0" stroke-dasharray="3 3"/>
-<text x="35" y="348" font-size="11" fill="#1f2328">28</text>
-</g>
-<g><title>2026-09-29：晚于最新记录日期</title>
-<rect x="96" y="333" width="54" height="48" rx="5" fill="#ffffff" stroke="#d1d9e0" stroke-dasharray="3 3"/>
-<text x="103" y="348" font-size="11" fill="#1f2328">29</text>
-</g>
-<g><title>2026-09-30：晚于最新记录日期</title>
-<rect x="164" y="333" width="54" height="48" rx="5" fill="#ffffff" stroke="#d1d9e0" stroke-dasharray="3 3"/>
-<text x="171" y="348" font-size="11" fill="#1f2328">30</text>
-</g>
-<text x="540" y="136" font-size="36" font-weight="600">105</text>
-<text x="540" y="159" font-size="13" fill="#59636e">本月开发记录</text>
-<text x="540" y="207" font-size="28" font-weight="600">10</text>
-<text x="540" y="230" font-size="13" fill="#59636e">有记录的日期</text>
-<text x="540" y="272" font-size="12" fill="#59636e">格子上方：日期</text>
-<text x="540" y="292" font-size="12" fill="#59636e">格子下方：记录条数</text>
-<rect x="28" y="413" width="14" height="14" rx="3" fill="#ebedf0" stroke="#d1d9e0"/>
-<text x="48" y="424" font-size="11" fill="#59636e">无记录</text>
-<rect x="122" y="413" width="14" height="14" rx="3" fill="#9be9a8" stroke="#d1d9e0"/>
-<text x="142" y="424" font-size="11" fill="#59636e">1–3</text>
-<rect x="216" y="413" width="14" height="14" rx="3" fill="#40c463" stroke="#d1d9e0"/>
-<text x="236" y="424" font-size="11" fill="#59636e">4–7</text>
-<rect x="310" y="413" width="14" height="14" rx="3" fill="#30a14e" stroke="#d1d9e0"/>
-<text x="330" y="424" font-size="11" fill="#59636e">8–14</text>
-<rect x="404" y="413" width="14" height="14" rx="3" fill="#216e39" stroke="#d1d9e0"/>
-<text x="424" y="424" font-size="11" fill="#59636e">15+</text>
+<text x="24" y="244" font-size="12" fill="#59636e">10 个有记录日期 · 每格一天 · 数量来源于开发日志</text>
+<text x="575" y="244" font-size="12" fill="#59636e">少</text>
+<rect x="600" y="231" width="13" height="13" rx="2" fill="#ebedf0" stroke="#d1d9e0" stroke-width="0.5"/>
+<text x="618" y="242" font-size="10" fill="#59636e">0</text>
+<rect x="669" y="231" width="13" height="13" rx="2" fill="#9be9a8" stroke="#d1d9e0" stroke-width="0.5"/>
+<text x="687" y="242" font-size="10" fill="#59636e">1–3</text>
+<rect x="738" y="231" width="13" height="13" rx="2" fill="#40c463" stroke="#d1d9e0" stroke-width="0.5"/>
+<text x="756" y="242" font-size="10" fill="#59636e">4–7</text>
+<rect x="807" y="231" width="13" height="13" rx="2" fill="#30a14e" stroke="#d1d9e0" stroke-width="0.5"/>
+<text x="825" y="242" font-size="10" fill="#59636e">8–14</text>
+<rect x="876" y="231" width="13" height="13" rx="2" fill="#216e39" stroke="#d1d9e0" stroke-width="0.5"/>
+<text x="894" y="242" font-size="10" fill="#59636e">15+</text>
+<text x="960" y="244" font-size="12" fill="#59636e">多</text>
 </g>
 </svg>
