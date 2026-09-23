@@ -1,29 +1,38 @@
 # Hotpoor Director · 创作与 AI 对话工作台
 
-一个把无限画布、图片/视频生成、资料对话和本机命令执行放在一起的 Electron 工作台。内置 Python/Tornado 后端与 PostgreSQL，支持 ComfyUI 本地生成、service-inference 多模型调用、素材直传、时间轴以及云端协作。
+把 AI 对话、资料阅读、本机代理执行、无限画布、图片与视频生成、素材审阅和时间轴编排放进同一个工作台。桌面端使用 Electron，内置 Python / Tornado 后端并管理本机 PostgreSQL；云端工作站复用画布与协作功能。
 
-[技术栈与服务来源](#技术栈与服务来源) · [对话与代理](#对话与代理模式) · [画布与素材](#无限画布与资源引用关系) · [视频时间轴](#视频时间轴2026-09-18) · [macOS 启动](#macos-源码启动) · [Windows 启动](#windows-开发启动) · [助手使用指南](SKILL.md)
+本文按 **2026-09-23 仓库实现**整理。模型表表示客户端已接入的适配能力，实际可用模型由所选 AK 和服务端返回结果决定。
 
-开发过程、验证结果和待办见 [开发日志](DEVELOPMENT_LOG.md)。
+[功能总览](#功能总览) · [快速开始](#快速开始) · [对话与代理](#对话与代理模式) · [画布](#项目-dashboard-与无限画布) · [生成](#图片与视频生成) · [素材与审阅](#素材预览与评论审阅) · [时间轴](#视频时间轴) · [同步与协作](#同步与协作) · [配置](#模型-ak费用与云存储) · [安装与开发](#安装与开发) · [技术栈](#技术栈与服务来源)
 
-首次部署、架构原理与维护排查见 [SKILL.md](SKILL.md)。也可以让代码助手先阅读仓库根目录的 `SKILL.md`，再按你的环境执行部署；该文件不包含个人账号或本地数据。
+## 功能总览
 
-## 技术栈与服务来源
-
-<a href="https://console.service-inference.ai/"><img src="backend/web/brand/tokenmart-cart.png" width="88" alt="TokenMart · service-inference 控制台"></a>
-
-**云端 API 服务供应商：service-inference（TokenMart）**。点击 Logo 或进入 [TokenMart 控制台](https://console.service-inference.ai/) 管理服务账号与 AK。本项目通过该服务调用云端图片、视频和对话模型；推理 API 地址为 `https://model.service-inference.ai`，管理 AK 用于查询服务商提供的余额与账单。
-
-| 技术 / 服务 | 在本项目中的职责 | 来源 |
+| 模块 | 已实现功能 | 入口 / 说明 |
 | --- | --- | --- |
-| <a href="https://html.spec.whatwg.org/"><img src="docs/logos/html5.svg" height="32" alt="HTML5" title="HTML5"></a> <a href="https://www.w3.org/Style/CSS/"><img src="docs/logos/css3.svg" height="32" alt="CSS" title="CSS"></a> <a href="https://tc39.es/ecma262/"><img src="docs/logos/javascript.svg" height="32" alt="JavaScript" title="JavaScript"></a><br>HTML / CSS / JavaScript | 项目页面、无限画布、生成卡片与对话界面 | [本仓库前端源码](backend/web/) |
-| <a href="https://www.electronjs.org/"><img src="docs/logos/electron.svg" height="32" alt="Electron" title="Electron"></a> <a href="https://www.chromium.org/"><img src="docs/logos/chromium.png" height="32" alt="Chromium" title="Chromium"></a> <a href="https://nodejs.org/"><img src="docs/logos/nodejs.svg" height="32" alt="Node.js" title="Node.js"></a><br>Electron（Chromium / Node.js） | 桌面客户端、系统集成与本机命令执行 | [Electron 官方网站](https://www.electronjs.org/) |
-| <a href="https://www.python.org/"><img src="docs/logos/python.svg" height="32" alt="Python" title="Python"></a> <a href="https://www.tornadoweb.org/en/stable/"><img src="docs/logos/tornado.png" height="32" alt="Tornado" title="Tornado"></a><br>Python / Tornado | 本机 HTTP API、任务调度与生成服务适配 | [Python](https://www.python.org/) · [Tornado](https://www.tornadoweb.org/en/stable/) |
-| <a href="https://www.postgresql.org/"><img src="docs/logos/postgresql.svg" height="32" alt="PostgreSQL" title="PostgreSQL"></a> <a href="https://www.psycopg.org/"><img src="docs/logos/psycopg.png" height="32" alt="Psycopg" title="Psycopg"></a><br>PostgreSQL / Psycopg | 账号、项目、对话与任务数据持久化 | [PostgreSQL](https://www.postgresql.org/) · [Psycopg](https://www.psycopg.org/) |
-| <a href="https://github.com/Comfy-Org/ComfyUI"><img src="docs/logos/comfyui.svg" height="32" alt="ComfyUI" title="ComfyUI"></a><br>ComfyUI | 用户独立部署的本地模型推理与工作流执行 | [ComfyUI 官方仓库](https://github.com/Comfy-Org/ComfyUI) |
-| <a href="https://console.service-inference.ai/"><img src="backend/web/brand/tokenmart-cart.png" height="32" alt="TokenMart" title="TokenMart"></a><br>service-inference / TokenMart | 云端模型 API、AK 管理及用量账单服务 | [TokenMart 控制台](https://console.service-inference.ai/) |
+| AI 对话 | 分类、标题与描述、归档恢复、Markdown 目录与表格、附件、模型搜索、字号与折叠阅读 | 顶部「对话模式」，左下角「设置」 |
+| 上下文与知识库 | 历史轮次、分包持久化、自动分段总结、外部 wiki 目录选择及发送确认 | [历史与持久化](#历史与持久化)、[知识库](#知识库参考) |
+| 本机代理 | 逐条命令确认、实时输出、停止、执行目录、加密凭据、单对话完全访问授权 | 仅 Electron 桌面端；[执行说明](#代理执行确认--输出--继续回答) |
+| 项目与画布 | 多封面、卡片命名、平移缩放、八向调整大小、参考连线、自动保存、触控板手势 | [项目 Dashboard](#项目-dashboard-与无限画布) |
+| 图片生成 | 本地 Z Image；云端 Seedream、GPT 图片适配；编辑、参考、多图融合及支持模型的组图 | [图片与视频生成](#图片与视频生成) |
+| 视频生成 | 本地 H3 / LTX；云端 Seedance / H3；首尾帧、图片 / 视频 / 音频参考 | 按模型显示可用模式和参数 |
+| 队列与历史 | 真实进度、历史参数复用、隐藏结果、ComfyUI 取消 / 停止 / 排序 | 云端任务不提供取消或排序 |
+| 素材与对比 | 上传 / 拖放 / 粘贴、云存储直传、图片全屏与复制、视频提帧、多图 / 多视频 PIN | [素材预览与评论审阅](#素材预览与评论审阅) |
+| 评论审阅 | 文本 / Markdown / HTML / 富文本、附件、素材引用、图片框选涂鸦、视频片段讨论 | 标注与片段继续引用原文件 |
+| 时间轴 | 多轴剪辑、裁剪、磁吸、覆盖、字幕、PIN 网格、同步播放和音源选择 | 浏览器预览，暂不导出成片 |
+| 云端协作 | 多目标双向同步、三方差异、独立副本、成员角色、只读分享、更新合并与编辑锁 | [同步与协作](#同步与协作) |
+| 模型与费用 | 多应用 / 管理 AK、每卡片选 AK、模型发现、绑定组织费用、项目账单导入 | [模型 AK、费用与云存储](#模型-ak费用与云存储) |
+| 数据与开发 | UUID 实体分片、本地账号、源码热刷新、Windows 打包、隔离测试、助手 CLI | [配置与数据](#配置与数据)、[构建和验证](#构建和验证) |
 
-Hotpoor Director 负责工作台界面与服务编排；以上开源技术由各自项目维护，云端 API 由 service-inference 提供，本地推理由用户配置的 ComfyUI 执行。模型名称表示调用的模型，API 服务供应商与模型开发方分别标识。TokenMart Logo [原图来源](https://console.service-inference.ai/tokenmart-cart.png)，品牌与标识归其各自权利人所有。其余 Logo 的下载来源与许可说明见 [Logo 来源清单](docs/logos/README.md)。
+## 快速开始
+
+1. 首次安装按 [macOS](#macos-源码启动) 或 [Windows](#windows-开发启动) 步骤准备依赖，启动后创建自己的账号。
+2. 使用云端模型：打开项目列表的「service-inference 设置」，添加并启用应用 AK，刷新模型。管理 AK 仅在需要查询组织费用时配置。
+3. 使用本地模型：独立启动已安装模型的 ComfyUI，在「ComfyUI 配置」中填写地址并测试连接。
+4. 开始对话：进入「对话模式」，选择模型并提问；代理执行、知识库和阅读偏好在左下角「设置」中配置。
+5. 开始创作：创建项目，导入素材，添加图片 / 视频生成卡片；用连线组织参考，使用评论、PIN 和时间轴审阅结果。云端模型引用本地素材前，先配置云存储直传。
+
+已完成依赖安装后，在仓库根目录运行 `npm run dev`。日常改页面无需重新打包。
 
 ## 对话与代理模式
 
@@ -43,6 +52,14 @@ Hotpoor Director 负责工作台界面与服务编排；以上开源技术由各
 ![对话设置：字体、历史轮次和每包容量集中在设置页](docs/screenshots/dialogue-settings.png)
 
 「设置 → 对话与显示」可修改运行模式、历史轮次和每包轮次，并设置折叠卡片的默认最小宽高。历史轮次为 `0` 时只发送当前问题；失败、中断及其已执行命令结果也按历史轮次进入后续提问，长命令输出会标注截断。不会因为继续提问而由客户端自动重跑已完成命令；模型若再次申请命令仍需确认。
+
+### 模型选择与统一设置
+
+点击输入框底部模型名，搜索当前可用模型、切换 AK 来源或刷新模型列表；同一对话可以切换模型和 AK。连接设置可选择自动协议、Responses 或 Chat Completions。代理模式使用 Responses，并要求模型支持对应工具调用。
+
+![模型选择：搜索、选中状态与 AK 来源](docs/screenshots/dialogue-model-picker.png)
+
+左下角「设置」分为对话与显示、模型与连接、执行目录、本机凭据、知识库、访问权限；收起侧栏后仍可通过设置入口打开。输入区只保留文件上传、模型选择与发送。
 
 ### 代理执行：确认 → 输出 → 继续回答
 
@@ -72,188 +89,29 @@ env SERVICE_TOKEN={{credential:research_token}} python3 script.py
 
 ### 历史与持久化
 
-对话、附件和记录包各自生成 UUID，按 `int(uuid, 16) % 2` 分片。记录包通过 `prev_id` / `next_id` 链接，对话保存 `first_id` / `last_id`；默认每包 25 轮，可调整。每轮及时保存，打包容量不是延迟保存次数。完整历史可加载更早记录，模型默认携带最近 20 轮；初次问题上下文最多 120000 字符。
+对话、附件和记录包各自生成 UUID，按 `int(uuid, 16) % 2` 分片。记录包通过 `prev_id` / `next_id` 链接，对话保存 `first_id` / `last_id`；默认每包 25 轮，可调整。每轮及时保存，打包容量不是延迟保存次数。完整历史可加载更早记录，模型默认携带最近 20 轮；当前输入与附件的文本容量仍受 120000 字符限制；旧历史通过下面的自动总结机制处理。
 
 提交先保存问题，再后台请求模型；相同请求 UUID 防止重复提交。连接中断不自动重发计费请求，先核对服务控制台，再选择继续。对话归创建账号私有，不加入项目分享或项目同步。回答展示实际模型、AK 名称、时间与服务商返回的用量；token 数不等于已确认的单次费用。
 
-### Antigravity / 代码助手接入
+上下文文字达到约 80000 字符或请求体达到 24 MiB 时，会先自动分段总结历史：每段最多约 32000 字符，再分层合并为最多 6000 字符的摘要。原始问答、附件与命令记录保留；摘要单独持久化，后续携带摘要及新记录继续对话。「本次提交」可查看实际携带内容，界面显示总结进度。历史轮次为 `0` 时不携带摘要。
 
-让助手先阅读 [SKILL.md](SKILL.md)。现有 CLI 使用 Director 已配置且启用的 service-inference AK，支持模型发现、文本调用、周期费用和余额查询：
+总结使用当前模型并产生额外请求与用量；已完成分段可复用，失败不会改写原始历史。代理工具续接也采用上下文总结；当前问题与附件本身仍过大时需要拆分。
 
-```sh
-python3 scripts/service-inference-cli.py keys
-python3 scripts/service-inference-cli.py models
-printf '%s' '请整理这段资料的要点' | python3 scripts/service-inference-cli.py chat --model gpt-6-astra
-python3 scripts/service-inference-cli.py cost --period 24h
-```
+### 知识库参考
 
-费用查询需要绑定管理 AK。周期账单及按 Key 分摊值不应冒充精确单次价格；详见 [SKILL 的调用与费用说明](SKILL.md#antigravity-调用文本模型与查询费用)。CLI 文本调用不等同于桌面对话历史或本地代理执行。
+在「设置 → 知识库」填写 wiki 服务地址，启用并保存，然后刷新目录。先创建或打开一个对话，再勾选参考文档或目录；选择范围保存在该对话中。发送前展示范围确认，可返回修改或取消。
 
-以上四张新截图采集于 **2026-09-19**，来自当前源码的真实 Electron 渲染，使用独立数据库及模拟模型/命令输出；未调用付费模型、执行截图中展示的命令或读取个人凭据。复现方法见 [截图说明](docs/screenshots/README.md)。
+![知识库设置：服务地址、正文容量与目录选择](docs/screenshots/dialogue-wiki.png)
 
-## 双向同步到云端工作站
+当前适配提供 `/api/tree`、`/api/search` 和 `/api/blocks/:id` 的 wiki 服务，默认地址为 `http://127.0.0.1:8888`；需要独立运行兼容服务，并非任意网站地址都能接入。服务配置保存于数据目录的 `.wiki-server.json`。
 
-[云端入口](https://api.xialiwei.com/hotpoor/director)复用本地画布。桌面顶部「同步云端」支持多个域名 / 路径、浏览器登录授权及独立 AK；提交前展示类似 Git 的三方差异，保留双方版本。拉回本地时创建新 UUID 副本，自动回传接收记录，避免循环复制。
+发送时按路径读取 Markdown 正文，作为知识库参考材料补充给模型，明确标记为资料而非用户指令。默认单篇 4000 字符、累计目标 16000 字符，最多处理 50 项；累计阈值在加入一篇后检查，含标题和分隔文本的最终长度可能超过该值。无法读取正文的条目会跳过。
 
-操作步骤、资源上传、历史记录及边界见 [云端同步说明](docs/CLOUD-SYNC.md)。
+### 本机文件链接
 
-![双向同步界面：多个云端、登录授权、双方差异与保留新副本](docs/screenshots/cloud-sync-diff.png)
+桌面端支持点击回答或评论中的 `file://` 链接，在系统文件管理器中定位对应路径（macOS 为 Finder）。定位的是运行客户端的本机文件；网页端不提供此桌面能力。
 
-此图为真实 Electron 界面与独立测试数据库，差异内容使用模拟云端数据，不含生产账号或密钥。
-
-云端授权页支持多个具名访问密钥，有效期可选时间段、自定义日历日期或永不过期；已有密钥可单独调整期限或撤销。
-
-## 统一操作提示
-
-操作确认使用应用内最上层深色遮罩，支持取消和键盘操作；桌面启动异常也使用同样样式。
-
-![卡片移除确认：自定义最上层遮罩](docs/screenshots/dialog-confirmation.png)
-
-截图来自隔离测试项目，取消与确认删除的保存行为已验证。
-
-## 在线分享与成员
-
-线上打开项目后点击「分享与成员」，按已验证邮箱邀请只读、评论、编辑或管理员；生成权限独立控制，成员使用自己的模型 AK 和云存储。也可创建有期限或永不过期的只读链接，无需登录即可观看；评论需登录并获得评论权限。
-
-![分享与成员：权限、个人 AK 与只读链接](docs/screenshots/collaboration.png)
-
-截图使用真实 Electron 界面及模拟成员数据，无生产账号或密钥。具体权限与链接撤销规则见 [协作说明](docs/CLOUD-SYNC.md#在线分享与成员)。
-
-## 画布的 8 个特色
-
-把生成、对比、素材引用和审阅放在同一张无限画布里：
-
-| 特色 | 使用方式 | 截图与说明 |
-| --- | --- | --- |
-| **1. 多图 PIN、多视频同时对比** | 固定多个图片结果并排看；固定多个视频后联动播放、暂停、进度与倍速。 | [PIN 对比](#视频-pin-同时播放) |
-| **2. 评论区按片段讨论** | 指定开始秒数和结束秒数，只播放要讨论的那段视频。 | [片段播放](#评论视频片段播放) |
-| **3. 资源引入参考线** | 连接素材、评论和生成卡片，从下游的引入素材库选择参考。 | [引用关系](#无限画布与资源引用关系) |
-| **4. 模型对应不同 Tab** | 选择模型后，只展示它支持的创作模式，并提供对应参数指引。 | [模型模式指引](#按模型显示可用-tab) |
-| **5. 本地与云端模型混用** | 同一项目中放置 ComfyUI 本地模型和 service-inference 云端模型卡片。 | [混合使用](#按模型显示可用-tab) |
-| **6. 云存储多配置** | 七牛、阿里云、腾讯云均可配置；同一厂商也能保存多套配置并切换。 | [存储配置](#云存储多配置列表) |
-| **7. 无限画布** | 自由平移、缩放、拖动和调整卡片尺寸，按创作思路组织项目。 | [画布全景](#无限画布与资源引用关系) |
-| **8. 图片额外标注，复用原图** | 框选、涂鸦只保存坐标和笔迹；继续引用原图，不额外生成或上传标注图片占用云存储空间。 | [图片标注](#评论关联片段引用与图片标注) |
-
-## 界面截图
-
-以下画布、生成与素材截图为 **2026-09-15 在 macOS 上运行本仓库 Electron 界面时的实际截图**，使用独立测试账号、临时 PostgreSQL 和模拟云服务响应。截图展示已实现的界面与交互；Logo 图片、纯色视频均为测试素材，不代表模型生成质量或真实云服务联通结果。可点击图片查看原始尺寸，来源与更新步骤见 [截图说明](docs/screenshots/README.md)。
-
-### 无限画布与资源引用关系
-
-素材卡片 → 评论区 → 生成卡片：参考线连接上下游，评论附件及其标注可在下游的引入素材库中查看。卡片位置、尺寸和连线随项目保存。
-
-![无限画布：素材、评论与生成卡片通过参考线关联，下游展示引入素材](docs/screenshots/workspace.png)
-
-云端生成卡片的提示词下方显示已引用素材的编号入口（`@Image1`、`@Video1`、`@Audio1` 等）。选中提示词文字后点击对应素材，会替换选中文字；只有光标时直接插入。编号按当前各类型素材的输入顺序排列，修改 URL 后即时刷新。
-
-## 日常开发：直接启动源码
-
-双击 `Start_Dev.bat`，或在项目根目录执行 `npm run dev`（`npm start` 也直接运行源码）。Electron 启动 `.venv` 中的 Python 读取 `backend` 源码，无需生成应用 EXE 或重新打包。
-
-Windows 一键重启：双击 `Restart_Dev.bat`。脚本先请求关闭当前源码目录的 Electron，等待后端和数据库正常退出；165 秒后仍未退出则结束该目录的残留 Electron / 后端，再通过 `pg_ctl` 正常停止所选数据目录的内置数据库。随后复用应用启动流程，按数据库 → 后端 → 桌面窗口顺序启动，等待就绪后显示地址。外部数据库不由脚本停止；ComfyUI 独立运行。启动日志保存在 `.local/restart-logs/`。可先执行 `Restart_Dev.bat -DryRun` 查看匹配范围而不重启。重启前保存正在编辑的内容，并等待应用内正在执行的命令结束。
-
-- 修改 `backend/web` 下的 HTML、CSS、页面 JS 和图片，保存后窗口自动刷新。
-- F12 打开/关闭开发者工具。
-- 修改 Python 文件或 `desktop/main.cjs` 后，关闭窗口再启动。
-- 如果本项目尚无 `.local/config.json`，但此前桌面版已有账号数据库，会自动使用现有 `userData` 配置。`DIRECTOR_DATA_DIR` 可以显式指定另一套数据。
-
-后面的构建命令只在需要分发安装包时使用，日常修改不需要执行。
-
-## 数据库
-
-同一 PostgreSQL 实例创建三个独立数据库：
-
-| 数据库 | 表 | 字段 |
-| --- | --- | --- |
-| `hotpoor_director` | `index_login` | `login`, `user_id`, `createtime`, `updatetime` |
-| `hotpoor_director1` | `entities`（唯一的用户表） | `block_id`, `body`, `createtime`, `updatetime` |
-| `hotpoor_director2` | `entities`（唯一的用户表） | `block_id`, `body`, `createtime`, `updatetime` |
-
-- `block_id` 和 `user_id`：32 个小写十六进制字符的 UUID，无连字符。`block_id` 通常由应用生成，数据库也提供符合本库分片规则的默认 UUID，并校验格式与分片归属。
-- `body`：JSONB，默认 `{}`；包含 GIN 索引和 `updatetime` 索引。
-- `createtime`、`updatetime`：BIGINT Unix 毫秒时间戳。数据库写入默认值，UPDATE 触发器自动更新 `updatetime` 并保留创建时间。
-- `login`：去除两端空格、统一小写、唯一；同一账号映射一个 `user_id`。
-- 主库另有 `auth_credentials`（Argon2id 密码哈希）和 `auth_sessions`（随机会话令牌的 SHA-256、用户和有效期）。密码不放入 `index_login` 或实体 JSONB。
-- 初始化可重复执行，不清空数据。运行应用使用普通数据库角色，建库使用独立的管理角色。
-- `hotpoor_director` 是索引库；另有 `index_entity_commits` 保存跨分片事务的提交决定，不存实体正文。
-- 实体统一按 `int(block_id, 16) % 2` 路由：余数 `0` → `hotpoor_director1`，余数 `1` → `hotpoor_director2`。项目、素材、评论、消息包、生成任务及云上传记录均遵循此规则，业务类型不决定数据库。
-- 按 ID 的读写只访问对应分片；列表查询汇总两个库，再按时间全局排序。数据库 CHECK 约束拒绝向错误分片写入 UUID。
-- 评论等跨分片写入采用 PostgreSQL 两阶段提交，索引库保存提交决定；下一次实体访问或启动时恢复中断事务。为保证恢复与查询一致性，实体事务通过索引库 advisory lock 串行执行，适用于当前本地工作台，尚未做高并发扩展。
-- 内置 PostgreSQL 启动参数自动设置 `max_prepared_transactions=32`；外置实例需自行配置该值并重启，最低要求为 `2`。三个库仍是独立数据库，没有主从复制。
-
-### 从旧的业务分库迁移
-
-关闭所有旧版本工作台后启动新版本，或执行 `python -m backend init-db`。初始化会自动检查并迁移放错分片的实体：先在配置目录的 `backups/uuid-shards-*.jsonl` 保存待迁移记录，再逐条复制、核对全部字段，最后删除旧库副本。UUID、JSONB、创建时间和更新时间均保留；迁移可重复执行。若两个库存在同 UUID、不同内容的记录，会停止并报告冲突，不覆盖数据。备份包含实体原始内容，应按工作台数据妥善保存。
-
-已有内置 PostgreSQL 进程若使用旧参数运行，需完全退出工作台并停止该实例后再启动，才能启用两阶段提交。
-
-## macOS 源码启动
-
-准备 Homebrew、Python 3.12 和 Node.js 22.12+ 后，在仓库根目录执行：
-
-```sh
-brew install postgresql@18
-python3.12 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
-npm ci
-mkdir -p runtime/pgsql
-ln -s "$(brew --prefix postgresql@18)/bin" runtime/pgsql/bin
-npm run db:init
-./Start_Dev.command
-```
-
-若 `runtime/pgsql/bin` 已存在，先确认它指向可用的 PostgreSQL，无需重复建立链接。数据库由工作台管理，数据保存在项目 `.local/`；无需运行 `brew services start`。后续可双击 `Start_Dev.command` 启动，首次进入后自行创建账号。ComfyUI 在另一台机器上时，通过界面“ComfyUI 配置”填写其局域网 IP 和端口。
-
-## Windows 开发启动
-
-需要 Python 3.12、Node.js 22.12+ 和新版 Microsoft Visual C++ x64 运行库。PostgreSQL 二进制来自 [EDB 官方下载页](https://www.enterprisedb.com/download-postgresql-binaries)，本版使用 18.6。
-
-```powershell
-git clone https://github.com/hotpoor/hotpoor_director.git
-cd hotpoor_director
-powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
-npm start
-```
-
-
-如 Python 不在 PATH：`scripts/setup.ps1 -Python '完整路径/python.exe'`。如使用合法的应用本地 VC Runtime 目录，可以加 `-VCRuntimeDir '完整目录'` 将运行库放入 PostgreSQL 的 bin 目录，避免依赖系统旧版 DLL。
-
-首次桌面启动会让你设置自己的账号和密码（12–256 字符），创建后自动登录。没有共享默认账号，创建首个账号的接口需要桌面进程产生的一次性启动凭据，同时使用 XSRF 校验。已有账号后不开放注册。
-
-也可通过交互命令创建账号（密码输入不回显）：
-
-```powershell
-npm run user:create
-npm run backend
-```
-
-单独后端默认在 `http://127.0.0.1:8765`；桌面模式自动分配 HTTP 端口。登录会话有效期 24 小时，退出会删除服务端会话，旧令牌随即失效。接口包括 `/api/login`、`/api/me`、`/api/logout`；POST 请求需要 `_xsrf` Cookie 对应的 `X-XSRFToken` 请求头。
-
-## 配置与数据
-
-开发模式首次运行自动生成 `.local/config.json`；Windows 上目录和文件都设置隐藏属性，并限制为当前用户访问。实际配置、数据库数据、运行组件、构建产物都被 `.gitignore` 排除。仓库仅提交 `config.example.json`，不要在示例里放真实凭据。
-
-安装版本把配置和数据放在 Electron 的 `userData` 目录（Windows 通常为 `%APPDATA%/hotpoor-director`）。数据库目录是其下的 `postgres`，不会放在安装目录中，不会随应用更新覆盖。隐藏文件不是加密；GitHub/Hugging Face token 不会自动复制到本项目。
-
-PostgreSQL 默认绑定 `127.0.0.1:55432`，只允许本机连接，并使用 SCRAM 密码认证。端口占用时在配置中更换端口。`DIRECTOR_DATA_DIR` 可覆盖配置/数据目录，`DIRECTOR_PG_BIN` 可指定 PostgreSQL 二进制目录。
-
-连接已有 PostgreSQL：将配置 `postgres.mode` 改为 `external`，填写地址、管理账号与应用账号。管理账号需有建库、建角色权限；应用不负责启动或停止外部数据库。本版面向本机桌面，不直接暴露 Tornado 到公网。
-
-应用正常退出时关闭它自己启动的数据库；首次写入较多时磁盘刷新可能需要一分钟。若数据库原本已在运行，附加的命令不会将它关闭。
-
-## 构建和验证
-
-```powershell
-npm test
-npm run pack
-npm run dist
-```
-
-PyInstaller 将 Python/Tornado 打包为独立后端；Electron Builder 将后端和 PostgreSQL `bin/lib/share` 一起放入 Windows 安装包。构建目录为 `release`。不包含本地配置、账号、数据库数据、pgAdmin 或测试数据库。安装包默认未做代码签名，公开分发前需配置签名及检查第三方运行组件的再分发许可。
-
-集成测试使用 `.test-data` 下的独立临时 PostgreSQL，验证实体字段、时间戳、JSONB、UUID 校验、密码哈希、账号唯一性、XSRF、首次账号保护、登录限流、会话注销和并发写入，不修改开发数据库。
-
-首次版本只验证 Windows x64；macOS/Linux 需准备对应平台的 PostgreSQL 二进制并在目标系统构建。
+对话截图于 **2026-09-23** 使用真实 Electron 界面和独立测试数据库采集，模型、命令输出为模拟数据，不包含个人凭据或私人对话；来源见 [截图说明](docs/screenshots/README.md)。
 
 ## 项目 Dashboard 与无限画布
 
@@ -266,6 +124,22 @@ PyInstaller 将 Python/Tornado 打包为独立后端；Electron Builder 将后�
 - 触控板双指上下左右移动可平移画布，双指捏合可缩放，卡片正文内优先滚动卡片，textarea 和展开的生成信息独立滚动，素材列表支持双指横向滚动；在画布空白处或卡片标题上双指移动可平移画布；也可拖动空白处平移、Ctrl+滚轮缩放画布。底栏「缩放灵敏度」提供 1×–20× 档位，默认 6×（为上一版速度的 3 倍），即时生效并保存在当前浏览器；客户端与线上分别保存。拖动标题移动卡片，四边及四角均可调整尺寸。底栏可适配全部卡片或恢复 100%。
 - 图片与视频卡片先选模型，再显示该模型支持的模式 tab。顶部显示当前结果，pin 数量可调 0–8，历史横向排列，最新在左。点击历史可查看参数/耗时并复用参数。退出或切换项目之前先完成保存。
 
+### 无限画布与资源引用关系
+
+素材卡片 → 评论区 → 生成卡片：参考线连接上下游，评论附件及其标注可在下游的引入素材库中查看。卡片位置、尺寸和连线随项目保存。
+
+![无限画布：素材、评论与生成卡片通过参考线关联，下游展示引入素材](docs/screenshots/workspace.png)
+
+云端生成卡片的提示词下方显示已引用素材的编号入口（`@Image1`、`@Video1`、`@Audio1` 等）。选中提示词文字后点击对应素材，会替换选中文字；只有光标时直接插入。编号按当前各类型素材的输入顺序排列，修改 URL 后即时刷新。
+
+### 生成卡片左右布局与固定生成栏
+
+新图片/视频生成卡片默认 920px 宽：左侧预览、历史与引入素材，右侧模型、提示词与参数，各自滚动；底部固定输出尺寸/比例/时长和生成按钮。点击「调整尺寸」定位到参数。已有窄卡片可在标题栏点击「左右布局」展开，「上下布局」恢复 480px；拖窄至 760px 以下也会自动上下排列。只调整卡片显示，不修改生成尺寸，宽度随项目保存。
+
+service-inference 设置使用用户提供的 [TokenMart Logo](https://console.service-inference.ai/tokenmart-cart.png)，点击 Logo 可打开 [TokenMart 控制台](https://console.service-inference.ai/)。窗口分为左侧「管理 AK」和右侧「应用 AK」两个 Tab，默认管理 AK；应用 AK 用于生成和对话，管理 AK 用于费用与用量查询。切换 Tab 保留未保存输入并隐藏已显示密钥，查询绑定管理 AK 的费用会自动切换到管理 Tab。
+
+## 图片与视频生成
+
 ### 本地生成
 
 先启动 ComfyUI，默认使用本机 `http://127.0.0.1:8188`。项目列表页右上角“ComfyUI 配置”可设置 Host 和 Port、测试连接并保存；配置供本机所有项目共用，保存成功立即生效。有未结束的工作台生成任务时不能切换地址，连接失败保留旧配置。配置保存在工作台数据目录下的隐藏文件 `.comfyui.json`（仅连接配置，不包含账号密码），重启后自动读取。HTTP API 和 WebSocket 进度统一使用该地址。新生成记录保存服务地址，旧记录沿用默认地址，历史媒体始终从生成时的服务读取，因此需保留对应服务及输出文件。模型文件须安装在 ComfyUI 中；Git clone 不会携带模型。界面显示的生成状态来自持久化任务和 ComfyUI 历史，不使用模拟图片或虚构用量。
@@ -275,7 +149,6 @@ PyInstaller 将 Python/Tornado 打包为独立后端；Electron Builder 将后�
 | Z Image Turbo | 文生图；单张原图的 VAE 重绘（图生图） | 独立参考图条件模型/工作流 |
 | Z Image 标准版 BF16 | 文生图、单图 VAE 重绘；反向提示词、CFG（默认 40 步 / CFG 4） | 独立参考图条件模型/工作流 |
 | MiniMax H3 fl2va | 文生视频；首帧、可选尾帧图生视频，带原生音频，使用已安装的 8-step Turbo LoRA | 多图参考请选择 Ref2VA 模型 |
-
 | H3-Base-Ref2VA FP8 | 图片、视频、音频混合参考共 1–8 项，视频/音频各最多 3 项，默认 20 步，可选 Turbo 4 步；生成带音轨 | 视频参考仅取画面，声音需独立音频输入；默认使用素材开头 |
 | LTX-2.5 22B 蒸馏版 INT8 | 文生视频、单首帧图生视频；固定 8＋3 步、2 倍潜空间放大，带音频 | 尾帧/多元素参考暂未接入 |
 
@@ -291,6 +164,12 @@ LTX 的宽高是最终输出尺寸，须为 64 的倍数，默认 512×320；帧
 
 官方模型说明：[Z Image](https://comfyanonymous.github.io/ComfyUI_examples/z_image/)、[MiniMax H3](https://docs.comfy.org/tutorials/video/minimax/minimax-h3)。
 
+### ComfyUI 局域网访问
+
+在 ComfyUI 原启动命令后添加 `--listen 0.0.0.0 --port 8188`，等待运行和排队任务结束、同步生成历史后重启。Windows 防火墙可按 ComfyUI 实际 Python 程序、有线网卡、专用网络和 `LocalSubnet` 限定 TCP 8188 入站。其他设备访问 `http://服务机器的局域网IP:8188`，工作台连接配置中的 Host 填该 IP；服务机器自身仍可使用 `127.0.0.1`。
+
+ComfyUI 默认没有账号保护，只向可信局域网开放，不需要路由器公网端口映射。此设置只开放 ComfyUI，不开放工作台 Tornado 或 PostgreSQL。局域网设备需安装自己的工作台，或使用 ComfyUI 自带网页；本地队列排序扩展目前仅接受回环请求，因此远程工作台的队列拖动排序暂不支持。
+
 ### 按模型显示可用 Tab
 
 先选择模型，再选择该模型支持的创作方式。界面会按模型提供 Tab、参数范围和用法提示：例如本地 Z Image 提供文生图 / 图生图；Seedream 5 Pro 提供交互编辑；Seedream 5 Lite 提供组图生成。未支持的模式不会混在当前模型的 Tab 中。
@@ -298,21 +177,6 @@ LTX 的宽高是最终输出尺寸，须为 64 的倍数，默认 512×320；帧
 **本地和云端卡片可以在同一项目、同一画布中混用。** 下图左侧为本地 Z Image，右侧两张为云端 Seedream；各自使用自己的模型参数。云端参考仍须是公网可访问的素材地址，可通过云存储直传获得。
 
 ![同一画布混用本地和云端模型：Z Image、Seedream 5 Pro、Seedream 5 Lite 展示不同创作模式 Tab](docs/screenshots/model-guidance.png)
-
-### 开发验证
-
-`npm test` 使用独立临时 PostgreSQL。`scripts/smoke-studio.cjs` 使用 `.test-data/studio-smoke` 数据库（需预先准备测试配置，端口建议 55440），检查项目创建、参数切换、八方向缩放、自动保存、重新打开和窄窗口布局。`scripts/smoke-generation.py` 为可选真实 GPU 测试，会提交一张 256px 图生图，使用上述 UI 测试账号；不自动加入常规测试。
-
-Logo 使用用户提供的透明原图，`scripts/prepare_brand.py` 可使用 Pillow 重建黑色原版、白色反白版和 PNG/ICO。原始透明图不加外圈白边。
-
-### 图片放大预览
-
-点击卡片大图、历史缩略图或 Pin 图片即可进入独立预览。滚轮/加减按钮缩放，拖动平移，100% 查看原尺寸，双击切换原尺寸与适应窗口；可切换同一卡片的历史图片。右上角支持系统全屏，Esc 关闭预览。此操作不会改变画布视角。
-
-设置 `DIRECTOR_MATERIAL_SMOKE=1` 运行 `scripts/smoke-studio.cjs` 可追加素材交互检查，使用本机已生成的 `ComfyUI/output/director/smoke-video_00001_.mp4` 测试文件。
-
-视频模型接口实测可设置 `DIRECTOR_TEST_MODEL=ltx-2.5`、`DIRECTOR_TEST_MODE=image`，或 `DIRECTOR_TEST_MODEL=minimax-h3-ref2va`、`DIRECTOR_TEST_MODE=reference`，运行 `scripts/smoke-generation.py`；使用隔离测试数据库，实际占用 GPU。
-
 
 ### H3 多元素参考
 
@@ -322,13 +186,55 @@ Logo 使用用户提供的透明原图，`scripts/prepare_brand.py` 可使用 Pi
 
 在上述 H3 GPU 测试环境设置 `DIRECTOR_TEST_MULTIMODAL=1` 可验证图片＋视频＋音频生成（需先有 LTX 测试输出）；`electron scripts/smoke-multimodal.cjs` 检查参考素材 UI、连线引用、自动保存及切换模型。均使用隔离测试数据；不要同时启动使用 `studio-smoke` 数据目录的测试。
 
+### service-inference 云端图片与视频生成
+
+项目列表右上角的 **service-inference 设置** 提供 API Key 保存、替换、清除和只读连接测试。接口使用一个 `Authorization: Bearer` API Key，不需要额外的 Secret。密钥保存在有效数据目录下的隐藏文件 `.service-inference.json`（源码默认 `.local/.service-inference.json`），文件权限为当前用户读写；普通配置读取不回显 Key；只有用户点击「显示 AK / 复制 AK」时才通过已认证接口读取。此目录已被 Git 忽略。所有生成请求由后端发送，不在画布或历史中保存密钥。被活跃云端任务使用的 Key 暂不能替换或删除。
+
+在图片或视频卡片中选择带“云端”的模型即可使用；本地 ComfyUI 模型继续保留。
+
+| 类型 | 模型 | 已接入的模式 |
+| --- | --- | --- |
+| 图片 | Seedream 5 Pro、5 Pro EP、5 Lite、4.5 | 文生图、单张或多张公网参考图编辑；按模型选择分辨率档位 |
+| 图片 | GPT Image 1、1 mini、1.5、2、2.5 Sunburst / Flare（含已登记日期版本） | 文生图、单图编辑、多图融合；画质、尺寸、背景、PNG / JPEG / WebP、1–10 张 |
+| 视频 | 豆包 / Dreamina Seedance 2.0 Max、Fast Max、Mini Max、2.5 Max | 文生视频、首尾帧、多元素参考；480p / 720p、画幅、音频开关；2.0 为 4–15 秒，2.5 为 4–30 秒 |
+| 视频 | MiniMax H3 | 文生视频、参考图生视频、图片 / 视频 / 音频多元素参考；768P / 2K、4–15 秒 |
+
+参考素材填写公开可访问的 HTTP(S) 文件直链，每行一项；也可点击「选择文件直传」或把文件拖入对应字段，使用已配置的云存储自动获得公网 URL。上游素材库的「用作参考素材」同样使用客户端直传。云端不能直接访问 ComfyUI 内网 URL。Seedance 多元素参考按图片、视频、音频分别编号，提示词使用 `@Image1` / `@Video1`；首尾帧有独立字段。Seedance 参考最多 12 项、视频/音频各 3 项；MiniMax H3 多元素参考最多 9 张图片、3 段视频、3 段音频，混合最多 12 项，音频须搭配图片或视频。以上为工作台输入上限，最终以服务端校验为准。
+
+GPT 图片接口按用户确认的 OpenAI 兼容协议接入：文字生成走 `/v1/images/generations`，参考图与编辑走 `/v1/images/edits` 的 JSON `images: [{image_url}]`。最多 16 张参考图；透明背景需 PNG 或 WebP；2.5 系列额外支持 xhigh / max 画质。模型按所选 AK 的 `/v1/models` 权限显示。当前参数与接口适配见 [模型定义](backend/inference_models.py) 和 [请求实现](backend/inference.py)；这里说明的是本项目通过 service-inference 的实现。
+
+GPT 与 Seedream 使用同步图片接口（请求在后台执行），请在图片请求完成前保持应用开启。视频提交后保存远端任务 ID，Seedance 每 10 秒、MiniMax 每 15 秒查询一次；应用重启会继续查询已有 ID，不会重新发起生成。生成结果按提交时选择保存到本机或云存储；本机结果位于数据目录 `generated/`，通过带登录验证的结果接口访问，视频支持 Range 拖动播放。历史播放、图片预览、PIN 和视频提帧继续引用保存后的结果。每个结果限制 210 MB；返回的用量按服务商原值记录，未返回 token 时不虚构。
+
+当前云端适配未接入取消或排序，因此这类任务只能查看和定位，不显示可用的取消/排序按钮；ComfyUI 的任务操作保持原有行为。提交超时或应用在提交期间关闭时，不自动重试付费请求：请到服务控制台核对受理状态。视频查询或结果下载的暂时性错误会自动重试；鉴权失效、无权限或任务不存在时会停止查询并显示错误。图片结果保存失败需在服务控制台核对；组图仅在支持的图片模型中提供；当前未接 SSE 流式输出，尺寸通过各模型提供的选项设置。
+
+接口依据：用户提供的 [Seedream](https://console.service-inference.ai/docs/seedream)、[豆包 Seedance Max](https://console.service-inference.ai/docs/doubao-seedance-max)、[Dreamina Seedance Max](https://console.service-inference.ai/docs/seedance-max)、[MiniMax H3](https://console.service-inference.ai/docs/minimax) 文档。生成按服务商规则计费；设置里的连接测试仅查询任务列表，不触发生成。
+
+验证：`npm test`；`node_modules/.bin/electron scripts/smoke-inference.cjs` 使用独立临时数据库、测试 Key 和模拟云端响应，检查设置、四类模型生成路径、结果保存、视频 Range、自动保存与重开、窄窗口。测试不读取真实 Key，不调用付费生成接口。
+
+### Seedream 创作模式
+
+- 所有 Seedream：文生图、图片编辑、多图融合（至少两张图，按「图1」「图2」描述）。
+- Pro / Pro EP：另有交互编辑，可上传已圈选/标记的参考图或在提示词中输入 `<point>` / `<bbox>` 坐标；目前无内置画笔。可选 standard / fast 提示词优化。
+- Lite / 4.5：另有组图生成，设置最多张数 1–15，参考图数量与输出上限之和不能超过 15。实际张数由模型决定，返回的全部图片在组图缩略图中查看，并按提交时选择保存到本机或云存储。
+- 输出格式按模型提供（4.5 仅 JPEG），水印可配置。本版组图使用同步响应，未接 SSE 流式输出。能力依据用户提供的 Seedream API 文档。
+
+云素材预览仍直接加载公网图片；复制图片时通过本机鉴权接口读取当前账号已确认的原图，并校验大小与 MD5，避免跨域 Canvas 污染。此读取仅用于复制，不改变客户端直传上传路径。
+
+Seedance 2.5（豆包 / Dreamina）的工作台时长范围为 4–30 秒；2.0 系列及 MiniMax 保留原来的 4–15 秒。2.5 上限依据[官方模型说明](https://seed.bytedance.com/zh/seedance2_5)，实际 service-inference 长视频受理情况以服务端为准。
+
+### 在线 H3 人物与音色参考（桌面 / 网页共用）
+
+选择 MiniMax H3 · 云端 → 多元素参考，上传人物图和独立 MP3/WAV，再设置 4–15 秒。图片最多9张，视频/音频各最多3段，混合最多12项；音频须搭配图片或视频。视频、音频单段2–15秒，各类合计最多15秒；音频单文件≤15MB。远程媒体格式与时长最终由服务商校验。
+
+声音参考示例：`<Audio 1> is the voice-timbre reference for the presenter in <Picture 1>. Reference the timbre only; speak the new dialogue without copying the original words.` 图片和音频均作为独立 content 项传给服务商，音频使用 `type: audio_url`、`role: reference_audio`。普通图生视频模式保持原行为；含音频的请求必须使用多元素参考，防止音频被忽略。
+
+字段依据：[MiniMax 官方 H3 API](https://platform.minimax.io/docs/api-reference/video-generation-v2-create)；提示词依据：[官方 H3 Prompt Writing](https://github.com/MiniMax-AI/MiniMax-H3/tree/main/skills/h3-prompt-writing)。服务商沿用 `/v1/video/generate` 和 `minimax-h3`。接收任务并不代表音色效果已验证。
 
 ### 取消与停止生成
 
 卡片顶部进度条旁提供“取消排队”或“停止生成”。多个任务时展开队列逐个操作，卡片内部滚动不影响顶部按钮。收到停止请求后显示“正在停止”，模型完成当前可中断阶段、队列确认移除后显示“已停止”；模型加载或解码期间可能需要等待。提交阶段取得任务 ID 后才可停止。已完成文件不受重复停止影响，可在历史复用参数重新生成。
 
 需要 ComfyUI 支持按 ID 取消的 `/api/jobs/{id}/cancel` 接口；不支持或服务断开时会报错，不回退为全局停止。可选 `python scripts/smoke-cancel.py` 使用隔离测试账号创建三个 GPU 任务，验证取消排队、运行中断和后继任务正常完成；已有任务时自动退出。`electron scripts/smoke-cancel-ui.cjs` 使用模拟队列验证界面，不中断真实生成。
-
 
 ### 画布汇总队列
 
@@ -342,6 +248,28 @@ Logo 使用用户提供的透明原图，`scripts/prepare_brand.py` 可使用 Pi
 
 选择模型后，参数区显示推荐尺寸按钮和当前本机限制：宽高各 256–1536 px；Z Image 以 16 对齐，H3 以 32 对齐，LTX-2.5 最终输出以 64 对齐。图片总像素上限 2,359,296，视频 1,032,192。前后端均校验；范围内的长视频和大量参考仍可能超过显存，应先用低分辨率短片测试。这些限制是当前工作台的配置，不是模型理论最大尺寸。
 
+### 云端生成进度与结果保存
+
+桌面工具栏的“添加到本机 / 直传云存储”同时决定新提交的 service-inference 生成结果保存位置；在线版固定使用云存储。任务提交时记录配置 ID 与指纹，切换启用配置不会改变正在生成任务的目的地。修改或删除原配置时明确提示恢复原配置，不静默落盘到本机。
+
+准备阶段每两秒查询一次上游；上游返回 `task.progress` 或 `task.metadata.progress` 的计数、阶段时持续展示。未提供逐项进度时明确显示“上游尚未提供逐项进度”和最近查询时间，不推算百分比。结果分为读取、上传、对象及公网校验，显示文件序号和实际读取 / 发送字节；上传完成须校验通过后才标记任务完成。
+
+视频生成完成后持久化结果地址；转存失败只重试保存，重启后继续处理同一任务，不重新计费生成。错误区分查询、读取、上传和校验。已存在的本地历史文件不自动迁移。
+
+七牛视频结果优先由对象存储直接抓取，使用项目目录下的任务ID/输出序号稳定命名，并验证对象与公网读取；抓取不可用时回退到内存转传。直接抓取不经过应用计算SHA-256，不伪造校验值。其他厂商及图片使用MD5命名的流式转传，大文件传输上限放宽到30分钟。
+
+## 素材预览与评论审阅
+
+支持独立图片、视频和音频素材卡片，也可从生成历史复用结果。视频结果可提取当前帧作为图片素材继续创作；隐藏生成结果只影响展示，历史仍可在生成记录中查询。
+
+### 图片放大预览
+
+点击卡片大图、历史缩略图或 Pin 图片即可进入独立预览。滚轮/加减按钮缩放，拖动平移，100% 查看原尺寸，双击切换原尺寸与适应窗口；可切换同一卡片的历史图片。右上角支持系统全屏，Esc 关闭预览。此操作不会改变画布视角。
+
+设置 `DIRECTOR_MATERIAL_SMOKE=1` 运行 `scripts/smoke-studio.cjs` 可追加素材交互检查，使用本机已生成的 `ComfyUI/output/director/smoke-video_00001_.mp4` 测试文件。
+
+视频模型接口实测可设置 `DIRECTOR_TEST_MODEL=ltx-2.5`、`DIRECTOR_TEST_MODE=image`，或 `DIRECTOR_TEST_MODEL=minimax-h3-ref2va`、`DIRECTOR_TEST_MODE=reference`，运行 `scripts/smoke-generation.py`；使用隔离测试数据库，实际占用 GPU。
+
 ### 视频 PIN 同时播放
 
 **图片和视频均支持多个 PIN 对比位。** 点击「固定当前」，即可将不同历史结果放到同一张卡片中并排比较；对比位数量可调整，最多 8 个。
@@ -352,36 +280,139 @@ Logo 使用用户提供的透明原图，`scripts/prepare_brand.py` 可使用 Pi
 
 在视频卡片固定至少两段视频后，勾选 PIN 区“同时播放”从开头一起播放；操作任一 PIN 视频的播放/暂停、进度和倍速，会联动其他 PIN 视频。取消勾选恢复独立控制；短片自然播放完毕不停止其余长片。设置自动保存，重新打开项目不自动播放。普通浏览器播放联动不保证逐帧同步，网络解码缓冲可能造成短暂差异。
 
-
 ### 放大预览复制图片
 
 在图片放大/全屏预览区域右键，点击小菜单“复制图片”，即可把完整图片以 PNG 图像写入系统剪贴板；也可使用顶部“复制图片”或 Ctrl+C（选中文字时仍按普通文字复制）。复制保留原始像素尺寸及透明度，不受预览缩放、平移影响。图片未加载成功时不能复制；复制结果或权限错误会显示在预览顶部。
 
-## service-inference 云端图片与视频生成
+### 评论区卡片
 
-项目列表右上角的 **service-inference 设置** 提供 API Key 保存、替换、清除和只读连接测试。接口使用一个 `Authorization: Bearer` API Key，不需要额外的 Secret。密钥保存在有效数据目录下的隐藏文件 `.service-inference.json`（源码默认 `.local/.service-inference.json`），文件权限为当前用户读写；接口只返回是否已配置，不回显 Key。此目录已被 Git 忽略。所有生成请求由后端发送，不在画布或历史中保存密钥。有活跃云端任务时不能更换或清除 Key。
+画布工具栏点击「＋ 评论区」，创建独立 `chat_id`。设置中可重命名并填写每包 25–100 条（默认 50）。评论每次发送即落库，尾包未满时追加，满后创建新包；修改条数只影响后续新包，不重写历史。顶部「刷新评论」获取最新记录，「加载更早的一包」向前读取。
 
-在图片或视频卡片中选择带“云端”的模型即可使用；本地 ComfyUI 模型继续保留。
+评论支持纯文本、Markdown、HTML 源码预览及 `contenteditable` 富文本（粗体、斜体、下划线、列表）。Markdown 使用 Marked 18.0.13，HTML / 富文本使用 DOMPurify 3.4.15 的标签和属性白名单渲染；不执行脚本、事件、表单或自定义 CSS。第三方浏览器文件及许可证随源码保存在 `backend/web/vendor`，不依赖运行时 CDN。正文最多 100000 字符，草稿保存在本机当前账号的浏览器存储中，发送成功后清空。
 
-| 类型 | 模型 | 已接入的模式 |
-| --- | --- | --- |
-| 图片 | Seedream 5 Pro、5 Pro EP、5 Lite、4.5 | 文生图、单张或多张公网参考图编辑；按模型选择分辨率档位 |
-| 图片 | GPT Image 1、1 mini、1.5、2、2.5 Sunburst / Flare（含已登记日期版本） | 文生图、单图编辑、多图融合；画质、尺寸、背景、PNG / JPEG / WebP、1–10 张 |
-| 视频 | 豆包 / Dreamina Seedance 2.0 Max、Fast Max、Mini Max、2.5 Max | 文生视频、首尾帧、多元素参考；480p / 720p、画幅、4–15 秒和音频开关 |
-| 视频 | MiniMax H3 | 文生视频、公网参考图生视频；768P / 2K、4–15 秒与画幅 |
+每条评论最多 10 个图片/视频附件，可选择文件、拖入或粘贴，选择上传到本机或已配置的云存储；也可填写 HTTP / HTTPS 直链并指定图片/视频类型。引用下拉框提供本项目画布的图片/视频素材卡片及已完成的生成结果，保存引用而不复制文件。图片最多 20 MB，视频最多 200 MB；文件类型沿用现有上传限制。地址附件保留原始地址，需要目标可访问且浏览器支持对应编码。
 
-参考素材填写公开可访问的 HTTP(S) 文件直链，每行一项；也可点击「选择文件直传」或把文件拖入对应字段，使用已配置的云存储自动获得公网 URL。上游素材库的「用作参考素材」同样使用客户端直传。云端不能直接访问 ComfyUI 内网 URL。Seedance 多元素参考按图片、视频、音频分别编号，提示词使用 `@Image1` / `@Video1`；首尾帧有独立字段。MiniMax 仅接入文档明确给出结构的图片参考。本版 Seedance 参考最多 12 项、视频/音频各 3 项，MiniMax 图片最多 5 项，为工作台输入上限，仍以服务端的模型校验为准。
+评论区和消息包分别按自身 UUID 求余存放于两个库的 `entities` 中，不塞入画布 JSON：
 
-GPT 图片接口按用户确认的 OpenAI 兼容协议接入：文字生成走 `/v1/images/generations`，参考图与编辑走 `/v1/images/edits` 的 JSON `images: [{image_url}]`。最多 16 张参考图；透明背景需 PNG 或 WebP；2.5 系列额外支持 xhigh / max 画质。模型仍按所选 AK 的 `/v1/models` 权限显示，修改后需重启本地客户端并刷新模型。协议依据 [OpenAI 图片生成](https://developers.openai.com/api/reference/resources/images/methods/generate) 与 [图片编辑](https://developers.openai.com/api/reference/resources/images/methods/edit)。
+- `kind=chat`：`block_id` 即 `chat_id`，记录项目、所有者、分包大小、头尾包 ID 和评论/包计数。
+- `kind=chat_pack`：独立 entity，含 `chat_id`、`prev_id`、`next_id`、固定 `capacity` 和 `messages` 数组。结构为 `chat → head ↔ … ↔ tail`。
+- 发送通过行锁和事务同时更新包与链指针，消息 UUID 实现丢失响应后的幂等重试；按登录用户和项目校验线程、附件及生成结果。
 
-GPT 与 Seedream 使用同步图片接口（请求在后台执行），请在图片请求完成前保持应用开启。视频提交后保存远端任务 ID，Seedance 每 10 秒、MiniMax 每 15 秒查询一次；应用重启会继续查询已有 ID，不会重新发起生成。生成完成后自动保存图片/视频到数据目录 `generated/`，历史播放、图片预览、PIN 和视频提帧使用带登录验证的本地结果接口，视频支持 Range 拖动播放。每个结果限制 210 MB；返回的用量按服务商原值记录，未返回 token 时不虚构。
+移除评论区卡片保留数据库中的评论；当前不提供删除评论；在线项目按成员权限开放评论读取和参与，公开分享访客只读。评论上传/发送进行中不可退出项目。隔离验证命令：`node_modules/.bin/electron scripts/smoke-comments.cjs`（Windows 使用 `electron.cmd`），覆盖四种文字模式、媒体文件/地址/引用、分包翻页和草稿重开；后端回归包含并发、幂等和越权检查。
 
-云端接口文档没有取消或排序操作，因此这类任务只能查看和定位，不显示可用的取消/排序按钮；ComfyUI 的任务操作保持原有行为。提交超时或应用在提交期间关闭时，不自动重试付费请求：请到服务控制台核对受理状态。视频查询或结果下载的暂时性错误会自动重试；鉴权失效、无权限或任务不存在时会停止查询并显示错误。图片结果保存失败需在服务控制台核对；本版未接入组图、流式响应或精确像素尺寸输入。
+### 评论视频片段播放
 
-接口依据：用户提供的 [Seedream](https://console.service-inference.ai/docs/seedream)、[豆包 Seedance Max](https://console.service-inference.ai/docs/doubao-seedance-max)、[Dreamina Seedance Max](https://console.service-inference.ai/docs/seedance-max)、[MiniMax H3](https://console.service-inference.ai/docs/minimax) 文档。生成按服务商规则计费；设置里的连接测试仅查询任务列表，不触发生成。
+在评论附件中选择「引用时间段」，填写开始和结束秒数，或使用当前播放位置设置边界。点击「播放选段」会从开始位置播放，到结束位置暂停；保存后可在评论及下游素材库中回看片段。
 
-验证：`npm test`；`node_modules/.bin/electron scripts/smoke-inference.cjs` 使用独立临时数据库、测试 Key 和模拟云端响应，检查设置、四类模型生成路径、结果保存、视频 Range、自动保存与重开、窄窗口。测试不读取真实 Key，不调用付费生成接口。
+下图使用 1 秒测试视频，指定 **0.20–0.55 秒**。只记录起止时间并引用原视频，不裁剪生成新文件；实际片段边界受浏览器播放时序和视频关键帧影响。
 
+![评论视频片段引用：开始 0.2 秒、结束 0.55 秒，以及播放选段和保存按钮](docs/screenshots/video-clip.png)
+
+### 评论关联、片段引用与图片标注
+
+**标注与原图分开保存，不为每次标注新增一张云存储图片。** 框选、涂鸦的坐标和笔迹保存于评论附件的 JSON 数据中，原素材 ID / URL 保持不变；可撤销、清空或再次引用标注。下图红色标记由应用内实际鼠标操作绘制。
+
+![评论附件图片标注：红色矩形框选与自由涂鸦，以及保存引用标注按钮](docs/screenshots/image-review.png)
+
+评论卡片现在与其他卡片一样具有左右连接点。将图片/视频素材或生成卡片的右侧连到评论左侧，在「引入素材库」点击「引用并评论」；再把评论右侧连到下游卡片，即可在下游素材库查看评论附件、说明和标注。连接保存于原画布连线结构，支持鼠标拖线及连接点键盘 Enter。评论历史的素材索引按包加载并缓存已满包，不要求先手动展开所有旧评论，断开连线不删除评论或附件。
+
+评论草稿中的每个附件提供「框选 / 涂鸦」或「引用时间段」。图片标注编辑器以 SVG 叠加框线和自由笔迹，支持颜色、撤销与清空；数据库只保存 0–1 相对坐标和受限形状数据，不接受可执行 SVG。缩放图片和重新打开后保持原位置，最多 50 处标注、4000 个笔迹点。
+
+视频引用可填写起止秒数，或把当前播放位置设为开始/结束，预览会从开始播放并在结束处暂停。发送后评论和下游素材库均显示时间范围及「播放引用片段」。已有评论附件可以点击「引用并标注」再次讨论。
+
+标注保存在评论附件的 `review` 字段：图片使用 `{kind:"image",shapes:[…]}`，视频使用 `{kind:"video",start:秒,end:秒}`。继续引用原素材 ID 或 URL，不生成裁剪视频、合成图片或重新上传文件。下游选择「用作参考素材」时仍使用原素材；评论标注是审阅层，不会自动烘焙为模型输入图像或截取生成参考视频。视频需原地址支持访问、浏览器解码及定位，选段播放精度受媒体关键帧和浏览器播放时序影响。
+
+## 视频时间轴
+
+打开项目，在画布底部点击「时间轴」。选择画布素材或已完成的视频结果，点击「接到末尾」按真实时长连续追加；在时间轴上滚轮横向移动，缩放滑块或 Ctrl/⌘ + 滚轮改变秒数比例。拖动片段移动，拖动两端裁剪，选择后可输入精确开始秒数、持续秒数和素材入点。默认磁吸到相邻片段边缘、字幕边缘、播放线及开始线，按住 Alt 暂停磁吸。
+
+重叠区由后放置或拖动的片段覆盖，也可点击「置于覆盖顶层」。覆盖保留下层内容，不修改原视频文件。金色开始线决定播放起点，可拖动标尺上的金色标记、输入秒数或将当前播放位置设为开始线；红色播放线表示预览位置，点击标尺或轨道空白处定位。
+
+「＋ 字幕」默认绑定所选/当前视频；跟随字幕使用片内偏移，随视频移动，并仅在绑定视频未被覆盖时显示。可切换「绝对定位」固定在全局时间轴上。跟随字幕必须处于绑定片段范围内，裁剪前可先调整字幕；移除视频会把绑定字幕转为绝对定位并保留其位置。
+
+时间轴随项目自动保存，桌面与线上使用同一实现，云端同步新副本会重写视频、字幕及素材引用。只读成员可查看和播放。当前是剪辑编排与浏览器预览，尚不提供成片渲染/导出；视频切换和定位精度受浏览器解码与网络加载影响。
+
+验证：`node_modules/.bin/electron scripts/smoke-timeline.cjs` 使用独立数据库，覆盖实际鼠标拖动、磁吸、重叠、裁剪、字幕两种定位、缩放横滚、保存重开与预览。
+
+卡片标题旁的「✎」可重命名图片生成、视频生成及素材卡片（评论区仍在评论区设置中改名）。时间轴素材选择优先展示卡片名，生成视频同时显示生成时间、结果序号及短批次 ID。选择时间轴片段后可填写独立「片段名」，留空时跟随来源名称；轨道显示原视频取用起止秒数，详情保留完整来源。改名不改变素材文件名、引用或剪辑位置，随项目保存与云端同步。
+
+![时间轴：片段覆盖、字幕与播放位置](docs/screenshots/timeline.png)
+
+### 重叠错层与多时间轴 PIN 对比
+
+重叠的视频自动抬到上方独立一行，起点竖线连回底层；非重叠片段可共用一行，接触边界不算重叠。覆盖优先级仍为后放置优先。
+
+「＋ 新时间轴」创建独立编排，最多 8 个；也可「复制时间轴」比较剪辑方案。点击时间轴名称改名。副本具有独立片段/字幕 ID，跟随字幕仍绑定对应副本片段；时间轴随项目保存及云端同步。收起的时间轴可用底部「时间轴」收起全部后重新打开恢复。
+
+每条轴可独立播放。勾选「同步播放 / 定位」后，以相同绝对秒数联动播放、暂停和定位；不同长度的时间轴在无片段处显示空画面。收起某条轴会停止该轴，其余轴继续播放。
+
+「PIN 对比窗」可拖动标题栏移动、拖动右下角调整大小；用数字输入「行 × 列」自定义网格，例如 1×3、2×3、3×3；行列各接受 1–16 的整数，最多 PIN 当前项目全部 8 条时间轴。同步播放多轴时会打开对比窗。各轴的「PIN 预览 / 已 PIN」决定参与对比的画面。声音可选择任一时间轴、全部混音或全部静音，窗口内外的声音选择同步；播放器在小预览和 PIN 窗间移动，不产生重复声音。视窗/PIN/声音选择属于当前浏览状态，编排数据持久保存。浏览器解码、缓冲和关键帧仍影响画面级同步精度。
+
+声音默认「跟随播放轴」：独立播放时听最后发起播放的轴，同步播放时听发起同步播放的轴；也可手动固定某轴、混音或静音。预览右下角的「音源 / 静音」标记显示当前路由。拖动、裁剪与片段命名对各轴独立生效。
+
+![多时间轴 PIN 网格对比](docs/screenshots/timeline-pin-quad.png)
+
+## 同步与协作
+
+### 双向同步到云端工作站
+
+[云端入口](https://api.xialiwei.com/hotpoor/director)复用本地画布。桌面顶部「同步云端」支持多个域名 / 路径、浏览器登录授权及独立 AK；提交前展示类似 Git 的三方差异，保留双方版本。拉回本地时创建新 UUID 副本，自动回传接收记录，避免循环复制。
+
+操作步骤、资源上传、历史记录及边界见 [云端同步说明](docs/CLOUD-SYNC.md)。
+
+![双向同步界面：多个云端、登录授权、双方差异与保留新副本](docs/screenshots/cloud-sync-diff.png)
+
+此图为真实 Electron 界面与独立测试数据库，差异内容使用模拟云端数据，不含生产账号或密钥。
+
+云端授权页支持多个具名访问密钥，有效期可选时间段、自定义日历日期或永不过期；已有密钥可单独调整期限或撤销。
+
+### 在线分享与成员
+
+线上打开项目后点击「分享与成员」，按已验证邮箱邀请只读、评论、编辑或管理员；生成权限独立控制，成员使用自己的模型 AK 和云存储。也可创建有期限或永不过期的只读链接，无需登录即可观看；评论需登录并获得评论权限。
+
+![分享与成员：权限、个人 AK 与只读链接](docs/screenshots/collaboration.png)
+
+截图使用真实 Electron 界面及模拟成员数据，无生产账号或密钥。具体权限与链接撤销规则见 [协作说明](docs/CLOUD-SYNC.md#在线分享与成员)。
+
+### 同项目自动更新与编辑占用
+
+同一服务中的同一项目支持约每秒检查更新：保存后的卡片和时间轴自动更新到其他窗口，不同位置的修改进行三方合并；同一字段冲突保留当前草稿并提示。鼠标进入或焦点进入卡片／时间轴时申请独占编辑锁，其他窗口显示编辑者账号（同账号不同窗口也互斥）。离开且保存完成后释放；关闭或断网停止续租，锁最多 15 秒过期。播放预览仍可使用。客户端与线上使用同一实现；本机项目副本与云端副本仍通过已有同步功能管理。
+
+### 统一操作提示
+
+操作确认使用应用内最上层深色遮罩，支持取消和键盘操作；桌面启动异常也使用同样样式。
+
+![卡片移除确认：自定义最上层遮罩](docs/screenshots/dialog-confirmation.png)
+
+截图来自隔离测试项目，取消与确认删除的保存行为已验证。
+
+## 模型 AK、费用与云存储
+
+### 多 service-inference Key
+
+设置页将「生成 AK」与「管理 AK」分为独立配置，两者分别支持最多 30 个命名配置。每张图片/视频生成卡片可直接选择生成 AK，多张卡片可同时使用不同 AK；模型列表按卡片所选 AK 筛选，选择保存于项目。设置页生成 AK 用复选框多选启用，卡片只可选择已启用的 AK；旧版配置默认全部启用，保留每张卡片的选择。管理 AK 同样多选启用，组织费用查询分别展示各组织并计算合计；同一组织多个 AK 去重。管理 AK 为 `sk-mgmt-v1-…`，保存/验证只读请求 `/manage/whoami`，配置独立保存于 `.service-inference-management.json`（0600，普通读取不回显凭据）。生成 AK 仍保存于 `.service-inference.json`；两类凭据不能混填。
+
+每个生成 AK 编辑时选择「绑定管理 AK」，多个生成 AK 可共用一个管理 AK。现有未绑定配置仍可生成，费用查询前需要补选绑定。绑定查询固定使用该管理 AK，即使更改其他管理 AK 的启用状态也不会改变绑定凭据；绑定的管理 AK 停用时查询会提示先启用；缺少绑定不会回退到另一管理 AK。被绑定的管理 AK 不能删除或换到不同组织，需要先改绑生成 AK。
+
+「查询绑定管理 AK 的费用汇总」直接调用管理 API 的 `/manage/cost/summary`、`/manage/cost/breakdown` 与 `/manage/cost/by-key`，展示整个组织的 USD 总费用、按模型汇总和按生成 Key 分摊的近似费用，支持周期或 UTC 日期范围。这些组织汇总与当前项目的逐条费用统计范围不同；`unpricedCount` 大于零时提示汇总尚不完整。用户提供的 Management API 文档没有单条请求/视频费用接口，所以管理 AK 不用于调用网页登录的 `/user/logs/record`，也不把分摊费用当成单视频账单。
+
+下图为早期多 Key 界面，配置与模型响应均来自隔离测试。当前版本支持复选框多选启用、行内展开编辑，以及用户主动点击「显示 / 隐藏 AK」和「复制 AK」；切换配置或关闭设置会清空已显示的密钥。
+
+![service-inference 多 Key 管理：选择视频专用 Key，并按图片和视频分类展示模型](docs/screenshots/service-inference-keys.png)
+
+设置中可添加、命名、编辑及删除多个 Key，用复选框启用多项；每张生成卡片及对话分别选择要使用的 AK。保存、切换与「刷新模型」均调用该 Key 的 `/v1/models`，分别显示图片与视频模型；API 可见但尚未接入工作台的模型会注明，不能在生成卡片中选择。图片与视频卡片只提供当前 Key 已列出且工作台已接入的模型；旧卡片的不可用模型保留显示并禁用生成，避免修改已保存的创作参数。
+
+旧单 Key 隐藏配置自动兼容为「原有 Key」，仍使用 `.local/.service-inference.json`、0600 权限，普通读取不回显凭据。任务保存 Key 的内部 ID 与名称，后续查询固定使用该 Key。切换 Key 不影响正在执行的任务；被活动任务使用的密钥暂不能替换或删除。模型列表是账号可见性结果，不代表实时余额、服务容量或最终生成成功。
+
+### 生成记录与费用汇总
+
+画布底部「生成记录 / 费用汇总」查询当前项目全部生成记录，包含已隐藏结果与已移除卡片的历史。支持日期、图片/视频、状态筛选，以及模型、Key 名称、提示词和任务 ID 搜索。展示逐条费用、本次折算单价及按模型、币种分别统计的已知开销；云端费用未知单独计数，本地电费/设备成本未统计。
+
+费用来自服务响应或控制台真实账单，不使用写死的模型价格。旧视频在 [service-inference 日志](https://console.service-inference.ai/logs) 选择日期范围，「下载 → NDJSON」，再用工作台「导入费用账单」回填。导入通过 `metadata.taskId` 与云端任务 ID、模型共同匹配，只更新当前项目；重复导入不会重复累计，也不按相近时间猜测匹配。新图片若服务响应包含 `X-Request-Id`，会保存请求 ID 用于账单匹配；缺少 ID 的旧图片不会自动匹配。
+
+视频生成信息提供「查询费用」，使用原任务 Key 只读查询原接口版本的任务响应；任务接口未返回费用时保留已有账单费用并提示导入。生成返回的费用在转存结果前保存，下载失败不会丢失已知开销。
+
+2026-09-17 核对已登录控制台：`GET /user/logs?from=…&to=…&tz=…&limit=…&cursor=…` 返回 `records` / `nextCursor`，单条为 `GET /user/logs/record?id=…`，汇总为 `GET /user/logs/summary`，导出为 `GET /user/logs/export`（默认 NDJSON，`format=csv` 为 CSV）。视频生成记录的 `cost` 为 USD 费用，`usage.video_tokens` 为视频 Tokens，`metadata.taskId` 用于关联视频；GET 任务轮询记录费用可为空。控制台通过网页登录会话访问这些接口，当前生成 Key 调用返回 403，因此本版提供账单导入，尚未自动同步控制台日志。
 
 ### 云存储直传
 
@@ -411,66 +442,6 @@ Region 可选择或填写，Endpoint 按地域自动生成，也可填写官方 
 
 云存储直传时右下角显示文件名、批次序号与阶段进度：MD5 校验百分比 → 重复检查 → 实际传输百分比与字节数 → 公网确认 → 完成或复用。未知耗时阶段显示等待状态，错误原因保留在进度面板，完成或失败后可关闭。
 
-### Seedream 创作模式
-
-- 所有 Seedream：文生图、图片编辑、多图融合（至少两张图，按「图1」「图2」描述）。
-- Pro / Pro EP：另有交互编辑，可上传已圈选/标记的参考图或在提示词中输入 `<point>` / `<bbox>` 坐标；目前无内置画笔。可选 standard / fast 提示词优化。
-- Lite / 4.5：另有组图生成，设置最多张数 1–15，参考图数量与输出上限之和不能超过 15。实际张数由模型决定，返回的全部图片在组图缩略图中查看，并按提交时选择保存到本机或云存储。
-- 输出格式按模型提供（4.5 仅 JPEG），水印可配置。本版组图使用同步响应，未接 SSE 流式输出。能力依据用户提供的 Seedream API 文档。
-
-云素材预览仍直接加载公网图片；复制图片时通过本机鉴权接口读取当前账号已确认的原图，并校验大小与 MD5，避免跨域 Canvas 污染。此读取仅用于复制，不改变客户端直传上传路径。
-
-Seedance 2.5（豆包 / Dreamina）的工作台时长范围为 4–30 秒；2.0 系列及 MiniMax 保留原来的 4–15 秒。2.5 上限依据[官方模型说明](https://seed.bytedance.com/zh/seedance2_5)，实际 service-inference 长视频受理情况以服务端为准。
-
-### 生成记录与费用汇总
-
-画布底部「生成记录 / 费用汇总」查询当前项目全部生成记录，包含已隐藏结果与已移除卡片的历史。支持日期、图片/视频、状态筛选，以及模型、Key 名称、提示词和任务 ID 搜索。展示逐条费用、本次折算单价及按模型、币种分别统计的已知开销；云端费用未知单独计数，本地电费/设备成本未统计。
-
-费用来自服务响应或控制台真实账单，不使用写死的模型价格。旧视频在 [service-inference 日志](https://console.service-inference.ai/logs) 选择日期范围，「下载 → NDJSON」，再用工作台「导入费用账单」回填。导入通过 `metadata.taskId` 与云端任务 ID、模型共同匹配，只更新当前项目；重复导入不会重复累计，也不按相近时间猜测匹配。新图片若服务响应包含 `X-Request-Id`，会保存请求 ID 用于账单匹配；缺少 ID 的旧图片不会自动匹配。
-
-视频生成信息提供「查询费用」，使用原任务 Key 只读查询原接口版本的任务响应；任务接口未返回费用时保留已有账单费用并提示导入。生成返回的费用在转存结果前保存，下载失败不会丢失已知开销。
-
-2026-09-17 核对已登录控制台：`GET /user/logs?from=…&to=…&tz=…&limit=…&cursor=…` 返回 `records` / `nextCursor`，单条为 `GET /user/logs/record?id=…`，汇总为 `GET /user/logs/summary`，导出为 `GET /user/logs/export`（默认 NDJSON，`format=csv` 为 CSV）。视频生成记录的 `cost` 为 USD 费用，`usage.video_tokens` 为视频 Tokens，`metadata.taskId` 用于关联视频；GET 任务轮询记录费用可为空。控制台通过网页登录会话访问这些接口，当前生成 Key 调用返回 403，因此本版提供账单导入，尚未自动同步控制台日志。
-
-## 多 service-inference Key
-
-设置页将「生成 AK」与「管理 AK」分为独立配置，两者分别支持最多 30 个命名配置。每张图片/视频生成卡片可直接选择生成 AK，多张卡片可同时使用不同 AK；模型列表按卡片所选 AK 筛选，选择保存于项目。设置页生成 AK 用复选框多选启用，卡片只可选择已启用的 AK；旧版配置默认全部启用，保留每张卡片的选择。管理 AK 同样多选启用，组织费用查询分别展示各组织并计算合计；同一组织多个 AK 去重。管理 AK 为 `sk-mgmt-v1-…`，保存/验证只读请求 `/manage/whoami`，配置独立保存于 `.service-inference-management.json`（0600，不回显凭据）。生成 AK 仍保存于 `.service-inference.json`；两类凭据不能混填。
-
-每个生成 AK 编辑时选择「绑定管理 AK」，多个生成 AK 可共用一个管理 AK。现有未绑定配置仍可生成，费用查询前需要补选绑定。绑定查询固定使用该管理 AK，即使更改其他管理 AK 的启用状态也不会改变绑定凭据；绑定的管理 AK 停用时查询会提示先启用；缺少绑定不会回退到另一管理 AK。被绑定的管理 AK 不能删除或换到不同组织，需要先改绑生成 AK。
-
-「查询绑定管理 AK 的费用汇总」直接调用管理 API 的 `/manage/cost/summary`、`/manage/cost/breakdown` 与 `/manage/cost/by-key`，展示整个组织的 USD 总费用、按模型汇总和按生成 Key 分摊的近似费用，支持周期或 UTC 日期范围。这些组织汇总与当前项目的逐条费用统计范围不同；`unpricedCount` 大于零时提示汇总尚不完整。用户提供的 Management API 文档没有单条请求/视频费用接口，所以管理 AK 不用于调用网页登录的 `/user/logs/record`，也不把分摊费用当成单视频账单。
-
-下图展示两个 Key 配置、当前启用项和按 Key 显示的模型列表；密钥输入框不会回显已保存的值。图中配置与模型响应均来自隔离测试。
-
-![service-inference 多 Key 管理：选择视频专用 Key，并按图片和视频分类展示模型](docs/screenshots/service-inference-keys.png)
-
-设置中可添加、命名、编辑及删除多个 Key，单选一个用于新任务。保存、切换与「刷新模型」均调用该 Key 的 `/v1/models`，分别显示图片与视频模型；API 可见但尚未接入工作台的模型会注明，不能在生成卡片中选择。图片与视频卡片只提供当前 Key 已列出且工作台已接入的模型；旧卡片的不可用模型保留显示并禁用生成，避免修改已保存的创作参数。
-
-旧单 Key 隐藏配置自动兼容为「原有 Key」，仍使用 `.local/.service-inference.json`、0600 权限，不回显凭据。任务保存 Key 的内部 ID 与名称，后续查询固定使用该 Key。切换 Key 不影响正在执行的任务；被活动任务使用的密钥暂不能替换或删除。模型列表是账号可见性结果，不代表实时余额、服务容量或最终生成成功。
-
-### ComfyUI 局域网访问
-
-在 ComfyUI 原启动命令后添加 `--listen 0.0.0.0 --port 8188`，等待运行和排队任务结束、同步生成历史后重启。Windows 防火墙可按 ComfyUI 实际 Python 程序、有线网卡、专用网络和 `LocalSubnet` 限定 TCP 8188 入站。其他设备访问 `http://服务机器的局域网IP:8188`，工作台连接配置中的 Host 填该 IP；服务机器自身仍可使用 `127.0.0.1`。
-
-ComfyUI 默认没有账号保护，只向可信局域网开放，不需要路由器公网端口映射。此设置只开放 ComfyUI，不开放工作台 Tornado 或 PostgreSQL。局域网设备需安装自己的工作台，或使用 ComfyUI 自带网页；本地队列排序扩展目前仅接受回环请求，因此远程工作台的队列拖动排序暂不支持。
-
-### 评论区卡片
-
-画布工具栏点击「＋ 评论区」，创建独立 `chat_id`。设置中可重命名并填写每包 25–100 条（默认 50）。评论每次发送即落库，尾包未满时追加，满后创建新包；修改条数只影响后续新包，不重写历史。顶部「刷新评论」获取最新记录，「加载更早的一包」向前读取。
-
-评论支持纯文本、Markdown、HTML 源码预览及 `contenteditable` 富文本（粗体、斜体、下划线、列表）。Markdown 使用 Marked 18.0.13，HTML / 富文本使用 DOMPurify 3.4.15 的标签和属性白名单渲染；不执行脚本、事件、表单或自定义 CSS。第三方浏览器文件及许可证随源码保存在 `backend/web/vendor`，不依赖运行时 CDN。正文最多 100000 字符，草稿保存在本机当前账号的浏览器存储中，发送成功后清空。
-
-每条评论最多 10 个图片/视频附件，可选择文件、拖入或粘贴，选择上传到本机或已配置的云存储；也可填写 HTTP / HTTPS 直链并指定图片/视频类型。引用下拉框提供本项目画布的图片/视频素材卡片及已完成的生成结果，保存引用而不复制文件。图片最多 20 MB，视频最多 200 MB；文件类型沿用现有上传限制。地址附件保留原始地址，需要目标可访问且浏览器支持对应编码。
-
-评论区和消息包分别按自身 UUID 求余存放于两个库的 `entities` 中，不塞入画布 JSON：
-
-- `kind=chat`：`block_id` 即 `chat_id`，记录项目、所有者、分包大小、头尾包 ID 和评论/包计数。
-- `kind=chat_pack`：独立 entity，含 `chat_id`、`prev_id`、`next_id`、固定 `capacity` 和 `messages` 数组。结构为 `chat → head ↔ … ↔ tail`。
-- 发送通过行锁和事务同时更新包与链指针，消息 UUID 实现丢失响应后的幂等重试；按登录用户和项目校验线程、附件及生成结果。
-
-移除评论区卡片保留数据库中的评论；当前不提供删除评论或多用户共享。评论上传/发送进行中不可退出项目。隔离验证命令：`node_modules/.bin/electron scripts/smoke-comments.cjs`（Windows 使用 `electron.cmd`），覆盖四种文字模式、媒体文件/地址/引用、分包翻页和草稿重开；后端回归包含并发、幂等和越权检查。
-
-
 ### 云存储多配置列表
 
 下图展示七牛、阿里云和腾讯云配置列表，以及独立的编辑表单；域名和 Bucket 均为测试示例。
@@ -483,77 +454,163 @@ ComfyUI 默认没有账号保护，只向可信局域网开放，不需要路由
 
 上传记录绑定发起时的配置 ID，切换启用项不影响正在上传文件的确认；修改或删除该配置的连接参数会使尚未确认的上传要求恢复原配置后重试。配置改名不改变文件去重指纹，已有素材 URL 和项目引用保留。密钥仍只保存在隐藏文件 `.local/.cloud-storage.json` 中，不经设置接口回显。
 
+## 安装与开发
 
-### 评论视频片段播放
+### macOS 源码启动
 
-在评论附件中选择「引用时间段」，填写开始和结束秒数，或使用当前播放位置设置边界。点击「播放选段」会从开始位置播放，到结束位置暂停；保存后可在评论及下游素材库中回看片段。
+准备 Homebrew、Python 3.12 和 Node.js 22.12+ 后，在仓库根目录执行：
 
-下图使用 1 秒测试视频，指定 **0.20–0.55 秒**。只记录起止时间并引用原视频，不裁剪生成新文件；实际片段边界受浏览器播放时序和视频关键帧影响。
+```sh
+brew install postgresql@18
+python3.12 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+npm ci
+mkdir -p runtime/pgsql
+ln -s "$(brew --prefix postgresql@18)/bin" runtime/pgsql/bin
+npm run db:init
+./Start_Dev.command
+```
 
-![评论视频片段引用：开始 0.2 秒、结束 0.55 秒，以及播放选段和保存按钮](docs/screenshots/video-clip.png)
+若 `runtime/pgsql/bin` 已存在，先确认它指向可用的 PostgreSQL，无需重复建立链接。数据库由工作台管理，数据保存在项目 `.local/`；无需运行 `brew services start`。后续可双击 `Start_Dev.command` 启动，首次进入后自行创建账号。ComfyUI 在另一台机器上时，通过界面“ComfyUI 配置”填写其局域网 IP 和端口。
 
-### 评论关联、片段引用与图片标注
+### Windows 开发启动
 
-**标注与原图分开保存，不为每次标注新增一张云存储图片。** 框选、涂鸦的坐标和笔迹保存于评论附件的 JSON 数据中，原素材 ID / URL 保持不变；可撤销、清空或再次引用标注。下图红色标记由应用内实际鼠标操作绘制。
+需要 Python 3.12、Node.js 22.12+ 和新版 Microsoft Visual C++ x64 运行库。PostgreSQL 二进制来自 [EDB 官方下载页](https://www.enterprisedb.com/download-postgresql-binaries)，本版使用 18.6。
 
-![评论附件图片标注：红色矩形框选与自由涂鸦，以及保存引用标注按钮](docs/screenshots/image-review.png)
+```powershell
+git clone https://github.com/hotpoor/hotpoor_director.git
+cd hotpoor_director
+powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
+npm start
+```
 
-评论卡片现在与其他卡片一样具有左右连接点。将图片/视频素材或生成卡片的右侧连到评论左侧，在「引入素材库」点击「引用并评论」；再把评论右侧连到下游卡片，即可在下游素材库查看评论附件、说明和标注。连接保存于原画布连线结构，支持鼠标拖线及连接点键盘 Enter。评论历史的素材索引按包加载并缓存已满包，不要求先手动展开所有旧评论，断开连线不删除评论或附件。
 
-评论草稿中的每个附件提供「框选 / 涂鸦」或「引用时间段」。图片标注编辑器以 SVG 叠加框线和自由笔迹，支持颜色、撤销与清空；数据库只保存 0–1 相对坐标和受限形状数据，不接受可执行 SVG。缩放图片和重新打开后保持原位置，最多 50 处标注、4000 个笔迹点。
+如 Python 不在 PATH：`scripts/setup.ps1 -Python '完整路径/python.exe'`。如使用合法的应用本地 VC Runtime 目录，可以加 `-VCRuntimeDir '完整目录'` 将运行库放入 PostgreSQL 的 bin 目录，避免依赖系统旧版 DLL。
 
-视频引用可填写起止秒数，或把当前播放位置设为开始/结束，预览会从开始播放并在结束处暂停。发送后评论和下游素材库均显示时间范围及「播放引用片段」。已有评论附件可以点击「引用并标注」再次讨论。
+首次桌面启动会让你设置自己的账号和密码（12–256 字符），创建后自动登录。没有共享默认账号，创建首个账号的接口需要桌面进程产生的一次性启动凭据，同时使用 XSRF 校验。已有账号后不开放注册。
 
-标注保存在评论附件的 `review` 字段：图片使用 `{kind:"image",shapes:[…]}`，视频使用 `{kind:"video",start:秒,end:秒}`。继续引用原素材 ID 或 URL，不生成裁剪视频、合成图片或重新上传文件。下游选择「用作参考素材」时仍使用原素材；评论标注是审阅层，不会自动烘焙为模型输入图像或截取生成参考视频。视频需原地址支持访问、浏览器解码及定位，选段播放精度受媒体关键帧和浏览器播放时序影响。
+也可通过交互命令创建账号（密码输入不回显）：
 
-### 云端生成进度与结果保存
+```powershell
+npm run user:create
+npm run backend
+```
 
-桌面工具栏的“添加到本机 / 直传云存储”同时决定新提交的 service-inference 生成结果保存位置；在线版固定使用云存储。任务提交时记录配置 ID 与指纹，切换启用配置不会改变正在生成任务的目的地。修改或删除原配置时明确提示恢复原配置，不静默落盘到本机。
+单独后端默认在 `http://127.0.0.1:8765`；桌面模式自动分配 HTTP 端口。登录会话有效期 24 小时，退出会删除服务端会话，旧令牌随即失效。接口包括 `/api/login`、`/api/me`、`/api/logout`；POST 请求需要 `_xsrf` Cookie 对应的 `X-XSRFToken` 请求头。
 
-准备阶段每两秒查询一次上游；上游返回 `task.progress` 或 `task.metadata.progress` 的计数、阶段时持续展示。未提供逐项进度时明确显示“上游尚未提供逐项进度”和最近查询时间，不推算百分比。结果分为读取、上传、对象及公网校验，显示文件序号和实际读取 / 发送字节；上传完成须校验通过后才标记任务完成。
+### 日常开发：直接启动源码
 
-视频生成完成后持久化结果地址；转存失败只重试保存，重启后继续处理同一任务，不重新计费生成。错误区分查询、读取、上传和校验。已存在的本地历史文件不自动迁移。
+双击 `Start_Dev.bat`，或在项目根目录执行 `npm run dev`（`npm start` 也直接运行源码）。Electron 启动 `.venv` 中的 Python 读取 `backend` 源码，无需生成应用 EXE 或重新打包。
 
-七牛视频结果优先由对象存储直接抓取，使用项目目录下的任务ID/输出序号稳定命名，并验证对象与公网读取；抓取不可用时回退到内存转传。直接抓取不经过应用计算SHA-256，不伪造校验值。其他厂商及图片使用MD5命名的流式转传，大文件传输上限放宽到30分钟。
+Windows 一键重启：双击 `Restart_Dev.bat`。脚本先请求关闭当前源码目录的 Electron，等待后端和数据库正常退出；165 秒后仍未退出则结束该目录的残留 Electron / 后端，再通过 `pg_ctl` 正常停止所选数据目录的内置数据库。随后复用应用启动流程，按数据库 → 后端 → 桌面窗口顺序启动，等待就绪后显示地址。外部数据库不由脚本停止；ComfyUI 独立运行。启动日志保存在 `.local/restart-logs/`。可先执行 `Restart_Dev.bat -DryRun` 查看匹配范围而不重启。重启前保存正在编辑的内容，并等待应用内正在执行的命令结束。
 
-### 视频时间轴（2026-09-18）
+- 修改 `backend/web` 下的 HTML、CSS、页面 JS 和图片，保存后窗口自动刷新。
+- F12 打开/关闭开发者工具。
+- 修改 Python 文件或 `desktop/main.cjs` 后，关闭窗口再启动。
+- 如果本项目尚无 `.local/config.json`，但此前桌面版已有账号数据库，会自动使用现有 `userData` 配置。`DIRECTOR_DATA_DIR` 可以显式指定另一套数据。
 
-打开项目，在画布底部点击「时间轴」。选择画布素材或已完成的视频结果，点击「接到末尾」按真实时长连续追加；在时间轴上滚轮横向移动，缩放滑块或 Ctrl/⌘ + 滚轮改变秒数比例。拖动片段移动，拖动两端裁剪，选择后可输入精确开始秒数、持续秒数和素材入点。默认磁吸到相邻片段边缘、字幕边缘、播放线及开始线，按住 Alt 暂停磁吸。
+后面的构建命令只在需要分发安装包时使用，日常修改不需要执行。
 
-重叠区由后放置或拖动的片段覆盖，也可点击「置于覆盖顶层」。覆盖保留下层内容，不修改原视频文件。金色开始线决定播放起点，可拖动标尺上的金色标记、输入秒数或将当前播放位置设为开始线；红色播放线表示预览位置，点击标尺或轨道空白处定位。
+### 配置与数据
 
-「＋ 字幕」默认绑定所选/当前视频；跟随字幕使用片内偏移，随视频移动，并仅在绑定视频未被覆盖时显示。可切换「绝对定位」固定在全局时间轴上。跟随字幕必须处于绑定片段范围内，裁剪前可先调整字幕；移除视频会把绑定字幕转为绝对定位并保留其位置。
+开发模式首次运行自动生成 `.local/config.json`；Windows 上目录和文件都设置隐藏属性，并限制为当前用户访问。实际配置、数据库数据、运行组件、构建产物都被 `.gitignore` 排除。仓库仅提交 `config.example.json`，不要在示例里放真实凭据。
 
-时间轴随项目自动保存，桌面与线上使用同一实现，云端同步新副本会重写视频、字幕及素材引用。只读成员可查看和播放。当前是剪辑编排与浏览器预览，尚不提供成片渲染/导出；视频切换和定位精度受浏览器解码与网络加载影响。
+安装版本把配置和数据放在 Electron 的 `userData` 目录（Windows 通常为 `%APPDATA%/hotpoor-director`）。数据库目录是其下的 `postgres`，不会放在安装目录中，不会随应用更新覆盖。隐藏文件不是加密；GitHub/Hugging Face token 不会自动复制到本项目。
 
-验证：`node_modules/.bin/electron scripts/smoke-timeline.cjs` 使用独立数据库，覆盖实际鼠标拖动、磁吸、重叠、裁剪、字幕两种定位、缩放横滚、保存重开与预览。
+PostgreSQL 默认绑定 `127.0.0.1:55432`，只允许本机连接，并使用 SCRAM 密码认证。端口占用时在配置中更换端口。`DIRECTOR_DATA_DIR` 可覆盖配置/数据目录，`DIRECTOR_PG_BIN` 可指定 PostgreSQL 二进制目录。
 
-卡片标题旁的「✎」可重命名图片生成、视频生成及素材卡片（评论区仍在评论区设置中改名）。时间轴素材选择优先展示卡片名，生成视频同时显示生成时间、结果序号及短批次 ID。选择时间轴片段后可填写独立「片段名」，留空时跟随来源名称；轨道显示原视频取用起止秒数，详情保留完整来源。改名不改变素材文件名、引用或剪辑位置，随项目保存与云端同步。
+连接已有 PostgreSQL：将配置 `postgres.mode` 改为 `external`，填写地址、管理账号与应用账号。管理账号需有建库、建角色权限；应用不负责启动或停止外部数据库。桌面后端面向本机访问；云端部署使用独立网关与身份权限配置，见 [云端同步说明](docs/CLOUD-SYNC.md)。
 
-#### 重叠错层与多时间轴 PIN 对比
+应用正常退出时关闭它自己启动的数据库；首次写入较多时磁盘刷新可能需要一分钟。若数据库原本已在运行，附加的命令不会将它关闭。
 
-重叠的视频自动抬到上方独立一行，起点竖线连回底层；非重叠片段可共用一行，接触边界不算重叠。覆盖优先级仍为后放置优先。
+### 数据库
 
-「＋ 新时间轴」创建独立编排，最多 8 个；也可「复制时间轴」比较剪辑方案。点击时间轴名称改名。副本具有独立片段/字幕 ID，跟随字幕仍绑定对应副本片段；时间轴随项目保存及云端同步。收起的时间轴可用底部「时间轴」收起全部后重新打开恢复。
+同一 PostgreSQL 实例创建三个独立数据库：
 
-每条轴可独立播放。勾选「同步播放 / 定位」后，以相同绝对秒数联动播放、暂停和定位；不同长度的时间轴在无片段处显示空画面。收起某条轴会停止该轴，其余轴继续播放。
+| 数据库 | 表 | 字段 |
+| --- | --- | --- |
+| `hotpoor_director` | `index_login` | `login`, `user_id`, `createtime`, `updatetime` |
+| `hotpoor_director1` | `entities`（唯一的用户表） | `block_id`, `body`, `createtime`, `updatetime` |
+| `hotpoor_director2` | `entities`（唯一的用户表） | `block_id`, `body`, `createtime`, `updatetime` |
 
-「PIN 对比窗」可拖动标题栏移动、拖动右下角调整大小；用数字输入「行 × 列」自定义网格，例如 1×3、2×3、3×3；行列各接受 1–16 的整数，最多 PIN 当前项目全部 8 条时间轴。同步播放多轴时会打开对比窗。各轴的「PIN 预览 / 已 PIN」决定参与对比的画面。声音可选择任一时间轴、全部混音或全部静音，窗口内外的声音选择同步；播放器在小预览和 PIN 窗间移动，不产生重复声音。视窗/PIN/声音选择属于当前浏览状态，编排数据持久保存。浏览器解码、缓冲和关键帧仍影响画面级同步精度。
+- `block_id` 和 `user_id`：32 个小写十六进制字符的 UUID，无连字符。`block_id` 通常由应用生成，数据库也提供符合本库分片规则的默认 UUID，并校验格式与分片归属。
+- `body`：JSONB，默认 `{}`；包含 GIN 索引和 `updatetime` 索引。
+- `createtime`、`updatetime`：BIGINT Unix 毫秒时间戳。数据库写入默认值，UPDATE 触发器自动更新 `updatetime` 并保留创建时间。
+- `login`：去除两端空格、统一小写、唯一；同一账号映射一个 `user_id`。
+- 主库另有 `auth_credentials`（Argon2id 密码哈希）和 `auth_sessions`（随机会话令牌的 SHA-256、用户和有效期）。密码不放入 `index_login` 或实体 JSONB。
+- 初始化可重复执行，不清空数据。运行应用使用普通数据库角色，建库使用独立的管理角色。
+- `hotpoor_director` 是索引库；另有 `index_entity_commits` 保存跨分片事务的提交决定，不存实体正文。
+- 实体统一按 `int(block_id, 16) % 2` 路由：余数 `0` → `hotpoor_director1`，余数 `1` → `hotpoor_director2`。项目、素材、评论、消息包、生成任务及云上传记录均遵循此规则，业务类型不决定数据库。
+- 按 ID 的读写只访问对应分片；列表查询汇总两个库，再按时间全局排序。数据库 CHECK 约束拒绝向错误分片写入 UUID。
+- 评论等跨分片写入采用 PostgreSQL 两阶段提交，索引库保存提交决定；下一次实体访问或启动时恢复中断事务。为保证恢复与查询一致性，实体事务通过索引库 advisory lock 串行执行，适用于当前本地工作台，尚未做高并发扩展。
+- 内置 PostgreSQL 启动参数自动设置 `max_prepared_transactions=32`；外置实例需自行配置该值并重启，最低要求为 `2`。三个库仍是独立数据库，没有主从复制。
 
-声音默认「跟随播放轴」：独立播放时听最后发起播放的轴，同步播放时听发起同步播放的轴；也可手动固定某轴、混音或静音。预览右下角的「音源 / 静音」标记显示当前路由。2026-09-18 已修复第二轴动态编辑控件绑定问题，拖动、裁剪与片段命名对各轴独立生效。
+#### 从旧的业务分库迁移
 
-同一服务中的同一项目支持约每秒检查更新：保存后的卡片和时间轴自动更新到其他窗口，不同位置的修改进行三方合并；同一字段冲突保留当前草稿并提示。鼠标进入或焦点进入卡片／时间轴时申请独占编辑锁，其他窗口显示编辑者账号（同账号不同窗口也互斥）。离开且保存完成后释放；关闭或断网停止续租，锁最多 15 秒过期。播放预览仍可使用。客户端与线上使用同一实现；本机项目副本与云端副本仍通过已有同步功能管理。
+关闭所有旧版本工作台后启动新版本，或执行 `python -m backend init-db`。初始化会自动检查并迁移放错分片的实体：先在配置目录的 `backups/uuid-shards-*.jsonl` 保存待迁移记录，再逐条复制、核对全部字段，最后删除旧库副本。UUID、JSONB、创建时间和更新时间均保留；迁移可重复执行。若两个库存在同 UUID、不同内容的记录，会停止并报告冲突，不覆盖数据。备份包含实体原始内容，应按工作台数据妥善保存。
 
-### 生成卡片左右布局与固定生成栏
+已有内置 PostgreSQL 进程若使用旧参数运行，需完全退出工作台并停止该实例后再启动，才能启用两阶段提交。
 
-新图片/视频生成卡片默认 920px 宽：左侧预览、历史与引入素材，右侧模型、提示词与参数，各自滚动；底部固定输出尺寸/比例/时长和生成按钮。点击「调整尺寸」定位到参数。已有窄卡片可在标题栏点击「左右布局」展开，「上下布局」恢复 480px；拖窄至 760px 以下也会自动上下排列。只调整卡片显示，不修改生成尺寸，宽度随项目保存。
+### 构建和验证
 
-service-inference 设置使用用户提供的 [TokenMart Logo](https://console.service-inference.ai/tokenmart-cart.png)，点击 Logo 可打开 [TokenMart 控制台](https://console.service-inference.ai/)。窗口分为左侧「管理 AK」和右侧「应用 AK」两个 Tab，默认管理 AK；应用 AK 用于生成和对话，管理 AK 用于费用与用量查询。切换 Tab 保留未保存输入并隐藏已显示密钥，查询绑定管理 AK 的费用会自动切换到管理 Tab。客户端需重启一次以载入系统浏览器跳转支持。
+```powershell
+npm test
+npm run pack
+npm run dist
+```
 
-### 在线 H3 人物与音色参考（桌面 / 网页共用）
+PyInstaller 将 Python/Tornado 打包为独立后端；Electron Builder 将后端和 PostgreSQL `bin/lib/share` 一起放入 Windows 安装包。构建目录为 `release`。不包含本地配置、账号、数据库数据、pgAdmin 或测试数据库。安装包默认未做代码签名，公开分发前需配置签名及检查第三方运行组件的再分发许可。
 
-选择 MiniMax H3 · 云端 → 多元素参考，上传人物图和独立 MP3/WAV，再设置 4–15 秒。图片最多9张，视频/音频各最多3段，混合最多12项；音频须搭配图片或视频。视频、音频单段2–15秒，各类合计最多15秒；音频单文件≤15MB。远程媒体格式与时长最终由服务商校验。
+集成测试使用 `.test-data` 下的独立临时 PostgreSQL，验证实体字段、时间戳、JSONB、UUID 校验、密码哈希、账号唯一性、XSRF、首次账号保护、登录限流、会话注销和并发写入，不修改开发数据库。
 
-声音参考示例：`<Audio 1> is the voice-timbre reference for the presenter in <Picture 1>. Reference the timbre only; speak the new dialogue without copying the original words.` 图片和音频均作为独立 content 项传给服务商，音频使用 `type: audio_url`、`role: reference_audio`。普通图生视频模式保持原行为；含音频的请求必须使用多元素参考，防止音频被忽略。
+当前提供 Windows x64 打包流程和 macOS 源码启动方式。跨平台打包需准备对应 PostgreSQL 二进制并在目标系统验证；本仓库未提供已验证的 Linux 安装包流程。
 
-字段依据：[MiniMax 官方 H3 API](https://platform.minimax.io/docs/api-reference/video-generation-v2-create)；提示词依据：[官方 H3 Prompt Writing](https://github.com/MiniMax-AI/MiniMax-H3/tree/main/skills/h3-prompt-writing)。服务商沿用 `/v1/video/generate` 和 `minimax-h3`。接收任务并不代表音色效果已验证。
+#### 开发验证
+
+`npm test` 使用独立临时 PostgreSQL。`scripts/smoke-studio.cjs` 使用 `.test-data/studio-smoke` 数据库（需预先准备测试配置，端口建议 55440），检查项目创建、参数切换、八方向缩放、自动保存、重新打开和窄窗口布局。`scripts/smoke-generation.py` 为可选真实 GPU 测试，会提交一张 256px 图生图，使用上述 UI 测试账号；不自动加入常规测试。
+
+Logo 使用用户提供的透明原图，`scripts/prepare_brand.py` 可使用 Pillow 重建黑色原版、白色反白版和 PNG/ICO。原始透明图不加外圈白边。
+
+### Antigravity / 代码助手接入
+
+让助手先阅读 [SKILL.md](SKILL.md)。现有 CLI 使用 Director 已配置且启用的 service-inference AK，支持模型发现、文本调用、周期费用和余额查询：
+
+```sh
+python3 scripts/service-inference-cli.py keys
+python3 scripts/service-inference-cli.py models
+printf '%s' '请整理这段资料的要点' | python3 scripts/service-inference-cli.py chat --model gpt-6-astra
+python3 scripts/service-inference-cli.py cost --period 24h
+```
+
+费用查询需要绑定管理 AK。周期账单及按 Key 分摊值不应冒充精确单次价格；详见 [SKILL 的调用与费用说明](SKILL.md#antigravity-调用文本模型与查询费用)。CLI 文本调用不等同于桌面对话历史或本地代理执行。
+
+## 技术栈与服务来源
+
+<a href="https://console.service-inference.ai/"><img src="backend/web/brand/tokenmart-cart.png" width="88" alt="TokenMart · service-inference 控制台"></a>
+
+**云端 API 服务供应商：service-inference（TokenMart）**。点击 Logo 或进入 [TokenMart 控制台](https://console.service-inference.ai/) 管理服务账号与 AK。本项目通过该服务调用云端图片、视频和对话模型；推理 API 地址为 `https://model.service-inference.ai`，管理 AK 用于查询服务商提供的余额与账单。
+
+| 技术 / 服务 | 在本项目中的职责 | 来源 |
+| --- | --- | --- |
+| <a href="https://html.spec.whatwg.org/"><img src="docs/logos/html5.svg" height="32" alt="HTML5" title="HTML5"></a> <a href="https://www.w3.org/Style/CSS/"><img src="docs/logos/css3.svg" height="32" alt="CSS" title="CSS"></a> <a href="https://tc39.es/ecma262/"><img src="docs/logos/javascript.svg" height="32" alt="JavaScript" title="JavaScript"></a><br>HTML / CSS / JavaScript | 项目页面、无限画布、生成卡片与对话界面 | [本仓库前端源码](backend/web/) |
+| <a href="https://www.electronjs.org/"><img src="docs/logos/electron.svg" height="32" alt="Electron" title="Electron"></a> <a href="https://www.chromium.org/"><img src="docs/logos/chromium.png" height="32" alt="Chromium" title="Chromium"></a> <a href="https://nodejs.org/"><img src="docs/logos/nodejs.svg" height="32" alt="Node.js" title="Node.js"></a><br>Electron（Chromium / Node.js） | 桌面客户端、系统集成与本机命令执行 | [Electron 官方网站](https://www.electronjs.org/) |
+| <a href="https://www.python.org/"><img src="docs/logos/python.svg" height="32" alt="Python" title="Python"></a> <a href="https://www.tornadoweb.org/en/stable/"><img src="docs/logos/tornado.png" height="32" alt="Tornado" title="Tornado"></a><br>Python / Tornado | 本机 HTTP API、任务调度与生成服务适配 | [Python](https://www.python.org/) · [Tornado](https://www.tornadoweb.org/en/stable/) |
+| <a href="https://www.postgresql.org/"><img src="docs/logos/postgresql.svg" height="32" alt="PostgreSQL" title="PostgreSQL"></a> <a href="https://www.psycopg.org/"><img src="docs/logos/psycopg.png" height="32" alt="Psycopg" title="Psycopg"></a><br>PostgreSQL / Psycopg | 账号、项目、对话与任务数据持久化 | [PostgreSQL](https://www.postgresql.org/) · [Psycopg](https://www.psycopg.org/) |
+| <a href="https://github.com/Comfy-Org/ComfyUI"><img src="docs/logos/comfyui.svg" height="32" alt="ComfyUI" title="ComfyUI"></a><br>ComfyUI | 用户独立部署的本地模型推理与工作流执行 | [ComfyUI 官方仓库](https://github.com/Comfy-Org/ComfyUI) |
+| <a href="https://console.service-inference.ai/"><img src="backend/web/brand/tokenmart-cart.png" height="32" alt="TokenMart" title="TokenMart"></a><br>service-inference / TokenMart | 云端模型 API、AK 管理及用量账单服务 | [TokenMart 控制台](https://console.service-inference.ai/) |
+
+Hotpoor Director 负责工作台界面与服务编排；以上开源技术由各自项目维护，云端 API 由 service-inference 提供，本地推理由用户配置的 ComfyUI 执行。模型名称表示调用的模型，API 服务供应商与模型开发方分别标识。TokenMart Logo [原图来源](https://console.service-inference.ai/tokenmart-cart.png)，品牌与标识归其各自权利人所有。其余 Logo 的下载来源与许可说明见 [Logo 来源清单](docs/logos/README.md)。
+
+## 文档与当前边界
+
+| 文档 | 内容 |
+| --- | --- |
+| [助手与部署指南](SKILL.md) | 首次部署、架构、维护排查、模型调用与费用 CLI |
+| [云端同步与协作](docs/CLOUD-SYNC.md) | 多目标同步、资源上传、成员与分享权限 |
+| [开发日志](DEVELOPMENT_LOG.md) | 实现过程、历史验证及变更记录 |
+| [截图来源](docs/screenshots/README.md) | 采集脚本、测试场景与图片清单 |
+| [模型磁盘迁移](docs/SSD-MIGRATION.md) | 本地模型存储迁移说明 |
+
+当前时间轴提供编排与预览，尚无成片渲染导出；浏览器多视频播放不保证逐帧同步。云端生成不提供客户端取消 / 排序，提交中断时不会自动重发付费请求。对话归个人账号私有，不参与项目分享与同步。本机代理的执行目录是工作目录校验，不是系统沙箱。
+
+画布与存储截图主要采集于 2026-09-15，时间轴截图采集于 2026-09-18，对话截图更新于 2026-09-23。截图使用独立测试账号及模拟云响应，展示界面功能，不代表模型生成质量或真实服务联通结果；较早截图的控件样式可能与当前版本不同。
