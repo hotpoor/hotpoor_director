@@ -1,5 +1,7 @@
 """Synchronize the chronological biography and daily counts from the development log."""
 import argparse
+import calendar
+from datetime import date
 from html import escape
 from collections import Counter
 from pathlib import Path
@@ -39,16 +41,64 @@ def daily_summary(entries, reverse):
 
 
 def activity_chart(entries):
+    latest = max(re.match(r'## (\d{4}-\d{2}-\d{2})', entry)[1] for entry in entries)
+    return ('### 每日工作记录分布\n\n'
+            f'展示最新记录所在月份（{latest[:7]}）。绿色越深，当天开发记录越多；浅灰色表示没有日志记录，虚线表示晚于最新记录日期。数字为记录条数，并非 Git 提交数或工时。\n\n'
+            '![每日开发记录绿色活动日历](docs/charts/development-activity.svg)\n\n'
+            '完整日期与数量见上表，图表随日志自动更新。')
+
+
+def activity_svg(entries):
     counts = Counter(re.match(r'## (\d{4}-\d{2}-\d{2})', entry)[1] for entry in entries)
-    days = sorted(counts, reverse=True)[:14]
-    labels = ', '.join('"' + day + ' · ' + str(counts[day]) + ' 条"' for day in days)
-    values = ', '.join(str(counts[day]) for day in days)
-    return ('### 每日工作记录分布\n\n最近 14 个有记录日期；条形长度表示记录数量，不表示耗时。完整数据见上表。\n\n'
-            '```mermaid\nxychart-beta horizontal\n'
-            '    title "每日开发记录"\n'
-            f'    x-axis [{labels}]\n'
-            f'    y-axis "记录数" 0 --> {max(counts[day] for day in days) + 2}\n'
-            f'    bar [{values}]\n```')
+    latest = date.fromisoformat(max(counts))
+    weeks = calendar.Calendar(firstweekday=0).monthdatescalendar(latest.year, latest.month)
+    month = f'{latest.year:04d}-{latest.month:02d}'
+    month_counts = {day: count for day, count in counts.items() if day.startswith(month)}
+    total = sum(month_counts.values())
+    height = 166 + len(weeks) * 58
+    colors = ['#ebedf0', '#9be9a8', '#40c463', '#30a14e', '#216e39']
+    def level(count):
+        return 0 if count == 0 else 1 if count <= 3 else 2 if count <= 7 else 3 if count <= 14 else 4
+    parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="820" height="{height}" viewBox="0 0 820 {height}" role="img" aria-labelledby="title desc">',
+             f'<title id="title">{month} 开发记录活动日历</title>',
+             '<desc id="desc">每天一个格子，绿色深浅表示开发记录条数，格子内显示日期和数量。统计来自开发日志，不代表 Git 提交数或工作时长。</desc>',
+             '<rect width="100%" height="100%" rx="12" fill="#ffffff" stroke="#d1d9e0"/>',
+             '<g font-family="Arial, PingFang SC, Microsoft YaHei, sans-serif" fill="#1f2328">',
+             f'<text x="28" y="36" font-size="20" font-weight="600">{latest.year} 年 {latest.month} 月 · 开发活动</text>',
+             f'<text x="28" y="61" font-size="12" fill="#59636e">记录截至 {latest.isoformat()} · 每格一天</text>']
+    for column, label in enumerate(['一', '二', '三', '四', '五', '六', '日']):
+        parts.append(f'<text x="{54 + column * 68}" y="88" text-anchor="middle" font-size="12" fill="#59636e">周{label}</text>')
+    for row, week in enumerate(weeks):
+        for column, day in enumerate(week):
+            if day.month != latest.month:
+                continue
+            key = day.isoformat(); count = counts.get(key, 0)
+            x, y = 28 + column * 68, 101 + row * 58
+            future = day > latest
+            shade = level(count)
+            foreground = '#ffffff' if shade >= 3 else '#1f2328'
+            fill = '#ffffff' if future else colors[shade]
+            dash = ' stroke-dasharray="3 3"' if future else ''
+            hint = '晚于最新记录日期' if future else f'{count} 条开发记录'
+            parts += [f'<g><title>{key}：{hint}</title>',
+                      f'<rect x="{x}" y="{y}" width="54" height="48" rx="5" fill="{fill}" stroke="#d1d9e0"{dash}/>',
+                      f'<text x="{x + 7}" y="{y + 15}" font-size="11" fill="{foreground}">{day.day}</text>']
+            if count:
+                parts.append(f'<text x="{x + 27}" y="{y + 36}" text-anchor="middle" font-size="16" font-weight="600" fill="{foreground}">{count}</text>')
+            parts.append('</g>')
+    parts += [f'<text x="540" y="136" font-size="36" font-weight="600">{total}</text>',
+              '<text x="540" y="159" font-size="13" fill="#59636e">本月开发记录</text>',
+              f'<text x="540" y="207" font-size="28" font-weight="600">{len(month_counts)}</text>',
+              '<text x="540" y="230" font-size="13" fill="#59636e">有记录的日期</text>',
+              '<text x="540" y="272" font-size="12" fill="#59636e">格子上方：日期</text>',
+              '<text x="540" y="292" font-size="12" fill="#59636e">格子下方：记录条数</text>']
+    legend_y = height - 30
+    for i, (color, label) in enumerate(zip(colors, ['无记录', '1–3', '4–7', '8–14', '15+'])):
+        x = 28 + i * 94
+        parts += [f'<rect x="{x}" y="{legend_y - 13}" width="14" height="14" rx="3" fill="{color}" stroke="#d1d9e0"/>',
+                  f'<text x="{x + 20}" y="{legend_y - 2}" font-size="11" fill="#59636e">{label}</text>']
+    parts += ['</g>', '</svg>']
+    return '\n'.join(parts) + '\n'
 
 
 def history_chart(entries):
@@ -98,12 +148,17 @@ def main():
     expected_log = re.sub(SUMMARY_PATTERN, lambda _: summary, source, flags=re.S)
     expected_history = HEADER + history_chart(entries) + '\n\n' + daily_summary(entries, False) + '\n\n' + '\n\n'.join(reversed(entries)) + '\n'
     target = ROOT / 'DEVELOPMENT_HISTORY.md'
+    chart_path = ROOT / 'docs/charts/development-activity.svg'
+    expected_chart = activity_svg(entries)
     if args.check:
-        if source != expected_log or not target.exists() or target.read_text(encoding='utf-8') != expected_history:
+        if (source != expected_log or not target.exists() or target.read_text(encoding='utf-8') != expected_history
+                or not chart_path.exists() or chart_path.read_text(encoding='utf-8') != expected_chart):
             print('Development docs are out of sync; run scripts/sync-development-history.py', file=sys.stderr)
             return 1
         print(f'Verified {len(entries)} matching entries, recording order and daily counts.')
     else:
+        chart_path.parent.mkdir(parents=True, exist_ok=True)
+        chart_path.write_text(expected_chart, encoding='utf-8')
         log_path.write_text(expected_log, encoding='utf-8')
         target.write_text(expected_history, encoding='utf-8')
         print(f'Synchronized {len(entries)} entries and daily counts.')

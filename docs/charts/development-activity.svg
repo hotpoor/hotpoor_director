@@ -1,0 +1,162 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="456" viewBox="0 0 820 456" role="img" aria-labelledby="title desc">
+<title id="title">2026-09 开发记录活动日历</title>
+<desc id="desc">每天一个格子，绿色深浅表示开发记录条数，格子内显示日期和数量。统计来自开发日志，不代表 Git 提交数或工作时长。</desc>
+<rect width="100%" height="100%" rx="12" fill="#ffffff" stroke="#d1d9e0"/>
+<g font-family="Arial, PingFang SC, Microsoft YaHei, sans-serif" fill="#1f2328">
+<text x="28" y="36" font-size="20" font-weight="600">2026 年 9 月 · 开发活动</text>
+<text x="28" y="61" font-size="12" fill="#59636e">记录截至 2026-09-23 · 每格一天</text>
+<text x="54" y="88" text-anchor="middle" font-size="12" fill="#59636e">周一</text>
+<text x="122" y="88" text-anchor="middle" font-size="12" fill="#59636e">周二</text>
+<text x="190" y="88" text-anchor="middle" font-size="12" fill="#59636e">周三</text>
+<text x="258" y="88" text-anchor="middle" font-size="12" fill="#59636e">周四</text>
+<text x="326" y="88" text-anchor="middle" font-size="12" fill="#59636e">周五</text>
+<text x="394" y="88" text-anchor="middle" font-size="12" fill="#59636e">周六</text>
+<text x="462" y="88" text-anchor="middle" font-size="12" fill="#59636e">周日</text>
+<g><title>2026-09-01：0 条开发记录</title>
+<rect x="96" y="101" width="54" height="48" rx="5" fill="#ebedf0" stroke="#d1d9e0"/>
+<text x="103" y="116" font-size="11" fill="#1f2328">1</text>
+</g>
+<g><title>2026-09-02：0 条开发记录</title>
+<rect x="164" y="101" width="54" height="48" rx="5" fill="#ebedf0" stroke="#d1d9e0"/>
+<text x="171" y="116" font-size="11" fill="#1f2328">2</text>
+</g>
+<g><title>2026-09-03：0 条开发记录</title>
+<rect x="232" y="101" width="54" height="48" rx="5" fill="#ebedf0" stroke="#d1d9e0"/>
+<text x="239" y="116" font-size="11" fill="#1f2328">3</text>
+</g>
+<g><title>2026-09-04：0 条开发记录</title>
+<rect x="300" y="101" width="54" height="48" rx="5" fill="#ebedf0" stroke="#d1d9e0"/>
+<text x="307" y="116" font-size="11" fill="#1f2328">4</text>
+</g>
+<g><title>2026-09-05：0 条开发记录</title>
+<rect x="368" y="101" width="54" height="48" rx="5" fill="#ebedf0" stroke="#d1d9e0"/>
+<text x="375" y="116" font-size="11" fill="#1f2328">5</text>
+</g>
+<g><title>2026-09-06：0 条开发记录</title>
+<rect x="436" y="101" width="54" height="48" rx="5" fill="#ebedf0" stroke="#d1d9e0"/>
+<text x="443" y="116" font-size="11" fill="#1f2328">6</text>
+</g>
+<g><title>2026-09-07：0 条开发记录</title>
+<rect x="28" y="159" width="54" height="48" rx="5" fill="#ebedf0" stroke="#d1d9e0"/>
+<text x="35" y="174" font-size="11" fill="#1f2328">7</text>
+</g>
+<g><title>2026-09-08：0 条开发记录</title>
+<rect x="96" y="159" width="54" height="48" rx="5" fill="#ebedf0" stroke="#d1d9e0"/>
+<text x="103" y="174" font-size="11" fill="#1f2328">8</text>
+</g>
+<g><title>2026-09-09：0 条开发记录</title>
+<rect x="164" y="159" width="54" height="48" rx="5" fill="#ebedf0" stroke="#d1d9e0"/>
+<text x="171" y="174" font-size="11" fill="#1f2328">9</text>
+</g>
+<g><title>2026-09-10：0 条开发记录</title>
+<rect x="232" y="159" width="54" height="48" rx="5" fill="#ebedf0" stroke="#d1d9e0"/>
+<text x="239" y="174" font-size="11" fill="#1f2328">10</text>
+</g>
+<g><title>2026-09-11：0 条开发记录</title>
+<rect x="300" y="159" width="54" height="48" rx="5" fill="#ebedf0" stroke="#d1d9e0"/>
+<text x="307" y="174" font-size="11" fill="#1f2328">11</text>
+</g>
+<g><title>2026-09-12：9 条开发记录</title>
+<rect x="368" y="159" width="54" height="48" rx="5" fill="#30a14e" stroke="#d1d9e0"/>
+<text x="375" y="174" font-size="11" fill="#ffffff">12</text>
+<text x="395" y="195" text-anchor="middle" font-size="16" font-weight="600" fill="#ffffff">9</text>
+</g>
+<g><title>2026-09-13：21 条开发记录</title>
+<rect x="436" y="159" width="54" height="48" rx="5" fill="#216e39" stroke="#d1d9e0"/>
+<text x="443" y="174" font-size="11" fill="#ffffff">13</text>
+<text x="463" y="195" text-anchor="middle" font-size="16" font-weight="600" fill="#ffffff">21</text>
+</g>
+<g><title>2026-09-14：6 条开发记录</title>
+<rect x="28" y="217" width="54" height="48" rx="5" fill="#40c463" stroke="#d1d9e0"/>
+<text x="35" y="232" font-size="11" fill="#1f2328">14</text>
+<text x="55" y="253" text-anchor="middle" font-size="16" font-weight="600" fill="#1f2328">6</text>
+</g>
+<g><title>2026-09-15：13 条开发记录</title>
+<rect x="96" y="217" width="54" height="48" rx="5" fill="#30a14e" stroke="#d1d9e0"/>
+<text x="103" y="232" font-size="11" fill="#ffffff">15</text>
+<text x="123" y="253" text-anchor="middle" font-size="16" font-weight="600" fill="#ffffff">13</text>
+</g>
+<g><title>2026-09-16：1 条开发记录</title>
+<rect x="164" y="217" width="54" height="48" rx="5" fill="#9be9a8" stroke="#d1d9e0"/>
+<text x="171" y="232" font-size="11" fill="#1f2328">16</text>
+<text x="191" y="253" text-anchor="middle" font-size="16" font-weight="600" fill="#1f2328">1</text>
+</g>
+<g><title>2026-09-17：9 条开发记录</title>
+<rect x="232" y="217" width="54" height="48" rx="5" fill="#30a14e" stroke="#d1d9e0"/>
+<text x="239" y="232" font-size="11" fill="#ffffff">17</text>
+<text x="259" y="253" text-anchor="middle" font-size="16" font-weight="600" fill="#ffffff">9</text>
+</g>
+<g><title>2026-09-18：10 条开发记录</title>
+<rect x="300" y="217" width="54" height="48" rx="5" fill="#30a14e" stroke="#d1d9e0"/>
+<text x="307" y="232" font-size="11" fill="#ffffff">18</text>
+<text x="327" y="253" text-anchor="middle" font-size="16" font-weight="600" fill="#ffffff">10</text>
+</g>
+<g><title>2026-09-19：15 条开发记录</title>
+<rect x="368" y="217" width="54" height="48" rx="5" fill="#216e39" stroke="#d1d9e0"/>
+<text x="375" y="232" font-size="11" fill="#ffffff">19</text>
+<text x="395" y="253" text-anchor="middle" font-size="16" font-weight="600" fill="#ffffff">15</text>
+</g>
+<g><title>2026-09-20：11 条开发记录</title>
+<rect x="436" y="217" width="54" height="48" rx="5" fill="#30a14e" stroke="#d1d9e0"/>
+<text x="443" y="232" font-size="11" fill="#ffffff">20</text>
+<text x="463" y="253" text-anchor="middle" font-size="16" font-weight="600" fill="#ffffff">11</text>
+</g>
+<g><title>2026-09-21：0 条开发记录</title>
+<rect x="28" y="275" width="54" height="48" rx="5" fill="#ebedf0" stroke="#d1d9e0"/>
+<text x="35" y="290" font-size="11" fill="#1f2328">21</text>
+</g>
+<g><title>2026-09-22：0 条开发记录</title>
+<rect x="96" y="275" width="54" height="48" rx="5" fill="#ebedf0" stroke="#d1d9e0"/>
+<text x="103" y="290" font-size="11" fill="#1f2328">22</text>
+</g>
+<g><title>2026-09-23：10 条开发记录</title>
+<rect x="164" y="275" width="54" height="48" rx="5" fill="#30a14e" stroke="#d1d9e0"/>
+<text x="171" y="290" font-size="11" fill="#ffffff">23</text>
+<text x="191" y="311" text-anchor="middle" font-size="16" font-weight="600" fill="#ffffff">10</text>
+</g>
+<g><title>2026-09-24：晚于最新记录日期</title>
+<rect x="232" y="275" width="54" height="48" rx="5" fill="#ffffff" stroke="#d1d9e0" stroke-dasharray="3 3"/>
+<text x="239" y="290" font-size="11" fill="#1f2328">24</text>
+</g>
+<g><title>2026-09-25：晚于最新记录日期</title>
+<rect x="300" y="275" width="54" height="48" rx="5" fill="#ffffff" stroke="#d1d9e0" stroke-dasharray="3 3"/>
+<text x="307" y="290" font-size="11" fill="#1f2328">25</text>
+</g>
+<g><title>2026-09-26：晚于最新记录日期</title>
+<rect x="368" y="275" width="54" height="48" rx="5" fill="#ffffff" stroke="#d1d9e0" stroke-dasharray="3 3"/>
+<text x="375" y="290" font-size="11" fill="#1f2328">26</text>
+</g>
+<g><title>2026-09-27：晚于最新记录日期</title>
+<rect x="436" y="275" width="54" height="48" rx="5" fill="#ffffff" stroke="#d1d9e0" stroke-dasharray="3 3"/>
+<text x="443" y="290" font-size="11" fill="#1f2328">27</text>
+</g>
+<g><title>2026-09-28：晚于最新记录日期</title>
+<rect x="28" y="333" width="54" height="48" rx="5" fill="#ffffff" stroke="#d1d9e0" stroke-dasharray="3 3"/>
+<text x="35" y="348" font-size="11" fill="#1f2328">28</text>
+</g>
+<g><title>2026-09-29：晚于最新记录日期</title>
+<rect x="96" y="333" width="54" height="48" rx="5" fill="#ffffff" stroke="#d1d9e0" stroke-dasharray="3 3"/>
+<text x="103" y="348" font-size="11" fill="#1f2328">29</text>
+</g>
+<g><title>2026-09-30：晚于最新记录日期</title>
+<rect x="164" y="333" width="54" height="48" rx="5" fill="#ffffff" stroke="#d1d9e0" stroke-dasharray="3 3"/>
+<text x="171" y="348" font-size="11" fill="#1f2328">30</text>
+</g>
+<text x="540" y="136" font-size="36" font-weight="600">105</text>
+<text x="540" y="159" font-size="13" fill="#59636e">本月开发记录</text>
+<text x="540" y="207" font-size="28" font-weight="600">10</text>
+<text x="540" y="230" font-size="13" fill="#59636e">有记录的日期</text>
+<text x="540" y="272" font-size="12" fill="#59636e">格子上方：日期</text>
+<text x="540" y="292" font-size="12" fill="#59636e">格子下方：记录条数</text>
+<rect x="28" y="413" width="14" height="14" rx="3" fill="#ebedf0" stroke="#d1d9e0"/>
+<text x="48" y="424" font-size="11" fill="#59636e">无记录</text>
+<rect x="122" y="413" width="14" height="14" rx="3" fill="#9be9a8" stroke="#d1d9e0"/>
+<text x="142" y="424" font-size="11" fill="#59636e">1–3</text>
+<rect x="216" y="413" width="14" height="14" rx="3" fill="#40c463" stroke="#d1d9e0"/>
+<text x="236" y="424" font-size="11" fill="#59636e">4–7</text>
+<rect x="310" y="413" width="14" height="14" rx="3" fill="#30a14e" stroke="#d1d9e0"/>
+<text x="330" y="424" font-size="11" fill="#59636e">8–14</text>
+<rect x="404" y="413" width="14" height="14" rx="3" fill="#216e39" stroke="#d1d9e0"/>
+<text x="424" y="424" font-size="11" fill="#59636e">15+</text>
+</g>
+</svg>
