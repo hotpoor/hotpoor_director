@@ -1,5 +1,6 @@
 """Synchronize the chronological biography and daily counts from the development log."""
 import argparse
+from html import escape
 from collections import Counter
 from pathlib import Path
 import re
@@ -37,6 +38,42 @@ def daily_summary(entries, reverse):
     return '\n'.join(lines)
 
 
+def activity_chart(entries):
+    counts = Counter(re.match(r'## (\d{4}-\d{2}-\d{2})', entry)[1] for entry in entries)
+    days = sorted(counts, reverse=True)[:14]
+    labels = ', '.join('"' + day + ' · ' + str(counts[day]) + ' 条"' for day in days)
+    values = ', '.join(str(counts[day]) for day in days)
+    return ('### 每日工作记录分布\n\n最近 14 个有记录日期；条形长度表示记录数量，不表示耗时。完整数据见上表。\n\n'
+            '```mermaid\nxychart-beta horizontal\n'
+            '    title "每日开发记录"\n'
+            f'    x-axis [{labels}]\n'
+            f'    y-axis "记录数" 0 --> {max(counts[day] for day in days) + 2}\n'
+            f'    bar [{values}]\n```')
+
+
+def history_chart(entries):
+    chronological = list(reversed(entries))
+    counts = Counter(re.match(r'## (\d{4}-\d{2}-\d{2})', entry)[1] for entry in entries)
+    examples = {}
+    for entry in chronological:
+        day = re.match(r'## (\d{4}-\d{2}-\d{2})', entry)[1]
+        title = re.sub(r'^## \d{4}-\d{2}-\d{2}(?: \d{2}:\d{2})?\s*[·：:]?\s*', '', entry.splitlines()[0])
+        # Escape text inside Mermaid quoted labels without changing source records.
+        title = '<br/>'.join(escape(title[i:i + 12], quote=True) for i in range(0, len(title), 12))
+        examples.setdefault(day, title)
+    days = sorted(counts)
+    parts = ['## 开发时间线', '', '从左向右阅读，每组最多 5 个日期。节点展示当日记录数及一条记录示例；间距不代表实际时间跨度，完整事项见下方正文。', '']
+    for offset in range(0, len(days), 5):
+        group = days[offset:offset + 5]
+        parts += [f'### {group[0]} 至 {group[-1]}', '', '```mermaid', 'flowchart LR']
+        for i, day in enumerate(group):
+            parts.append(f'    d{i}["{day}<br/>{counts[day]} 条记录<br/>{examples[day]}"]')
+        if len(group) > 1:
+            parts.append('    ' + ' --> '.join(f'd{i}' for i in range(len(group))))
+        parts += ['```', '']
+    return '\n'.join(parts).rstrip()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check', action='store_true', help='Check without writing files')
@@ -55,11 +92,11 @@ def main():
     timed = re.findall(r'^## (\d{4}-\d{2}-\d{2} \d{2}:\d{2})', source, re.M)
     if timed != sorted(timed, reverse=True):
         parser.error('Timestamped entries must have newest recording times first')
-    summary = '<!-- daily-summary:start -->\n' + daily_summary(entries, True) + '\n<!-- daily-summary:end -->'
+    summary = '<!-- daily-summary:start -->\n' + daily_summary(entries, True) + '\n\n' + activity_chart(entries) + '\n<!-- daily-summary:end -->'
     if len(re.findall(SUMMARY_PATTERN, source, re.S)) != 1:
         parser.error('Expected one daily-summary marker pair in development log')
     expected_log = re.sub(SUMMARY_PATTERN, lambda _: summary, source, flags=re.S)
-    expected_history = HEADER + daily_summary(entries, False) + '\n\n' + '\n\n'.join(reversed(entries)) + '\n'
+    expected_history = HEADER + history_chart(entries) + '\n\n' + daily_summary(entries, False) + '\n\n' + '\n\n'.join(reversed(entries)) + '\n'
     target = ROOT / 'DEVELOPMENT_HISTORY.md'
     if args.check:
         if source != expected_log or not target.exists() or target.read_text(encoding='utf-8') != expected_history:
