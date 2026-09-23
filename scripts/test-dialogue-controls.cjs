@@ -1,7 +1,7 @@
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
 const nodes=new Map(),buttons=[{disabled:true},{disabled:true}];
 function $(id){if(!nodes.has(id))nodes.set(id,{id,value:'model',setAttribute(){},querySelectorAll:()=>id==='#dialogue-list'?buttons:[]});return nodes.get(id);}
-const context={$,busy:true,pending:true,current:'conversation',model:$('#model'),key:$('#key'),question:$('#question')};
+const context={$,refreshWikiSelUI(){},busy:true,pending:true,current:'conversation',model:$('#model'),key:$('#key'),question:$('#question')};
 vm.createContext(context);
 const source=fs.readFileSync('backend/web/dialogue.js','utf8');vm.runInContext(source.slice(source.indexOf('  function controls(){'),source.indexOf('  function fileLink(')),context);
 vm.runInContext('controls()',context);assert.ok(buttons.every(b=>b.disabled));

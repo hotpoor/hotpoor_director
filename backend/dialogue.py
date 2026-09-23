@@ -512,18 +512,7 @@ class DialogueHandler(PrivateHandler):
             self.finish(result)
             return
         if data.get('action') == 'wiki_update':
-            selections = data.get('selections')
-            if not isinstance(selections, list) or len(selections) > 50:
-                raise HTTPError(400, reason='知识库勾选范围需为不超过 50 项的列表')
-            cleaned = []
-            for item in selections:
-                if not isinstance(item, dict):
-                    continue
-                path = item.get('path')
-                if not isinstance(path, str) or not 1 <= len(path.strip()) <= 1000:
-                    continue
-                title = item.get('title')
-                cleaned.append({'path': path.strip(), 'title': (title if isinstance(title, str) else path.strip())[:200]})
+            cleaned = wiki.clean_selections(data.get('selections'))
             async with self.projects.connection() as conn:
                 row = await row_for(conn, conversation_id, self.owner)
                 if row['body'].get('pending_id'):
@@ -612,11 +601,12 @@ class DialogueHandler(PrivateHandler):
             await prepare_messages(conn, [messages[-1]], self.settings['config'], self.owner, conversation_id, path)
             raw_messages = messages
             messages = await prepare_messages(conn, messages, self.settings['config'], self.owner, conversation_id, path, enforce_limits=False)
+            wiki_report = None
             if data.get('use_wiki'):
                 wiki_cfg = wiki.load_config(self.settings['config'])
                 selections = (body.get('wiki_selections') or []) if wiki_cfg.get('enabled') else []
                 if selections:
-                    supplement = await wiki.fetch_supplement(wiki_cfg, selections)
+                    supplement, wiki_report = await wiki.retrieve(wiki_cfg, selections, question)
                     if supplement:
                         index = 0
                         while index < len(messages) and messages[index].get('role') == 'system':
@@ -641,6 +631,8 @@ class DialogueHandler(PrivateHandler):
                     'context_ids': [item['id'] for item in context_turns], 'submission': submission,
                     'protocol': path, 'mode': 'agent' if agent else 'chat', 'allowed_paths': folders,
                     'status': 'running', 'created_at': int(time.time() * 1000)}
+            if wiki_report is not None:
+                turn['wiki_retrieval'] = wiki_report
             if saved_summary:
                 turn['context_summary'] = saved_summary
             if dialogue_context.needs_summary(messages):
