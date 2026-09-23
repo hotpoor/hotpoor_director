@@ -630,8 +630,8 @@ Hotpoor Director 负责工作台界面与服务编排；以上开源技术由各
 | --- | --- |
 | [助手与部署指南](SKILL.md) | 首次部署、架构、维护排查、模型调用与费用 CLI |
 | [云端同步与协作](docs/CLOUD-SYNC.md) | 多目标同步、资源上传、成员与分享权限 |
-| [开发日志](DEVELOPMENT_LOG.md) | 最新在前，查看近期改动与验证结果 |
-| [开发传记](DEVELOPMENT_HISTORY.md) | 从早到晚，按时间顺序回顾项目演进 |
+| [开发日志](DEVELOPMENT_LOG.md) | 最新在前，含分钟级记录时间、旧记录提交依据与每日记录数 |
+| [开发传记](DEVELOPMENT_HISTORY.md) | 从早到晚，按时间顺序和每日统计回顾项目演进 |
 | [截图来源](docs/screenshots/README.md) | 采集脚本、测试场景与图片清单 |
 | [模型磁盘迁移](docs/SSD-MIGRATION.md) | 本地模型存储迁移说明 |
 
