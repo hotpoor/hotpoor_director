@@ -27,6 +27,14 @@ description: 部署、运行和维护 Hotpoor Director 导演工作台，解释 
 
 相关验证：`python -m pytest -q tests/test_dialogue.py`；`node scripts/test-agent-ui.cjs`、`node scripts/test-command-output.cjs`、`node scripts/test-command-stop.cjs`、`node scripts/test-dialogue-controls.cjs`。`electron scripts/capture-dialogue-readme.cjs` 在隔离数据中更新文档截图，模型与执行桥为演示桩，不接触真实凭据或执行命令。截图来源必须如实标注。
 
+## Wiki 知识库范围
+
+- 对话里的 Wiki 勾选完整保存当前文件路径清单，不设置文档数量或目录页数上限。前端分页并发和后端正文并发上限为 4，这是并发控制，不是范围截断。
+- 勾选、读取和保存均需保持完整性：分页失败或保存失败时保留旧范围；文件夹显示全选和部分选择。新导入文件需要刷新后重新勾选。
+- 按问题遍历搜索摘要分页并按所选路径过滤，再分批取正文；无匹配时利用 wiki_test 的 Markdown 路径索引（`md`）扫描解析范围。不能恢复逐篇重复扫描整个索引的做法。
+- 字符预算只限制提交的片段，包括标题和来源说明；不把勾选数量说成阅读全文数量。轮次的 `wiki_retrieval` 保存范围、命中、实际来源和字符位置，界面「本次提交」展示统计和来源。
+- 入口为 `backend/wiki.py`、`backend/dialogue.py` 和 `backend/web/dialogue.js`；变更后运行 `tests/test_wiki.py`、`tests/test_dialogue.py`、`scripts/test-wiki-selection.cjs` 与隔离的 `scripts/smoke-wiki.cjs`。
+
 ## 首次部署：Windows x64
 
 当前主要验证平台为 Windows x64。准备 Git、Python 3.12、Node.js 22.12+、Microsoft Visual C++ x64 运行库，以及安装依赖所需的网络连接。ComfyUI 的 Python 环境和本项目 `.venv` 分开使用。

@@ -32,67 +32,113 @@
     const response=await fetch('/api/wiki/'+suffix,{headers:{'X-XSRFToken':xsrfToken()}});
     const result=await response.json();if(!response.ok)throw Error(result.error||result.detail||'wiki 请求失败');return result;
   }
-  let wikiEnabled=false,wikiSelections=[];
+  let wikiEnabled=false,wikiSelections=[],wikiBusy=false;
+  const wikiDirectoryFiles=new Map();
   const wikiButton=document.createElement('button');wikiButton.type='button';wikiButton.className='quiet';wikiButton.textContent='知识库';wikiButton.title='配置并勾选 wiki 知识库，作为对话的系统提示补充';$('.dialogue-controls').append(wikiButton);
   const wikiPanel=document.createElement('aside');wikiPanel.id='dialogue-wiki';wikiPanel.hidden=true;
-  wikiPanel.innerHTML='<header><strong>知识库（wiki 服务器）</strong><button type="button" class="quiet" data-close>✕</button></header><section class="dialogue-wiki-config"><label class="dialogue-wiki-enable"><input type="checkbox" id="wiki-enabled"> 启用知识库注入</label><label>服务器地址<input id="wiki-base-url" placeholder="http://127.0.0.1:8888"></label><label>单篇最大字符<input id="wiki-max-doc" type="number" min="0" max="20000" step="100"></label><label>总计最大字符<input id="wiki-max-total" type="number" min="0" max="80000" step="500"></label><div class="dialogue-wiki-config-actions"><button type="button" id="wiki-save-config">保存设置</button></div><p data-config-notice role="status"></p></section><section class="dialogue-wiki-browse"><div class="dialogue-wiki-selections"><strong>已勾选范围：<span id="wiki-sel-count">0</span> 项</strong><button type="button" class="quiet" id="wiki-clear-sel">清空</button></div><div class="dialogue-wiki-tree-toolbar"><button type="button" id="wiki-tree-refresh">刷新目录</button><span data-tree-status></span></div><nav id="dialogue-wiki-tree" class="dialogue-wiki-tree"></nav></section>';
+  wikiPanel.innerHTML='<header><strong>知识库（wiki 服务器）</strong><button type="button" class="quiet" data-close>✕</button></header><section class="dialogue-wiki-config"><label class="dialogue-wiki-enable"><input type="checkbox" id="wiki-enabled"> 启用知识库注入</label><label>服务器地址<input id="wiki-base-url" placeholder="http://127.0.0.1:8888"></label><label>单篇片段字符预算<input id="wiki-max-doc" type="number" min="0" max="20000" step="100"></label><label>本轮资料字符预算<input id="wiki-max-total" type="number" min="0" max="80000" step="500"></label><div class="dialogue-wiki-config-actions"><button type="button" id="wiki-save-config">保存设置</button></div><p data-config-notice role="status"></p></section><section class="dialogue-wiki-browse"><div class="dialogue-wiki-selections"><strong>已勾选范围：<span id="wiki-sel-count">0</span> 项</strong><button type="button" class="quiet" id="wiki-clear-sel">清空</button></div><div class="dialogue-wiki-tree-toolbar"><button type="button" id="wiki-tree-refresh">刷新目录</button><span data-tree-status></span></div><p class="dialogue-note">勾选不限篇数；文件夹按当前目录完整保存。回答时在勾选范围内搜索，分批读取相关片段，实际来源可在“本次提交”查看。</p><nav id="dialogue-wiki-tree" class="dialogue-wiki-tree"></nav></section>';
   $('.dialogue-main').append(wikiPanel);
   const wikiConfigNotice=wikiPanel.querySelector('[data-config-notice]'),wikiTreeStatus=wikiPanel.querySelector('[data-tree-status]'),wikiTreeEl=wikiPanel.querySelector('#dialogue-wiki-tree');
   wikiPanel.querySelector('[data-close]').onclick=()=>{wikiPanel.hidden=true;};
   const wikiConfirmDlg=document.createElement('dialog');wikiConfirmDlg.id='dialogue-wiki-confirm';
-  wikiConfirmDlg.innerHTML='<form method="dialog"><header><strong>确认知识库范围</strong><button type="button" class="quiet" data-cancel>✕</button></header><p>本次将把以下已勾选的知识库内容作为系统提示补充发送给模型：</p><ul data-list></ul><div class="dialogue-wiki-confirm-actions"><button type="button" class="quiet" data-edit>编辑范围</button><button type="submit" value="cancel" data-cancel>取消</button><button type="submit" value="confirm" data-confirm>确认发送</button></div></form>';
+  wikiConfirmDlg.innerHTML='<form method="dialog"><header><strong>确认知识库范围</strong><button type="button" class="quiet" data-cancel>✕</button></header><p>将在完整勾选范围内按问题搜索，分批读取相关资料。字符预算只限制本轮片段，不限制勾选范围；实际来源显示在“本次提交”中。</p><ul data-list></ul><div class="dialogue-wiki-confirm-actions"><button type="button" class="quiet" data-edit>编辑范围</button><button type="submit" value="cancel" data-cancel>取消</button><button type="submit" value="confirm" data-confirm>确认发送</button></div></form>';
   document.querySelector('#studio').append(wikiConfirmDlg);
-  function wikiAdd(item){const path=String(item.path);if(!wikiSelections.some(s=>s.path===path))wikiSelections.push({path,title:String(item.name||path)});}
-  function wikiRemove(path){wikiSelections=wikiSelections.filter(s=>s.path!==path);}
-  function wikiUnselectDir(prefix){const p=prefix.endsWith('/')?prefix:prefix+'/';wikiSelections=wikiSelections.filter(s=>!s.path.startsWith(p)&&s.path!==prefix);}
-  function refreshWikiSelUI(){wikiPanel.querySelector('#wiki-sel-count').textContent=String(wikiSelections.length);}
-  async function wikiSelectDir(prefix,persist=true){
-    wikiTreeStatus.textContent='正在收集目录内文档…';
-    try{
-      const items=await wikiFetchPages(prefix);
-      for(const it of items){
-        if(wikiSelections.length>=50)break;
-        if(it.kind==='file'&&it.path!==prefix)wikiAdd(it);
+  function rememberWikiFiles(items){
+    for(const item of items){
+      if(item.kind==='directory'&&!wikiDirectoryFiles.has(item.path))wikiDirectoryFiles.set(item.path,new Set());
+      if(item.kind!=='file')continue;
+      const parts=item.path.split('/');
+      for(let i=1;i<parts.length;i++){
+        const prefix=parts.slice(0,i).join('/');
+        if(!wikiDirectoryFiles.has(prefix))wikiDirectoryFiles.set(prefix,new Set());
+        wikiDirectoryFiles.get(prefix).add(item.path);
       }
-    }catch(e){status.textContent='读取目录失败：'+e.message;}
-    finally{wikiTreeStatus.textContent='';refreshWikiSelUI();if(persist)await wikiPersist();}
+    }
   }
-  async function wikiPersist(){
-    if(!current){status.textContent='请先创建或打开一个对话，再保存知识库范围';return false;}
-    try{const result=await api('conversations/'+current,{action:'wiki_update',selections:wikiSelections});if(currentBody)currentBody.wiki_selections=wikiSelections.slice();return true;}
-    catch(e){status.textContent='知识库范围保存失败：'+e.message;return false;}
+  function refreshWikiSelUI(){
+    wikiPanel.querySelector('#wiki-sel-count').textContent=String(wikiSelections.length);
+    const selected=new Set(wikiSelections.map(s=>s.path));
+    for(const checkbox of wikiTreeEl.querySelectorAll('input[data-wiki-path]')){
+      const files=checkbox.dataset.wikiKind==='directory'?wikiDirectoryFiles.get(checkbox.dataset.wikiPath):new Set([checkbox.dataset.wikiPath]);
+      const count=files?[...files].filter(path=>selected.has(path)).length:0;
+      checkbox.checked=Boolean(files?.size&&count===files.size);
+      checkbox.indeterminate=count>0&&count<files.size;
+      checkbox.disabled=wikiBusy||busy||pending;
+    }
+  }
+  async function wikiChange(build){
+    if(wikiBusy||busy||pending){refreshWikiSelUI();return;}
+    if(!current){status.textContent='请先创建或打开一个对话，再保存知识库范围';refreshWikiSelUI();return;}
+    const conversation=current;
+    wikiBusy=true;busy=true;controls();
+    for(const node of wikiPanel.querySelectorAll('input,button'))node.disabled=true;
+    try{
+      const next=await build(wikiSelections.slice());
+      if(current!==conversation)throw Error('对话已切换，请重新勾选');
+      // Commit UI state only after the entire directory and save have succeeded.
+      const result=await api('conversations/'+conversation,{action:'wiki_update',selections:next});
+      if(current!==conversation)return;
+      wikiSelections=(result.body.wiki_selections||[]).slice();
+      if(currentBody)currentBody.wiki_selections=wikiSelections.slice();
+      wikiTreeStatus.textContent='已完整保存 '+wikiSelections.length+' 篇资料的勾选范围';
+    }catch(e){wikiTreeStatus.textContent='未更改已保存范围：'+e.message;status.textContent=wikiTreeStatus.textContent;}
+    finally{
+      wikiBusy=false;busy=false;controls();
+      for(const node of wikiPanel.querySelectorAll('input,button'))node.disabled=false;
+      refreshWikiSelUI();
+    }
+  }
+  async function wikiSelectDir(prefix){
+    return wikiChange(async previous=>{
+      wikiTreeStatus.textContent='正在完整收集目录内文档…';
+      const items=await wikiFetchPages(prefix);
+      const merged=new Map(previous.map(item=>[item.path,item]));
+      for(const item of items){
+        if(item.kind==='file'&&item.path.startsWith(prefix+'/'))merged.set(item.path,{path:item.path,title:String(item.name||item.path)});
+      }
+      return [...merged.values()];
+    });
   }
   function wikiNode(item){
     const wrap=document.createElement('div');wrap.className='dialogue-wiki-node-wrap';
     const row=document.createElement('div');row.className='dialogue-wiki-node';
-    const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.checked=wikiSelections.some(s=>s.path===item.path);
+    const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.dataset.wikiPath=item.path;checkbox.dataset.wikiKind=item.kind;
     const label=document.createElement('span');label.className='dialogue-wiki-name';
     if(item.kind==='directory'){
-      const toggle=document.createElement('button');toggle.type='button';toggle.className='quiet dialogue-wiki-toggle';toggle.textContent='▸';
+      const toggle=document.createElement('button');toggle.type='button';toggle.className='quiet';toggle.textContent='▸';
       const childBox=document.createElement('div');childBox.className='dialogue-wiki-children';childBox.hidden=true;
-      toggle.onclick=()=>{if(childBox.hidden){childBox.hidden=false;toggle.textContent='▾';if(!childBox.dataset.loaded){wikiLoadChildren(item.path,childBox).then(()=>{childBox.dataset.loaded='1';});}}else{childBox.hidden=true;toggle.textContent='▸';}};
+      toggle.onclick=async()=>{if(childBox.hidden){childBox.hidden=false;toggle.textContent='▾';if(!childBox.dataset.loaded&&await wikiLoadChildren(item.path,childBox))childBox.dataset.loaded='1';}else{childBox.hidden=true;toggle.textContent='▸';}};
       label.textContent=item.name+(item.child_count!=null?'（'+item.child_count+'）':'');
-      checkbox.onchange=async()=>{if(checkbox.checked)await wikiSelectDir(item.path);else{wikiUnselectDir(item.path);refreshWikiSelUI();await wikiPersist();}};
+      checkbox.onchange=async()=>{if(checkbox.checked)await wikiSelectDir(item.path);else await wikiChange(previous=>previous.filter(s=>!s.path.startsWith(item.path+'/')));};
       const dirTag=document.createElement('span');dirTag.className='dialogue-wiki-kind';dirTag.textContent='目录';
-      row.append(toggle,checkbox,dirTag,label);
-      wrap.append(row,childBox);
+      row.append(toggle,checkbox,dirTag,label);wrap.append(row,childBox);
     }else{
       label.textContent=item.name;
-      checkbox.onchange=async()=>{if(checkbox.checked)wikiAdd(item);else wikiRemove(item.path);refreshWikiSelUI();await wikiPersist();};
-      row.append(checkbox,label);
-      wrap.append(row);
+      checkbox.onchange=async()=>{
+        const checked=checkbox.checked;
+        await wikiChange(previous=>checked?[...previous.filter(s=>s.path!==item.path),{path:item.path,title:String(item.name||item.path)}]:previous.filter(s=>s.path!==item.path));
+      };
+      row.append(checkbox,label);wrap.append(row);
     }
     return wrap;
   }
   async function wikiFetchPages(prefix){
-    const enc=encodeURIComponent(prefix);
-    const first=await apiWiki('tree?prefix='+enc+'&page=1&page_size=100');
-    const pages=Math.min((first.pagination&&first.pagination.pages)||1,50);
-    let items=[...(first.items||[])];
-    if(pages>1){
-      const rest=await Promise.all(Array.from({length:pages-1},(_,i)=>apiWiki('tree?prefix='+enc+'&page='+(i+2)+'&page_size=100').catch(()=>({items:[]}))));
-      for(const d of rest)items.push(...(d.items||[]));
+    const enc=encodeURIComponent(prefix),url='tree?prefix='+enc+'&page_size=100&page=';
+    const first=await apiWiki(url+1);
+    const pages=Math.max(1,Number(first.pagination?.pages)||1);
+    const items=[...(first.items||[])];
+    // Four concurrent requests per batch, with no page-count ceiling.
+    for(let page=2;page<=pages;page+=4){
+      const rest=await Promise.all(Array.from({length:Math.min(4,pages-page+1)},(_,i)=>apiWiki(url+(page+i))));
+      for(const data of rest){
+        if(!data.items?.length)throw Error('目录分页不完整，请刷新后重试');
+        items.push(...data.items);
+      }
+      wikiTreeStatus.textContent='正在读取目录：'+Math.min(page+3,pages)+' / '+pages+' 页';
     }
+    if(Number.isInteger(first.pagination?.total)&&items.length!==first.pagination.total)throw Error('目录在读取期间发生变化，请刷新后重试');
+    if(!prefix)wikiDirectoryFiles.clear();
+    rememberWikiFiles(items);
     return items;
   }
   async function wikiLoadChildren(prefix,container){
@@ -104,7 +150,9 @@
       container.replaceChildren();
       for(const it of direct)container.append(wikiNode(it));
       if(!direct.length)container.textContent='（空目录）';
-    }catch(e){container.textContent='读取失败：'+e.message;}
+      refreshWikiSelUI();
+      return true;
+    }catch(e){container.textContent='读取失败：'+e.message;return false;}
   }
   async function wikiRenderRoot(){
     wikiTreeEl.replaceChildren();
@@ -112,7 +160,7 @@
     await wikiLoadChildren('',wikiTreeEl);
   }
   wikiPanel.querySelector('#wiki-tree-refresh').onclick=()=>wikiRenderRoot();
-  wikiPanel.querySelector('#wiki-clear-sel').onclick=async()=>{wikiSelections=[];refreshWikiSelUI();await wikiPersist();wikiRenderRoot();};
+  wikiPanel.querySelector('#wiki-clear-sel').onclick=()=>wikiChange(()=>[]);
   wikiPanel.querySelector('#wiki-save-config').onclick=async()=>{
     const enabled=wikiPanel.querySelector('#wiki-enabled').checked;
     const base_url=wikiPanel.querySelector('#wiki-base-url').value.trim();
@@ -146,9 +194,16 @@
   function wikiConfirmSend(){
     return new Promise(resolve=>{
       const list=wikiConfirmDlg.querySelector('[data-list]');list.replaceChildren();
-      const shown=wikiSelections.slice(0,40);
-      for(const sel of shown){const li=document.createElement('li');li.textContent=sel.title+'  ·  '+sel.path;list.append(li);}
-      if(wikiSelections.length>shown.length){const li=document.createElement('li');li.textContent='… 共 '+wikiSelections.length+' 项';list.append(li);}
+      let shown=0;
+      const more=document.createElement('button');more.type='button';more.className='quiet';
+      function showMore(){
+        if(more.parentElement)more.parentElement.remove();
+        for(const sel of wikiSelections.slice(shown,shown+100)){const li=document.createElement('li');li.textContent=sel.title+'  ·  '+sel.path;list.append(li);}
+        shown=Math.min(shown+100,wikiSelections.length);
+        if(shown<wikiSelections.length){more.textContent='继续查看（已显示 '+shown+' / '+wikiSelections.length+' 篇）';const li=document.createElement('li');li.append(more);list.append(li);}
+      }
+      more.onclick=showMore;showMore();
+      wikiConfirmDlg.querySelector('header strong').textContent='确认知识库范围 · '+wikiSelections.length+' 篇';
       const finish=val=>{wikiConfirmDlg.removeEventListener('close',onClose);resolve(val);};
       const onClose=()=>finish(wikiConfirmDlg.returnValue==='confirm');
       wikiConfirmDlg.addEventListener('close',onClose);
@@ -157,8 +212,8 @@
     });
   }
   async function wikiSyncConfig(){
-    try{const cfg=await apiWiki('config');wikiEnabled=Boolean(cfg.enabled);}catch{}
-    if(currentBody&&Array.isArray(currentBody.wiki_selections))wikiSelections=currentBody.wiki_selections.slice();
+    const cfg=await apiWiki('config');wikiEnabled=Boolean(cfg.enabled);
+    wikiSelections=(currentBody?.wiki_selections||[]).slice();refreshWikiSelUI();
   }
 
   let inventory={keys:[]},categories=[],showArchived=false,currentBody=null,metadataTimer=null,metadataSaving=false,metadataQueued=false,current='',turns=[],older=null,timer=null,generation=0,busy=false,pending=false,requestId='',requestQuestion='',draftFiles=[],agentFolders=[];
@@ -241,6 +296,7 @@
     for(const item of [key,model,$('#dialogue-run-mode'),$('#dialogue-protocol'),$('#dialogue-refresh'),$('#dialogue-settings'),$('#dialogue-agent-folders-button'),$('#dialogue-context-turns'),$('#dialogue-pack-size'),$('#dialogue-card-width'),$('#dialogue-card-height'),$('#dialogue-save-options')])item.disabled=busy||(pending&&item.id==='dialogue-save-options');
     for(const item of [$('#dialogue-category'),$('#dialogue-archive')])item.disabled=busy||!current;
     for(const item of [$('#dialogue-title'),$('#dialogue-description')]){item.contentEditable=String(Boolean(current&&!busy));item.setAttribute('aria-disabled',String(Boolean(busy||!current)));}
+    refreshWikiSelUI();
   }
   function fileLink(file){
     const link=document.createElement('a');link.href='/api/dialogue/files/'+file.id;link.download=file.name;link.textContent=file.name+' · '+(file.size<1024?file.size+' B':(file.size/1024).toFixed(1)+' KB');link.className='dialogue-file-link';return link;
@@ -382,7 +438,7 @@
   function fillContext(panel,result){
     panel.replaceChildren();
     if(result.summary?.text){const memory=document.createElement('section'),title=document.createElement('strong'),text=document.createElement('div');title.textContent='本次携带的历史摘要';text.textContent=result.summary.text;memory.append(title,text);panel.append(memory);}
-    if(!result.turns.length&&!result.summary?.text){const empty=document.createElement('p');empty.textContent='本次没有携带历史问答，只提交了当前问题。';panel.append(empty);return;}
+    if(!result.turns.length&&!result.summary?.text){const empty=document.createElement('p');empty.textContent='本次没有携带历史问答。';panel.append(empty);return;}
     for(const item of result.turns){
       const section=document.createElement('section');section.className='dialogue-context-turn';
       const heading=document.createElement('strong');heading.textContent=(item.model||'历史模型')+' · '+new Date(item.created_at).toLocaleString();
@@ -397,6 +453,7 @@
     const details=document.createElement('details');details.className='dialogue-context';
     const summary=document.createElement('summary'),info=turn.submission;
     summary.textContent=(info.summarized?'已携带历史摘要 · ':'')+'本次提交：历史 '+info.history_turns+' 轮 · '+info.messages+' 条消息 · 文本 '+info.text_chars.toLocaleString()+' 字 · 请求 '+readableBytes(info.request_bytes)+(info.attachments?' · 附件 '+info.attachments+' 个 / '+readableBytes(info.attachment_bytes):'');
+    if(turn.wiki_retrieval)summary.textContent+=' · 知识库 '+turn.wiki_retrieval.used.length+' / '+turn.wiki_retrieval.selected_count+' 篇';
     const panel=document.createElement('div');panel.className='dialogue-context-content';
     const cacheKey=current+':'+turn.id+':'+(turn.context_summary?.entity_id||turn.phase||'');details.open=contextExpanded.has(cacheKey);
     if(contextCache.has(cacheKey))fillContext(panel,contextCache.get(cacheKey));else panel.textContent='展开后加载本次实际使用的历史问答。';
@@ -407,7 +464,19 @@
       try{const result=await api('conversations/'+conversation+'?context='+turn.id);if(token!==generation||conversation!==current)return;contextCache.set(cacheKey,result);fillContext(panel,result);}
       catch(e){panel.textContent=e.message;}
     };
-    details.append(summary,panel);return details;
+    details.append(summary);
+    if(turn.wiki_retrieval){
+      const report=turn.wiki_retrieval,section=document.createElement('section'),heading=document.createElement('p');
+      heading.textContent='知识库：勾选 '+report.selected_count+' 篇 · '+(report.mode==='scope_fallback'?'范围读取':'问题检索')+'命中 '+report.matched_count+' 篇 · 实际提供 '+report.used.length+' 篇 / '+report.chars+' 字（不代表已读完全部勾选资料）';
+      section.append(heading);
+      if(report.mode==='disabled_budget'){const note=document.createElement('p');note.textContent='总字符预算为 0，本轮未发送知识库资料。';section.append(note);}
+      const sources=document.createElement('ul');
+      for(const item of report.used){const li=document.createElement('li');li.textContent=item.path+' · 原文字符 '+(item.start+1)+'–'+(item.start+item.chars)+' / '+item.total_chars+(item.partial?'（节选）':'（全文）');sources.append(li);}
+      section.append(sources);
+      if(report.missing_paths?.length){const note=document.createElement('p');note.textContent='未找到正文：'+report.missing_paths.join('、');section.append(note);}
+      details.append(section);
+    }
+    details.append(panel);return details;
   }
   function directoryView(response,turnId){
     const headings=[...response.querySelectorAll('h1,h2,h3,h4,h5,h6')];if(!headings.length)return null;
@@ -525,6 +594,7 @@
     setEditText('#dialogue-title',body.title||'新对话');setEditText('#dialogue-description',body.description||'');$('#dialogue-title').dataset.description=body.description||'';
     $('#dialogue-category').value=categories.find(item=>item.block_id===body.category_id)?.body.name||'';$('#dialogue-archive').textContent=body.archived?'恢复对话':'归档对话';
     $('#dialogue-run-mode').value=body.last_mode||localStorage.getItem('dialogue-run-mode')||'chat';
+    if(!wikiBusy){wikiSelections=(body.wiki_selections||[]).slice();refreshWikiSelUI();}
     const selectionWarning=reset?restoreSelection(body):'';
     if(reset){turns=body.turns;older=body.prev_id;}else{const map=new Map(turns.map(t=>[t.id,t]));for(const t of body.turns)map.set(t.id,t);turns=[...map.values()];}
     pending=Boolean(body.pending_id);$('#dialogue-acknowledge').hidden=!body.interrupted;
@@ -543,7 +613,7 @@
     catch(e){if(token===generation)status.textContent=e.message;}
   }
   async function newConversation(){
-    autoCountdowns.clear();++generation;clearTimeout(timer);const result=await api('conversations',options());apply(result,true);wikiSyncConfig();question.replaceChildren();requestId='';clearDraft();status.textContent='新对话已创建';await loadList();question.focus();
+    autoCountdowns.clear();++generation;clearTimeout(timer);const result=await api('conversations',options());apply(result,true);await wikiSyncConfig();question.replaceChildren();requestId='';clearDraft();status.textContent='新对话已创建';await loadList();question.focus();
   }
   async function renameCategory(category){
     const name=await window.directorDialogs.prompt('输入分类名称',{title:'重命名分类',value:category.body.name});
@@ -592,8 +662,9 @@
     try{
       if(!current){const result=await api('conversations',options());apply(result,true);}
       if(!requestId||requestQuestion!==text+JSON.stringify(draftFiles.map(f=>f.id))){requestId=makeId();requestQuestion=text+JSON.stringify(draftFiles.map(f=>f.id));}
+      await wikiSyncConfig();
       if(wikiEnabled&&wikiSelections.length){const confirmed=await wikiConfirmSend();if(!confirmed)return;}
-      status.textContent='提交问题…';
+      status.textContent=wikiEnabled&&wikiSelections.length?'正在完整勾选范围内检索并分批读取资料…':'提交问题…';
       if(mode==='agent'&&!agentFolders.length)throw Error('请先在“执行目录”侧边栏添加允许的文件夹');
       const result=await api('conversations/'+current,{request_id:requestId,question:text,credential_id:selectedKey,model:selectedModel,protocol,mode,credential_names:mode==='agent'&&window.directorDesktop.credentialNames?await window.directorDesktop.credentialNames():[],credential_descriptions:mode==='agent'&&window.directorDesktop.credentialEntries?await window.directorDesktop.credentialEntries():[],allowed_paths:mode==='agent'?agentFolders:[],attachments:draftFiles.map(f=>f.id),use_wiki:Boolean(wikiEnabled&&wikiSelections.length)});localStorage.setItem('dialogue-key-id',selectedKey);localStorage.setItem('dialogue-model',selectedModel);localStorage.setItem('dialogue-run-mode',mode);
       apply(result);question.replaceChildren();requestId='';clearDraft();status.textContent='模型正在回答，记录已保存';await loadList();poll();
