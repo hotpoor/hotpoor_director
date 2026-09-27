@@ -80,3 +80,26 @@ def test_disabled_budget_does_not_request(monkeypatch):
     monkeypatch.setattr(wiki,'_post_json',fail)
     _,r=run(wiki.retrieve({**CFG,'max_total_chars':0},selected(10),'query'))
     assert r['mode']=='disabled_budget'
+
+
+def test_retrieval_reports_real_stages_and_counts(monkeypatch):
+    mock_api(monkeypatch, [item(0), item(1)], page_size=1)
+    progress = []
+    _, report = run(wiki.retrieve(CFG, selected(2), 'query', progress=lambda phase, **values: progress.append((phase, values))))
+    assert progress[0] == ('resolve', {'selected': 2})
+    assert [values['pages'] for phase, values in progress if phase == 'search'] == [0, 1, 2]
+    assert any(phase == 'read' for phase, _ in progress)
+    assert progress[-1] == ('complete', {'matched': 2, 'used': 2, 'chars': report['chars']})
+
+
+def test_progress_is_account_scoped_and_expires(monkeypatch):
+    monkeypatch.setattr(wiki, '_progress', {})
+    monkeypatch.setattr(wiki.time, 'monotonic', lambda: 100)
+    wiki.record_progress('alice', 'request', 'resolve', selected=2)
+    wiki.record_progress('bob', 'request', 'search', pages=1)
+    assert wiki._progress[('alice', 'request')][1]['phase'] == 'resolve'
+    assert wiki._progress[('bob', 'request')][1]['phase'] == 'search'
+    monkeypatch.setattr(wiki.time, 'monotonic', lambda: 1001)
+    wiki.record_progress('alice', 'next', 'complete')
+    assert ('alice', 'request') not in wiki._progress
+    assert ('bob', 'request') not in wiki._progress

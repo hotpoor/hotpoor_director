@@ -331,9 +331,9 @@
 .dialogue-wiki-node:hover{background:#1f1f1f}
 .dialogue-wiki-toggle{width:24px;min-width:24px;padding:2px;font-size:11px;line-height:1}
 .dialogue-wiki-kind{font-size:10px;color:#9fb6cf;border:1px solid #3a4a5a;border-radius:4px;padding:0 5px}
-#dialogue-wiki .dialogue-wiki-name{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
-#dialogue-wiki .dialogue-wiki-node input[type=checkbox]{flex:0 0 auto;width:15px;height:15px;min-width:15px;padding:0;margin:0;accent-color:#8ab0d8}
-#dialogue-wiki .dialogue-wiki-node span{flex:0 0 auto}
+:is(#dialogue-wiki,#dialogue-sources) .dialogue-wiki-name{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
+:is(#dialogue-wiki,#dialogue-sources) .dialogue-wiki-node input[type=checkbox]{flex:0 0 auto;width:15px;height:15px;min-width:15px;padding:0;margin:0;accent-color:#8ab0d8}
+:is(#dialogue-wiki,#dialogue-sources) .dialogue-wiki-node span{flex:0 0 auto}
 #dialogue-wiki-confirm{width:min(460px,94vw);border:1px solid #505050;border-radius:12px;background:#171717;color:#eee;padding:0}
 #dialogue-wiki-confirm::backdrop{background:rgba(0,0,0,.6)}
 #dialogue-wiki-confirm form{display:grid;gap:12px;padding:18px}
@@ -346,3 +346,36 @@
 
 #dialogue-settings-page #dialogue-wiki{position:static;inset:auto!important;width:100%;max-width:none;height:auto;overflow:visible;border:0;padding:0;background:transparent;box-shadow:none}
 #dialogue-settings-page #dialogue-wiki>header{display:none}
+
+/* Persistent knowledge sources beside the conversation. */
+#dialogue-mode .dialogue-layout{grid-template-columns:200px 270px minmax(0,1fr)}
+#dialogue-mode.dialogue-sidebar-hidden .dialogue-layout{grid-template-columns:270px minmax(0,1fr)}
+#dialogue-sources{display:flex;flex-direction:column;min-height:0;min-width:0;padding:16px 12px;background:#171717;border-right:1px solid #303030;overflow:hidden}
+#dialogue-sources>header{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:14px}
+#dialogue-sources>header>div{display:grid;gap:7px;min-width:0}
+#dialogue-sources>header strong{font-size:14px}
+#dialogue-sources .dialogue-wiki-browse{display:flex;flex:1;flex-direction:column;min-height:0;gap:10px;overflow:auto}
+#dialogue-sources .dialogue-wiki-tree{flex:1;min-height:120px;max-height:none;padding:4px;border:0;border-radius:0;background:transparent}
+#dialogue-sources .dialogue-wiki-tree-toolbar{flex-wrap:wrap;gap:6px}
+#dialogue-sources [data-tree-status]{width:100%;overflow-wrap:anywhere}
+#dialogue-sources .dialogue-note{font-size:11px;line-height:1.5;margin:0}
+#dialogue-sources #wiki-import-help{display:none}
+#dialogue-sources #wiki-import-status:empty,#dialogue-sources [data-tree-status]:empty{display:none}
+#dialogue-sources .dialogue-wiki-selections strong{font-size:12px}
+#dialogue-sources .dialogue-wiki-node span.dialogue-wiki-name{flex:1 1 auto}
+@media(min-width:761px) and (max-width:1100px){
+ #dialogue-mode .dialogue-layout{grid-template-columns:170px 230px minmax(0,1fr)}
+ #dialogue-mode.dialogue-sidebar-hidden .dialogue-layout{grid-template-columns:230px minmax(0,1fr)}
+ #dialogue-mode .dialogue-main{padding-left:16px;padding-right:16px}
+}
+@media(max-width:760px){
+ #dialogue-mode .dialogue-layout,#dialogue-mode.dialogue-sidebar-hidden .dialogue-layout{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(130px,30dvh) minmax(0,1fr)}
+ #dialogue-sources{grid-row:1;border-right:0;border-bottom:1px solid #303030;padding:10px 14px}
+ #dialogue-sources>header{margin-bottom:6px}
+ #dialogue-sources .dialogue-wiki-tree{min-height:44px}
+ #dialogue-sources .dialogue-wiki-browse>.dialogue-note:not(#wiki-import-status){display:none}
+ #dialogue-mode .dialogue-main{grid-row:2}
+}
+
+#dialogue-mode .wiki-document-processing{display:block;margin:0 4px 8px 24px;font-size:10px;line-height:1.5;color:#a7b6a6;overflow-wrap:anywhere}
+#dialogue-mode #wiki-processing-status{padding:8px;border:1px solid #343b34;border-radius:6px;color:#b7c6b6}

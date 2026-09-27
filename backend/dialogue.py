@@ -606,7 +606,13 @@ class DialogueHandler(PrivateHandler):
                 wiki_cfg = wiki.load_config(self.settings['config'])
                 selections = (body.get('wiki_selections') or []) if wiki_cfg.get('enabled') else []
                 if selections:
-                    supplement, wiki_report = await wiki.retrieve(wiki_cfg, selections, question)
+                    def wiki_progress(phase, **values):
+                        wiki.record_progress(self.owner, data['request_id'], phase, **values)
+                    try:
+                        supplement, wiki_report = await wiki.retrieve(wiki_cfg, selections, question, progress=wiki_progress)
+                    except Exception:
+                        wiki_progress('failed')
+                        raise
                     if supplement:
                         index = 0
                         while index < len(messages) and messages[index].get('role') == 'system':

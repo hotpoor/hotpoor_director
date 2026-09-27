@@ -33,7 +33,7 @@ app.whenReady().then(async()=>{
  backend=spawn(path.join(root,process.platform==='win32'?'.venv/Scripts/python.exe':'.venv/bin/python'),['tests/dialogue_backend.py','serve','--port','0','--desktop','--dev'],{cwd:root,stdio:['pipe','pipe','pipe'],env:{...process.env,PYTHONIOENCODING:'utf-8',DIRECTOR_DATA_DIR:directory,DIRECTOR_BOOTSTRAP_TOKEN:'dialogue-bootstrap'}});
  backend.stderr.on('data',d=>process.stderr.write(d));
  try{
-  const port=await new Promise((resolve,reject)=>{const t=setTimeout(()=>reject(Error('Startup timeout')),60000);readline.createInterface({input:backend.stdout}).on('line',line=>{try{const v=JSON.parse(line);if(v.event==='ready'){clearTimeout(t);resolve(v.port);}}catch{}});backend.once('exit',()=>reject(Error('Backend stopped')));});
+  const port=await new Promise((resolve,reject)=>{const t=setTimeout(()=>reject(Error('Startup timeout')),360000);readline.createInterface({input:backend.stdout}).on('line',line=>{try{const v=JSON.parse(line);if(v.event==='ready'){clearTimeout(t);resolve(v.port);}}catch{}});backend.once('exit',()=>reject(Error('Backend stopped')));});
   const origin=`http://127.0.0.1:${port}`;
   win=new BrowserWindow({width:1320,height:930,show:false,webPreferences:{contextIsolation:true,sandbox:true,backgroundThrottling:false}});
   await win.webContents.session.cookies.set({url:origin,name:'director_bootstrap',value:'dialogue-bootstrap',httpOnly:true,path:'/'});
@@ -51,7 +51,10 @@ app.whenReady().then(async()=>{
   await js(`testApi('/api/wiki/config',{enabled:true,base_url:${JSON.stringify(wikiOrigin)},max_chars_per_doc:4000,max_total_chars:16000})`);
   await js("document.querySelector('#new-dialogue').click()");
   await wait("document.querySelector('#dialogue-list .dialogue-list-item')&&!document.querySelector('#new-dialogue').disabled");
-  await js("document.querySelector('#dialogue-settings-launcher').click();document.querySelector('[data-settings-page=wiki]').click()");
+  await wait("document.querySelector('#dialogue-sources input[data-wiki-kind=directory]')");
+  if(!await js("document.querySelector('#dialogue-settings-page').hidden&&document.querySelector('#dialogue-sources').getBoundingClientRect().right<=document.querySelector('.dialogue-main').getBoundingClientRect().left+1"))throw Error('Sources not visible beside conversation');
+  await js("document.querySelector('#wiki-source-settings').click()");
+  await wait(`document.querySelector('#wiki-base-url').value===${JSON.stringify(wikiOrigin)}&&document.querySelector('#wiki-provider').value==='external'`);
   await wait("document.querySelector('input[data-wiki-kind=directory]')");
   await js("document.querySelector('#wiki-provider').value='builtin';document.querySelector('#wiki-provider').dispatchEvent(new Event('change'));document.querySelector('#wiki-save-config').click()");
   await wait("document.querySelector('[data-config-notice]').textContent.includes('设置已保存')");
@@ -76,9 +79,29 @@ app.whenReady().then(async()=>{
   if(!await js("document.querySelector('input[data-wiki-kind=directory]').indeterminate"))throw Error('Partial state missing');
   await js("document.querySelector('input[data-wiki-kind=directory]').click()");
   await wait("document.querySelector('#wiki-sel-count').textContent==='120'&&!document.querySelector('#dialogue-send').disabled");
+  // The sidebar must distinguish ready, missing, running and failed documents.
+  await js(`window.realWikiFetch=window.fetch;window.fetch=async (url,options)=>{if(String(url)==='/api/wiki/readiness'){const paths=JSON.parse(options.body).paths;return new Response(JSON.stringify({supported:true,ready:false,job:{state:'running',completed_documents:2,total_documents:3,current_completed_chunks:4,current_total_chunks:9},items:paths.map((path,index)=>({path,documents:[{block_id:path,lexical:{state:index===0?'missing':'ready',terms:index===0?0:42},semantic:{state:index===0?'missing':index===1?'running':index===2?'failed':'ready',chunks:3,completed_chunks:4,total_chunks:9}}]}))}),{status:200,headers:{'Content-Type':'application/json'}});}return window.realWikiFetch(url,options);};void 0`);
+  await js("document.querySelector('#wiki-tree-refresh').click()");
+  await wait("document.querySelector('.wiki-document-processing')?.textContent.includes('分词 119/120')");
+  await js("document.querySelector('.dialogue-wiki-node button').click()");
+  await wait("document.querySelectorAll('input[data-wiki-kind=file]').length===120");
+  await wait("[...document.querySelectorAll('.wiki-document-processing')].some(n=>n.textContent.includes('分词未整理'))&&[...document.querySelectorAll('.wiki-document-processing')].some(n=>n.textContent.includes('向量整理中 4/9'))&&[...document.querySelectorAll('.wiki-document-processing')].some(n=>n.textContent.includes('向量异常'))");
+  await js("window.fetch=window.realWikiFetch;void 0");
   // Reopen the saved conversation and check all 120 paths survived persistence.
   await js("document.querySelector('#dialogue-settings-page [data-close]').click();document.querySelector('#dialogue-list .dialogue-list-item').click()");
   await wait("!document.querySelector('#dialogue-send').disabled");
+  await wait("document.querySelector('#dialogue-sources input[data-wiki-kind=directory]')?.checked");
+  if(!await js("document.querySelector('#wiki-source-state').textContent.includes('120')"))throw Error('Persistent selection summary missing');
+  await js("document.querySelector('#dialogue-sources .dialogue-wiki-node button').click()");
+  await wait("document.querySelectorAll('#dialogue-sources input[data-wiki-kind=file]').length===120");
+  await js("document.querySelector('#dialogue-sources input[data-wiki-kind=file]').click()");
+  await wait("document.querySelector('#wiki-sel-count').textContent==='119'&&!document.querySelector('#dialogue-send').disabled");
+  await js("document.querySelector('#dialogue-sources input[data-wiki-kind=directory]').click()");
+  await wait("document.querySelector('#wiki-sel-count').textContent==='120'&&!document.querySelector('#dialogue-send').disabled");
+  win.setSize(700,900);
+  await new Promise(r=>setTimeout(r,150));
+  if(!await js("document.querySelector('#dialogue-sources').getBoundingClientRect().bottom<=document.querySelector('.dialogue-main').getBoundingClientRect().top+1&&document.querySelector('#dialogue-compose').getBoundingClientRect().bottom<=innerHeight"))throw Error('Narrow layout overlaps composer');
+  win.setSize(1320,930);
   await js("document.querySelector('#dialogue-question').textContent='财政预算';document.querySelector('#dialogue-compose').requestSubmit()");
   await wait("document.querySelector('#dialogue-wiki-confirm').open");
   if(!await js("document.querySelector('#dialogue-wiki-confirm header strong').textContent.includes('120')"))throw Error('Scope was truncated on reopen');

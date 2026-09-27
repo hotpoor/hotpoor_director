@@ -7,6 +7,10 @@ from pathlib import Path
 import uuid
 
 from tornado.httpclient import AsyncHTTPClient
+from qdrant_client import QdrantClient, models
+
+# Load NumPy-backed Qdrant dependencies on the main thread at startup.
+# First importing them inside an executor can stall Windows DLL initialization.
 
 MODEL = os.getenv('WIKI_EMBED_MODEL', 'bge-m3')
 OLLAMA = os.getenv('WIKI_OLLAMA_URL', 'http://127.0.0.1:11434').rstrip('/')
@@ -71,7 +75,6 @@ class Semantic:
             raise ValueError('Embedding model changed; use a new index before searching')
         self.manifest = saved.get('documents', {})
         def open_client():
-            from qdrant_client import QdrantClient
             client = QdrantClient(url=QDRANT_URL, timeout=60, trust_env=False)
             client.get_collections()
             expected = sum(x['chunks'] for x in self.manifest.values())
@@ -104,7 +107,6 @@ class Semantic:
         return await self.status(ids)
 
     async def build(self, ids, pools):
-        from qdrant_client import models
         try:
             for bid in ids:
                 ident = uuid.UUID(bid)
@@ -136,7 +138,6 @@ class Semantic:
             self.progress.update(state='failed', error=str(error))
 
     async def search(self, query, ids, threshold):
-        from qdrant_client import models
         state = await self.status(ids)
         if not state['ready']:
             raise ValueError('Semantic index incomplete; run scope.py index first')

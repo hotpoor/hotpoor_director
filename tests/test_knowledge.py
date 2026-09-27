@@ -53,6 +53,24 @@ def test_builtin_postgres_and_http(tmp_path, monkeypatch):
                 assert ids == [str(content_block_id('财政预算研究 102。'))]
                 scoped = await wiki._post_json(client,base+'/api/search',{'q':'研究','block_ids':ids})
                 assert [x['block_id'] for x in scoped['items']]==ids
+                original_status = runtime.app.semantic.status
+                async def processing_status(scope):
+                    return {'missing_block_ids': scope, 'job': {'state': 'running', 'current_block_id': ids[0], 'current_completed_chunks': 2, 'current_total_chunks': 5}}
+                runtime.app.semantic.status = processing_status
+                readiness = await wiki._post_json(client, base+'/api/processing/status', {'block_ids': ids})
+                assert len(readiness['items']) == 1 and not readiness['ready']
+                assert readiness['items'][0]['lexical']['state'] == 'ready'
+                assert readiness['items'][0]['lexical']['terms'] > 0
+                assert readiness['items'][0]['semantic']['state'] == 'running'
+                assert readiness['items'][0]['semantic']['completed_chunks'] == 2
+                async def broken_processing(scope):
+                    raise RuntimeError('fixture vector unavailable')
+                runtime.app.semantic.status = broken_processing
+                unavailable_status = await wiki._post_json(client, base+'/api/processing/status', {'block_ids': ids})
+                assert unavailable_status['items'][0]['lexical']['state'] == 'ready'
+                assert unavailable_status['items'][0]['semantic']['state'] == 'unavailable'
+                assert 'fixture vector unavailable' in unavailable_status['semantic_error']
+                runtime.app.semantic.status = original_status
                 # Test real SQL lexical branch + deterministic semantic branch, preserving union/scope.
                 other = str(content_block_id('财政预算研究 000。'))
                 async def search(query, scope, threshold):

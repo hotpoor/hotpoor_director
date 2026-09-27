@@ -215,6 +215,40 @@ class SemanticIndex(Search):
             raise tornado.web.HTTPError(503, reason='Semantic service unavailable: ' + str(error))
 
 
+class ProcessingStatus(Search):
+    async def get(self):
+        ids = self.scoped_ids()
+        if ids is None:
+            raise tornado.web.HTTPError(400, reason="explicit block_ids required")
+        counts = await self.application.pools['wiki'].fetch(
+            "SELECT block_id, count(*) AS terms FROM index_search WHERE block_id=ANY($1::uuid[]) GROUP BY block_id", ids)
+        terms_by_id = {str(row['block_id']): row['terms'] for row in counts}
+        semantic = self.application.semantic
+        error = None
+        try:
+            state = await asyncio.wait_for(semantic.status([str(x) for x in ids]), timeout=10)
+        except Exception as exc:
+            error = str(exc) or '语义状态检查超时'
+            state = {'job': {'state': 'unavailable'}, 'missing_block_ids': [str(x) for x in ids]}
+        missing = set(state['missing_block_ids'])
+        job = state.get('job', {})
+        items = []
+        for ident in ids:
+            bid = str(ident)
+            phase = 'ready' if bid not in missing else 'missing'
+            if error:
+                phase = 'unavailable'
+            elif bid in missing and job.get('current_block_id') == bid and job.get('state') in ('running', 'failed'):
+                phase = job['state']
+            items.append({'block_id': bid,
+                'lexical': {'state': 'ready' if terms_by_id.get(bid, 0) else 'missing', 'terms': terms_by_id.get(bid, 0)},
+                'semantic': {'state': phase, 'chunks': semantic.manifest.get(bid, {}).get('chunks', 0),
+                    'completed_chunks': job.get('current_completed_chunks', 0) if job.get('current_block_id') == bid else 0,
+                    'total_chunks': job.get('current_total_chunks', 0) if job.get('current_block_id') == bid else 0}})
+        self.write_json({'items': items, 'job': job, 'semantic_error': error,
+            'ready': all(x['lexical']['state'] == 'ready' and x['semantic']['state'] == 'ready' for x in items)})
+
+
 class Hybrid(Search):
     async def get(self):
         from .semantic import fuse
@@ -329,7 +363,7 @@ class Block(Base):
 class Application(tornado.web.Application):
     def __init__(self, token, semantic_root):
         self.token = token
-        super().__init__([(r"/", Root), (r"/favicon.ico", Favicon), (r"/health", Health), (r"/api/search", Search), (r"/api/hybrid/search", Hybrid), (r"/api/semantic/index", SemanticIndex), (r"/api/semantic/status", SemanticIndex), (r"/api/resolve", Resolve), (r"/api/tree", Tree), (r"/api/blocks/([0-9a-f-]+)", Block)], debug=False)
+        super().__init__([(r"/", Root), (r"/favicon.ico", Favicon), (r"/health", Health), (r"/api/search", Search), (r"/api/hybrid/search", Hybrid), (r"/api/semantic/index", SemanticIndex), (r"/api/semantic/status", SemanticIndex), (r"/api/processing/status", ProcessingStatus), (r"/api/resolve", Resolve), (r"/api/tree", Tree), (r"/api/blocks/([0-9a-f-]+)", Block)], debug=False)
         from .semantic import Semantic
         self.semantic = Semantic(semantic_root)
         self.hybrid_cache = {}

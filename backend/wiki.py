@@ -7,6 +7,7 @@ import asyncio
 import json
 import os
 import re
+import time
 import uuid
 from urllib.parse import urlencode
 
@@ -129,13 +130,28 @@ def clean_selections(selections):
     return list(cleaned.values())
 
 
+_progress = {}
+
+
+def record_progress(owner, request_id, phase, **values):
+    now = time.monotonic()
+    for key in list(_progress):
+        if now - _progress[key][0] > 900:
+            del _progress[key]
+    if len(_progress) >= 1000:
+        del _progress[next(iter(_progress))]
+    _progress[(str(owner), request_id)] = (now, {'phase': phase, **values})
+
+
 async def _post_json(client, url, body, timeout=180):
     try:
         response = await client.fetch(url, method='POST', request_timeout=timeout,
             headers={'Content-Type': 'application/json'}, body=json.dumps(body))
         return json.loads(response.body)
     except (HTTPError, ValueError) as error:
-        raise WebHTTPError(502, reason='Wiki 双路检索不可用，未回退单路；请检查语义索引与服务。') from error
+        stage = {'resolve': '文档范围解析', 'index': '向量索引初始化', 'search': '双路检索', 'status': '处理状态检查'}.get(url.rsplit('/', 1)[-1], '知识库请求')
+        detail = ('连接失败或请求超时' if error.code == 599 else f'服务返回 HTTP {error.code}') if isinstance(error, HTTPError) else '服务返回了无效数据'
+        raise WebHTTPError(502, reason=f'{stage}失败：{detail}；未回退单路，也未提交回答模型。请查看资料栏的分词与向量状态。') from error
 
 
 async def resolve_scope(client, base, paths):
@@ -186,12 +202,13 @@ def excerpt(markdown, query, limit):
     return markdown[start:start + limit], start
 
 
-async def retrieve(cfg, selections, query=''):
+async def retrieve(cfg, selections, query='', progress=None):
     """Fuse scoped lexical and vector retrieval, then fetch relevant bodies.
 
     Context size limits only the passages submitted, never the search scope.
     No model requests are issued here. Failure aborts before a paid request.
     """
+    progress = progress or (lambda *args, **kwargs: None)
     selections = clean_selections(selections)
     report = {'selected_count': len(selections), 'matched_count': 0, 'used': [],
               'mode': 'search', 'query': query, 'chars': 0}
@@ -212,15 +229,21 @@ async def retrieve(cfg, selections, query=''):
         if bid not in candidates:
             candidates[bid] = {**item, 'selected_path': matched_paths[0]}
     matched = set()
+    progress('resolve', selected=len(scope))
     block_ids = await resolve_scope(client, base, scope)
     if not block_ids:
         raise WebHTTPError(409, reason='所选范围没有正文 ID，不回退全库。')
+    progress('index', documents=len(block_ids))
     indexing = await _post_json(client, base + '/api/semantic/index', {'block_ids': block_ids})
     if not indexing.get('ready'):
         raise WebHTTPError(409, reason='所选资料的语义索引正在建立或需要修复，请完成后重试；未回退单路检索。')
     report['mode'] = 'hybrid_union_rrf'
     report['resolved_block_count'] = len(block_ids)
+    progress('search', documents=len(block_ids), pages=0, matched=0)
+    search_page = 0
     async for data in search_pages(client, base, query.strip() or '概括文献的主要内容和核心论点', block_ids):
+        search_page += 1
+        progress('search', documents=len(block_ids), pages=search_page, matched=len(matched))
         report['retrieval'] = data['retrieval']
         for item in data['items']:
             paths = [p for p in (item.get('paths') or [item.get('path')]) if p in scope]
@@ -241,6 +264,7 @@ async def retrieve(cfg, selections, query=''):
     for offset in range(0, len(ranked), FETCH_BATCH_SIZE):
         if max_total - len(text) < 100:
             break
+        progress('read', matched=len(matched), used=len(report['used']), candidates=len(ranked), chars=len(text))
         batch = ranked[offset:offset + FETCH_BATCH_SIZE]
         bodies = await asyncio.gather(*(_get_json(client, base + '/api/blocks/' + str(item['block_id']) + '?include=markdown') for item in batch))
         for item, body in zip(batch, bodies):
@@ -267,6 +291,7 @@ async def retrieve(cfg, selections, query=''):
                                    'start': start, 'chars': len(passage), 'total_chars': len(markdown), 'partial': partial, 'channels': item.get('channels', []), 'score': item.get('score')})
     report['chars'] = len(text)
     report['candidate_count'] = len(ranked)
+    progress('complete', matched=len(matched), used=len(report['used']), chars=len(text))
     return text, report
 
 
@@ -321,6 +346,45 @@ class WikiTreeHandler(WikiBaseHandler):
         self.finish(data)
 
 
+class WikiReadinessHandler(WikiBaseHandler):
+    async def post(self):
+        cfg = load_config(self.settings['config'])
+        if cfg.get('provider') != 'builtin':
+            self.finish({'supported': False, 'items': [], 'message': '外部知识库未提供逐篇处理状态'})
+            return
+        if not cfg.get('enabled'):
+            raise WebHTTPError(409, reason='请先启用知识库')
+        try:
+            body = json.loads(self.request.body)
+            paths = body['paths']
+            if not isinstance(paths, list) or len(paths) > 1000 or any(not isinstance(p, str) or not 1 <= len(p) <= 1000 for p in paths):
+                raise ValueError()
+            build = body.get('build', False)
+            retry = body.get('retry', False)
+            if not isinstance(build, bool) or not isinstance(retry, bool):
+                raise ValueError()
+        except (ValueError, KeyError, TypeError):
+            raise WebHTTPError(400, reason='资料路径列表无效')
+        base, client = connection(cfg)
+        resolved = await _post_json(client, base + '/api/resolve', {'paths': paths})
+        ids = resolved['block_ids']
+        state = await _post_json(client, base + '/api/processing/status', {'block_ids': ids}, timeout=20)
+        if build and ids and not state['semantic_error'] and (state['job'].get('state') != 'failed' or retry) and all(x['lexical']['state'] == 'ready' for x in state['items']):
+            await _post_json(client, base + '/api/semantic/index', {'block_ids': ids}, timeout=20)
+            state = await _post_json(client, base + '/api/processing/status', {'block_ids': ids}, timeout=20)
+        by_id = {x['block_id']: x for x in state['items']}
+        items = [{'path': item['path'], 'documents': [by_id[bid] for bid in item['block_ids']]} for item in resolved['items']]
+        self.finish({'supported': True, **state, 'items': items, 'missing_paths': resolved['missing_paths']})
+
+
+class WikiProgressHandler(WikiBaseHandler):
+    async def get(self):
+        user = await self.session_user()
+        key = (str(user['user_id']), self.get_argument('request_id'))
+        value = _progress.get(key)
+        self.finish(value[1] if value and time.monotonic() - value[0] < 900 else {'phase': 'waiting'})
+
+
 class WikiLibraryHandler(WikiBaseHandler):
     """Authenticated access to the built-in read/search/index API."""
     async def get(self, endpoint):
@@ -348,5 +412,7 @@ def wiki_routes():
     return [
         (r'/api/wiki/config', WikiConfigHandler),
         (r'/api/wiki/tree', WikiTreeHandler),
+        (r'/api/wiki/readiness', WikiReadinessHandler),
+        (r'/api/wiki/progress', WikiProgressHandler),
         (r'/api/wiki/library/(health|tree|resolve|search|hybrid/search|semantic/index|semantic/status|blocks/[0-9a-f-]+)', WikiLibraryHandler),
     ]
