@@ -113,6 +113,11 @@
 .dialogue-context>summary{cursor:pointer;padding:6px 8px;color:#999;font-size:11px;line-height:1.5}
 .dialogue-context-content{display:grid;gap:10px;padding:4px 12px 12px;color:#aaa;font-size:12px}
 .dialogue-context-content>p{margin:0}
+.wiki-channel-summary{color:#aaa;line-height:1.6;margin:8px 12px}
+.wiki-channel-badge{display:inline-block;padding:1px 6px;margin:3px 4px 3px 0;border:1px solid #555;border-radius:5px;color:#bbb;font-size:11px;white-space:nowrap}
+.wiki-channel-badge[data-channel=lexical]{color:#a9caff;border-color:#465c7e}
+.wiki-channel-badge[data-channel=semantic]{color:#dbc0fa;border-color:#69527f}
+.wiki-channel-badge[data-channel=both]{color:#addac2;border-color:#466d59}
 .dialogue-context-turn{display:grid;gap:7px;border-top:1px solid #333;padding-top:10px}
 .dialogue-context-turn strong{font-size:11px}
 .dialogue-context-question,.dialogue-context-answer{white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;overflow:auto;padding:9px;border-radius:6px;background:#202020;line-height:1.6}

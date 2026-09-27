@@ -598,10 +598,23 @@
       const report=turn.wiki_retrieval,section=document.createElement('section'),heading=document.createElement('p');
       heading.textContent='知识库：勾选 '+report.selected_count+' 篇 · '+(report.mode==='scope_fallback'?'范围读取':'问题检索')+'命中 '+report.matched_count+' 篇 · 实际提供 '+report.used.length+' 篇 / '+report.chars+' 字（不代表已读完全部勾选资料）';
       section.append(heading);
+      const stats=report.retrieval,counts=document.createElement('p');counts.className='wiki-channel-summary';
+      if(stats&&['lexical_count','semantic_count','overlap_count','union_count'].every(key=>Number.isInteger(stats[key])&&stats[key]>=0)){
+        counts.textContent='检索命中：分词 '+stats.lexical_count+' · 向量 '+stats.semantic_count+' · 两路重合 '+stats.overlap_count+' · 合并去重 '+stats.union_count+' 条文献记录（发送给模型的资料见下方）';
+      }else counts.textContent='本轮未记录完整的两路命中统计，不能据此判断某一路没有命中。';
+      section.append(counts);
       if(report.mode==='disabled_budget'){const note=document.createElement('p');note.textContent='总字符预算为 0，本轮未发送知识库资料。';section.append(note);}
       const sources=document.createElement('ul');
-      for(const item of report.used){const li=document.createElement('li');li.textContent=item.path+' · 原文字符 '+(item.start+1)+'–'+(item.start+item.chars)+' / '+item.total_chars+(item.partial?'（节选）':'（全文）');sources.append(li);}
+      for(const item of report.used){
+        const li=document.createElement('li'),badge=document.createElement('span'),channels=Array.isArray(item.channels)?item.channels:[];
+        const lexical=channels.includes('lexical'),semantic=channels.includes('semantic');
+        badge.className='wiki-channel-badge';badge.dataset.channel=lexical&&semantic?'both':lexical?'lexical':semantic?'semantic':'unknown';
+        badge.textContent=lexical&&semantic?'两路均命中':lexical?'分词命中':semantic?'向量命中':'命中渠道未记录';
+        badge.title=lexical&&semantic?'这篇文献同时被分词关键词检索和向量语义检索找到。':lexical?'通过分词后的关键词匹配找到这篇文献。':semantic?'通过语义相似度找到这篇文献。':'历史记录或服务未提供渠道信息，无法追溯。';
+        li.append(badge,document.createTextNode(' '+item.path+' · 原文字符 '+(item.start+1)+'–'+(item.start+item.chars)+' / '+item.total_chars+(item.partial?'（节选）':'（全文）')));sources.append(li);
+      }
       section.append(sources);
+      const explanation=document.createElement('p');explanation.className='wiki-channel-summary';explanation.textContent='分词：关键词匹配；向量：语义相似匹配。标签表示文献的检索来源，不表示回答中的每句话都由该渠道验证。';section.append(explanation);
       if(report.missing_paths?.length){const note=document.createElement('p');note.textContent='未找到正文：'+report.missing_paths.join('、');section.append(note);}
       details.append(section);
     }

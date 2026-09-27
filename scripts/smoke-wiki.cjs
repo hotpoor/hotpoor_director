@@ -18,7 +18,7 @@ app.whenReady().then(async()=>{
    return send({ready:true});
   }else if(url.pathname==='/api/hybrid/search'){
    if(body.block_ids.length!==120)throw Error('Incomplete request scope');
-   return send({items:[{block_id:'doc-119',paths:['folder/119.md'],score:1,channels:['lexical','semantic']}],pagination:{has_next:false},retrieval:{strategy:'hybrid_union_rrf'}});
+   return send({items:[{block_id:'doc-119',paths:['folder/119.md'],score:1,channels:['lexical','semantic']}],pagination:{has_next:false},retrieval:{strategy:'hybrid_union_rrf',lexical_count:1,semantic_count:1,overlap_count:1,union_count:1}});
   }else if(url.pathname==='/api/tree'){
    items=[{kind:'directory',path:'folder',name:'folder',child_count:120},...Array.from({length:120},(_,i)=>({kind:'file',path:'folder/'+String(i).padStart(3,'0')+'.md',name:'资料 '+i}))];
   }else if(url.pathname==='/api/search'){
@@ -113,7 +113,9 @@ app.whenReady().then(async()=>{
   await js("document.querySelector('.dialogue-context').open=true");
   if(!await js("document.querySelector('.dialogue-context').textContent.includes('勾选 120 篇')&&document.querySelector('.dialogue-context').textContent.includes('folder/119.md')&&!document.querySelector('.dialogue-context').textContent.includes('outside/')"))throw Error('Actual retrieval report missing or scope leaked');
   await new Promise(resolve=>setTimeout(resolve,250));
-  await js("document.querySelector('.dialogue-context').open=true;document.querySelector('.dialogue-context').scrollIntoView()");
+  if(!await js("document.querySelector('.wiki-channel-badge[data-channel=both]')?.textContent==='两路均命中'&&document.querySelector('.wiki-channel-summary')?.textContent.includes('分词 1 · 向量 1 · 两路重合 1 · 合并去重 1')"))throw Error('Retrieval provenance or overlap counts missing');
+  await wait("!document.querySelector('#dialogue-status').textContent.includes('模型正在回答')");
+  await js("document.querySelector('.dialogue-context').open=true;document.querySelector('.dialogue-context').dispatchEvent(new Event('toggle'));document.querySelector('.dialogue-context').scrollIntoView()");
   await new Promise(resolve=>setTimeout(resolve,250));
   fs.writeFileSync(path.join(directory,'wiki-retrieval.png'),(await win.webContents.capturePage()).toPNG());
   console.log('Wiki UI verified: full folder selection, 120 persisted paths, partial state, reopen, confirmation, late-page in-scope retrieval and report. Artifacts:',directory);
