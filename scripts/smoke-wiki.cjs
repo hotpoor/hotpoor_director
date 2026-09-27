@@ -6,14 +6,24 @@ const root=path.resolve(__dirname,'..'),directory=fs.mkdtempSync(path.join(root,
 app.setPath('userData',path.join(directory,'profile'));
 let backend,win,wikiServer,failed=false;
 app.whenReady().then(async()=>{
- wikiServer=http.createServer((req,res)=>{
+ wikiServer=http.createServer(async(req,res)=>{
+  const chunks=[];for await(const chunk of req)chunks.push(chunk);
+  const body=chunks.length?JSON.parse(Buffer.concat(chunks).toString()):{};
+  const send=value=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify(value));};
   const url=new URL(req.url,'http://fixture'),page=Number(url.searchParams.get('page')||1),size=Number(url.searchParams.get('page_size')||100);
   let items=[];
-  if(url.pathname==='/api/tree'){
+  if(url.pathname==='/api/resolve'){
+   return send({block_ids:body.paths.map(p=>'doc-'+p.split('/')[1].split('.')[0]),missing_paths:[]});
+  }else if(url.pathname==='/api/semantic/index'){
+   return send({ready:true});
+  }else if(url.pathname==='/api/hybrid/search'){
+   if(body.block_ids.length!==120)throw Error('Incomplete request scope');
+   return send({items:[{block_id:'doc-119',paths:['folder/119.md'],score:1,channels:['lexical','semantic']}],pagination:{has_next:false},retrieval:{strategy:'hybrid_union_rrf'}});
+  }else if(url.pathname==='/api/tree'){
    items=[{kind:'directory',path:'folder',name:'folder',child_count:120},...Array.from({length:120},(_,i)=>({kind:'file',path:'folder/'+String(i).padStart(3,'0')+'.md',name:'资料 '+i}))];
   }else if(url.pathname==='/api/search'){
    items=[...Array.from({length:100},(_,i)=>({block_id:'outside'+i,paths:['outside/'+i+'.md'],score:100})),{block_id:'inside',paths:['folder/119.md'],score:1}];
-  }else if(url.pathname==='/api/blocks/inside'){
+  }else if(url.pathname==='/api/blocks/doc-119'){
    res.setHeader('Content-Type','application/json');res.end(JSON.stringify({markdown:'财政预算是本篇相关资料的主题。'}));return;
   }else{res.writeHead(404);res.end();return;}
   const offset=(page-1)*size;
@@ -34,11 +44,19 @@ app.whenReady().then(async()=>{
   await js(`window.testApi=async(path,body,expected=200)=>{const r=await fetch(path,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json','X-XSRFToken':decodeURIComponent(document.cookie.split('; ').find(x=>x.startsWith('_xsrf=')).slice(6))},body:body===undefined?undefined:JSON.stringify(body)});const d=await r.json();if(r.status!==expected)throw Error(r.status+' '+JSON.stringify(d));return d;};void 0`);
   await js(`(async()=>{await testApi('/api/setup',{login:'dialogue-ui',password:'dialogue-password-123'});await testApi('/api/login',{login:'dialogue-ui',password:'dialogue-password-123'});await directorStudio.enter(await testApi('/api/me'));document.querySelector('#open-dialogue').click();})()`);
   await wait("document.querySelector('#dialogue-model').value==='gpt-6-astra'");
+  await js(`testApi('/api/wiki/config',{enabled:true,provider:'builtin'})`);
+  if(!await js(`(async()=>{const result=await testApi('/api/wiki/library/health');return result.ok&&result.databases.length===3;})()`))throw Error('Built-in Wiki is not healthy');
   const wikiOrigin='http://127.0.0.1:'+wikiServer.address().port;
   await js(`testApi('/api/wiki/config',{enabled:true,base_url:${JSON.stringify(wikiOrigin)},max_chars_per_doc:4000,max_total_chars:16000})`);
   await js("document.querySelector('#new-dialogue').click()");
   await wait("document.querySelector('#dialogue-list .dialogue-list-item')&&!document.querySelector('#new-dialogue').disabled");
   await js("document.querySelector('#dialogue-settings-launcher').click();document.querySelector('[data-settings-page=wiki]').click()");
+  await wait("document.querySelector('input[data-wiki-kind=directory]')");
+  await js("document.querySelector('#wiki-provider').value='builtin';document.querySelector('#wiki-provider').dispatchEvent(new Event('change'));document.querySelector('#wiki-save-config').click()");
+  await wait("document.querySelector('[data-config-notice]').textContent.includes('设置已保存')");
+  if(!await js("document.querySelector('#wiki-external-url').hidden"))throw Error('Built-in mode still requires URL');
+  if(!await js("(async()=>{const cfg=await testApi('/api/wiki/config');return cfg.provider==='builtin'&&!('_knowledge' in cfg);})()"))throw Error('Provider switch or secret filtering failed');
+  await js("document.querySelector('#wiki-provider').value='external';document.querySelector('#wiki-provider').dispatchEvent(new Event('change'));document.querySelector('#wiki-save-config').click()");
   await wait("document.querySelector('input[data-wiki-kind=directory]')");
   await js("document.querySelector('input[data-wiki-kind=directory]').click()");
   await wait("document.querySelector('#wiki-sel-count').textContent==='120'&&!document.querySelector('#dialogue-send').disabled");

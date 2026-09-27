@@ -29,11 +29,35 @@ description: 部署、运行和维护 Hotpoor Director 导演工作台，解释 
 
 ## Wiki 知识库范围
 
-- 对话里的 Wiki 勾选完整保存当前文件路径清单，不设置文档数量或目录页数上限。前端分页并发和后端正文并发上限为 4，这是并发控制，不是范围截断。
-- 勾选、读取和保存均需保持完整性：分页失败或保存失败时保留旧范围；文件夹显示全选和部分选择。新导入文件需要刷新后重新勾选。
-- 按问题遍历搜索摘要分页并按所选路径过滤，再分批取正文；无匹配时利用 wiki_test 的 Markdown 路径索引（`md`）扫描解析范围。不能恢复逐篇重复扫描整个索引的做法。
-- 字符预算只限制提交的片段，包括标题和来源说明；不把勾选数量说成阅读全文数量。轮次的 `wiki_retrieval` 保存范围、命中、实际来源和字符位置，界面「本次提交」展示统计和来源。
-- 入口为 `backend/wiki.py`、`backend/dialogue.py` 和 `backend/web/dialogue.js`；变更后运行 `tests/test_wiki.py`、`tests/test_dialogue.py`、`scripts/test-wiki-selection.cjs` 与隔离的 `scripts/smoke-wiki.cjs`。
+- Codex 范围页已纳入 Director：`knowledge.codex_scope.enabled` 启用后由同进程提供 8890，退出一起关闭。代码在 `backend/knowledge/scope_server.py`、`scope_cli.py`、`scope_web/`；记录在有效数据目录 `knowledge/codex-scopes`。保留旧 scope.py 与目录兼容链接，不把旧 8888 当成 Codex 默认取材接口。
+
+先读 [内置知识库说明](docs/BUILTIN-KNOWLEDGE.md)。Wiki 已移入 `backend/knowledge/`，由 Director 同进程启动，使用相同 PostgreSQL 配置、独立的 `wiki/wiki1/wiki2` 逻辑库。不能把 Wiki 原生 UUID 实体混入 Director EntityStore。保留外部 Wiki 模式兼容旧配置。
+
+- 路径解析后，在完整 block_ids 范围内进行分词/向量两路检索，取并集、RRF 排序和完整分页；不得全库搜索后过滤或静默降级。
+- 文件夹勾选完整保存当前文件路径；分页/保存失败保留旧范围。字符预算只限制提交片段，轮次保存真实来源、原文位置和覆盖情况。
+- 导入入口 `python -m backend wiki-import --root <目录>`；不得跳过文件树已有路径，正文变化创建新实体并保留历史。当前路径解析可能包含旧版本，不宣称默认最新。
+- 内部 HTTP 随机回环端口使用进程令牌；用户经登录和 XSRF 校验访问 `/api/wiki/*`，令牌不能传到前端或外部服务器。
+- Qdrant 与 Ollama 保持独立服务，清单位于有效数据目录 `knowledge/semantic`。原向量集合与清单须配套保留。
+- 修改后验证 `tests/test_knowledge.py`、`tests/test_knowledge_semantic.py`、`tests/test_wiki.py`、`tests/test_dialogue.py`、`scripts/test-wiki-selection.cjs` 和隔离 `scripts/smoke-wiki.cjs`。测试的模拟向量/模型回复不能当作真实服务验证。
+
+### 本地优先：工具、模型与调用边界
+
+| 环节 | 明确使用的工具 / 模型 | 调用入口与职责 |
+| --- | --- | --- |
+| 范围与原文 | Director 内置 Wiki、PostgreSQL；不调用大模型 | `scope.py status/read`；路径解析、正文和引用位置留在本机。 |
+| 分词召回 | Python `jieba` + PostgreSQL 倒排索引；不调用大模型 | 内置 `/api/hybrid/search` 的 lexical 路，与向量路使用相同完整 `block_ids`。 |
+| 文档与问题向量化 | 本机 **Ollama + `bge-m3`**（安装标签通常为 `bge-m3:latest`） | `http://127.0.0.1:11434/api/embed`；代码参数为 `model=bge-m3`、`truncate=false`，不是回答生成接口。 |
+| 向量存储与召回 | 本机 **Qdrant**，集合 `wiki_passages_v1` | `http://127.0.0.1:6333`；通过 `qdrant-client` 进行范围内召回，与分词取并集、RRF 排序。 |
+| 索引与检索操作 | Director 标准库 CLI `backend.knowledge.scope_cli` | `status/index/search/read`；本机兼容入口 `/Users/prof.taoran/Sites/wiki-scope/scope.py`。 |
+| 分析与回答 | 当前 Codex 会话模型，或 Director 对话中用户选定的实际模型 ID | Director 经所选 service-inference AK 调用；不得将 `bge-m3` 写成回答模型，不默认另发付费请求。 |
+
+核对工具时运行 `ollama list` 或读取本机 `/api/tags`，确认 `bge-m3` 及 digest；再检查所选范围的语义索引状态。记录实际模型名、服务地址和索引签名，不能只凭默认配置宣称健康。`WIKI_EMBED_MODEL`、`WIKI_OLLAMA_URL`、`QDRANT_URL` 可覆盖默认值；覆盖后必须如实报告实际端点，不能仍称为本地计算。模型 digest 变化不得混用旧向量，按新签名另建索引并保留回退数据。
+
+本机 Ollama 向量化消耗本机算力、内存和时间，Qdrant 消耗本机存储；这条本地链路不调用云端付费 embedding API。云端回答的输入、历史与输出用量另计，不能把字符数冒充 tokens 或准确账单。已有索引复用，只给缺失文档补建，禁止因一次提问重建全库。
+
+线上与客户端互通以本地知识库为来源：本地完成完整范围检索，按问题核读，再携带有限证据片段、文献 ID、来源位置和范围 revision 供回答使用；不自动上传整库、向量或把所有检索分页拼进模型上下文。当前已有本机 CLI/API 桥接；现有项目云同步不包含 Wiki，云端自动回连本地检索尚未实现，不得宣称已上线。将来接入须沿用明确授权的设备与范围，保留引用可追溯性。
+
+缩减模型上下文不能缩减应检索的范围或掩盖阅读不足：检索仍完成双路和分页，模型只接收本题所需片段；资料不足时继续按范围核读。用户另选本地生成模型之前，不自动下载或指定一个模型替代当前回答模型。
 
 ## 首次部署：Windows x64
 

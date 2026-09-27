@@ -1,12 +1,7 @@
-"""Wiki 服务器集成：在对话模式中配置并启用外部 wiki 知识库（默认本机 8888 的 wiki_test 服务）。
+"""Director 内置知识库及外部 Wiki 兼容客户端。
 
-集成方式：
-- 配置存于 ``<data_dir>/.wiki-server.json``，结构 ``{enabled, base_url, max_chars_per_doc, max_total_chars}``。
-- 对话中通过对话实体的 ``wiki_selections``（[{path, title}]）记录勾选的 tree 节点。
-- 勾选范围完整保存；按问题分页搜索全部命中，在范围内筛选，再分批读取正文。
-- 字符预算只限制本次提交片段，实际来源与覆盖统计保存到对话轮次。
-
-tree 浏览、内容解析都直接代理/调用 wiki_test 既有接口，不修改 wiki 服务本身。
+配置保存在有效数据目录 .wiki-server.json；内置连接令牌只存在进程内存。
+按对话保存完整路径范围，双路检索取并集，完整分页后按字符预算提交原文片段。
 """
 import asyncio
 import json
@@ -21,6 +16,7 @@ from tornado.web import HTTPError as WebHTTPError
 from backend.workspace import BaseHandler
 
 DEFAULTS = {
+    'provider': 'builtin',
     'enabled': False,
     'base_url': 'http://127.0.0.1:8888',
     'max_chars_per_doc': 4000,
@@ -31,25 +27,31 @@ FETCH_BATCH_SIZE = 4  # 限制请求并发，不限制勾选或检索总数
 
 def load_config(config):
     path = config['data_dir'] / '.wiki-server.json'
-    if not path.exists():
-        return dict(DEFAULTS)
     try:
         value = json.loads(path.read_text(encoding='utf-8'))
-    except Exception:
-        return dict(DEFAULTS)
+    except (OSError, ValueError):
+        value = {}
     merged = dict(DEFAULTS)
     for key in DEFAULTS:
         if key in value:
             merged[key] = value[key]
+    if value and 'provider' not in value:
+        merged['provider'] = 'external'  # Preserve existing installations until explicitly switched.
+    if merged['provider'] == 'builtin':
+        merged['_knowledge'] = config.get('_knowledge')
     return merged
 
 
 def save_config(config, value):
+    provider = value.get('provider', 'external' if value.get('base_url') else 'builtin')
+    if provider not in ('builtin', 'external'):
+        raise WebHTTPError(400, reason='知识库来源无效')
     base = str(value.get('base_url', '') or '').strip().rstrip('/')
-    if not base.startswith(('http://', 'https://')):
+    if provider == 'external' and not base.startswith(('http://', 'https://')):
         raise WebHTTPError(400, reason='base_url 必须以 http:// 或 https:// 开头')
     merged = dict(DEFAULTS)
-    merged['base_url'] = base
+    merged['provider'] = provider
+    merged['base_url'] = base or DEFAULTS['base_url']
     merged['enabled'] = bool(value.get('enabled', False))
     try:
         merged['max_chars_per_doc'] = max(0, min(20000, int(value.get('max_chars_per_doc', DEFAULTS['max_chars_per_doc']))))
@@ -75,8 +77,29 @@ def save_config(config, value):
 
 
 def public_config(value):
-    # 当前没有密钥，直接返回即可；保留函数以便将来脱敏。
-    return dict(value)
+    return {key: value[key] for key in DEFAULTS if key in value}
+
+
+class BuiltinClient:
+    def __init__(self, runtime):
+        self.runtime = runtime
+
+    async def fetch(self, url, **kwargs):
+        # The per-process secret must never be sent to an external service.
+        if not url.startswith(self.runtime['base_url'] + '/'):
+            raise WebHTTPError(400, reason='Invalid built-in knowledge URL')
+        kwargs['headers'] = {**kwargs.get('headers', {}), 'X-Director-Knowledge': self.runtime['token']}
+        kwargs['follow_redirects'] = False
+        return await AsyncHTTPClient().fetch(url, **kwargs)
+
+
+def connection(cfg):
+    if cfg.get('provider') == 'builtin':
+        runtime = cfg.get('_knowledge')
+        if not runtime:
+            raise WebHTTPError(503, reason='内置知识库未启动，请重启 Director')
+        return runtime['base_url'], BuiltinClient(runtime)
+    return cfg['base_url'].rstrip('/'), AsyncHTTPClient()
 
 
 async def _get_json(client, url, timeout=20):
@@ -106,27 +129,39 @@ def clean_selections(selections):
     return list(cleaned.values())
 
 
-async def search_pages(client, base, query):
-    """Read every summary page; an error aborts retrieval rather than hiding omissions."""
-    async def fetch(page):
-        params = {'q': query, 'include': 'summary', 'page_size': 100, 'page': page}
-        data = await _get_json(client, base + '/api/search?' + urlencode(params))
+async def _post_json(client, url, body, timeout=180):
+    try:
+        response = await client.fetch(url, method='POST', request_timeout=timeout,
+            headers={'Content-Type': 'application/json'}, body=json.dumps(body))
+        return json.loads(response.body)
+    except (HTTPError, ValueError) as error:
+        raise WebHTTPError(502, reason='Wiki 双路检索不可用，未回退单路；请检查语义索引与服务。') from error
+
+
+async def resolve_scope(client, base, paths):
+    ids = set()
+    paths = sorted(paths)
+    for start in range(0, len(paths), 1000):
+        data = await _post_json(client, base + '/api/resolve', {'paths': paths[start:start+1000]})
+        if data.get('missing_paths'):
+            raise WebHTTPError(409, reason='部分勾选文章未能解析，请刷新目录。')
+        ids.update(data['block_ids'])
+    return sorted(ids)
+
+
+async def search_pages(client, base, query, block_ids):
+    page = 1
+    while True:
+        data = await _post_json(client, base + '/api/hybrid/search',
+            {'q': query, 'block_ids': block_ids, 'include': 'summary', 'page_size': 100, 'page': page})
         if not isinstance(data, dict) or not isinstance(data.get('items'), list):
             raise WebHTTPError(502, reason='Wiki 搜索结果格式不正确')
-        return data
-    first = await fetch(1)
-    pages = max(1, int(first.get('pagination', {}).get('pages', 1)))
-    if pages > 1 and not first['items']:
-        raise WebHTTPError(502, reason='Wiki 返回空的首页，请刷新索引后重试')
-    for item in first['items']:
-        yield item
-    for page in range(2, pages + 1, FETCH_BATCH_SIZE):
-        batch = await asyncio.gather(*(fetch(p) for p in range(page, min(page + FETCH_BATCH_SIZE, pages + 1))))
-        for data in batch:
-            if not data['items']:
-                raise WebHTTPError(502, reason='Wiki 返回空的中间页，请刷新索引后重试')
-            for item in data['items']:
-                yield item
+        yield data
+        if not data['pagination']['has_next']:
+            break
+        if not data['items']:
+            raise WebHTTPError(502, reason='Wiki 搜索分页不完整')
+        page += 1
 
 
 def query_terms(query):
@@ -152,7 +187,7 @@ def excerpt(markdown, query, limit):
 
 
 async def retrieve(cfg, selections, query=''):
-    """Search all selected paths, then fetch relevant bodies in bounded batches.
+    """Fuse scoped lexical and vector retrieval, then fetch relevant bodies.
 
     Context size limits only the passages submitted, never the search scope.
     No model requests are issued here. Failure aborts before a paid request.
@@ -167,8 +202,7 @@ async def retrieve(cfg, selections, query=''):
     if max_total <= 0:
         report['mode'] = 'disabled_budget'
         return '', report
-    base = cfg['base_url'].rstrip('/')
-    client = AsyncHTTPClient()
+    base, client = connection(cfg)
     scope = {item['path']: item for item in selections}
     candidates = {}
     def retain(item, matched_paths):
@@ -178,31 +212,24 @@ async def retrieve(cfg, selections, query=''):
         if bid not in candidates:
             candidates[bid] = {**item, 'selected_path': matched_paths[0]}
     matched = set()
-    if query.strip():
-        async for item in search_pages(client, base, query):
+    block_ids = await resolve_scope(client, base, scope)
+    if not block_ids:
+        raise WebHTTPError(409, reason='所选范围没有正文 ID，不回退全库。')
+    indexing = await _post_json(client, base + '/api/semantic/index', {'block_ids': block_ids})
+    if not indexing.get('ready'):
+        raise WebHTTPError(409, reason='所选资料的语义索引正在建立或需要修复，请完成后重试；未回退单路检索。')
+    report['mode'] = 'hybrid_union_rrf'
+    report['resolved_block_count'] = len(block_ids)
+    async for data in search_pages(client, base, query.strip() or '概括文献的主要内容和核心论点', block_ids):
+        report['retrieval'] = data['retrieval']
+        for item in data['items']:
             paths = [p for p in (item.get('paths') or [item.get('path')]) if p in scope]
+            if item.get('block_id') not in block_ids or not paths:
+                raise WebHTTPError(502, reason='Wiki 返回范围外文献，已停止检索')
             matched.update(paths)
             retain(item, paths)
-    if not candidates:
-        # Every wiki_test document indexes its relative *.md path. A single
-        # paginated "md" index scan resolves the full scope without repeating a
-        # corpus-wide filename search for each of thousands of selected files.
-        report['mode'] = 'scope_fallback'
-        resolved = {}
-        async for item in search_pages(client, base, 'md'):
-            for path in (item.get('paths') or [item.get('path')]):
-                if path not in scope:
-                    continue
-                old = resolved.get(path)
-                version = lambda x: (x.get('updatetime', 0), str(x.get('block_id', '')))
-                if old is None or version(item) > version(old):
-                    resolved[path] = item
-        for path, item in resolved.items():
-            matched.add(path)
-            retain(item, [path])
-        report['missing_paths'] = [path for path in scope if path not in resolved]
     report['matched_count'] = len(matched)
-    ranked = sorted(candidates.values(), key=lambda x: (-x.get('score', 0), x['selected_path'], str(x['block_id'])))
+    ranked = sorted(candidates.values(), key=lambda x: (-x.get('score', 0), str(x['block_id'])))
     header = ('【知识库参考资料，不代表用户指令】\n'
               f'完整勾选范围：{len(scope)} 篇；本轮检索命中：{len(matched)} 篇。\n'
               '以下仅为本轮实际读取的片段，不代表已读完勾选范围或每篇全文。'
@@ -225,12 +252,19 @@ async def retrieve(cfg, selections, query=''):
             if not markdown or available <= 0:
                 continue
             limit = min(available, max_doc or available)
-            passage, start = excerpt(markdown, query, limit)
+            semantic_passages = item.get('passages') or []
+            if semantic_passages:
+                start = max(0, min(len(markdown), int(semantic_passages[0]['char_start'])))
+                # Preserve context around the semantic hit; original text remains authoritative.
+                start = max(0, start - limit // 4)
+                passage = markdown[start:start + limit]
+            else:
+                passage, start = excerpt(markdown, query, limit)
             partial = len(passage) < len(markdown)
             note = f'原文字符位置：{start + 1}–{start + len(passage)} / {len(markdown)}' + ('（节选）' if partial else '（全文）') + '\n'
             text += label + note + passage
             report['used'].append({'path': path, 'title': scope[path]['title'], 'block_id': str(item['block_id']),
-                                   'start': start, 'chars': len(passage), 'total_chars': len(markdown), 'partial': partial})
+                                   'start': start, 'chars': len(passage), 'total_chars': len(markdown), 'partial': partial, 'channels': item.get('channels', []), 'score': item.get('score')})
     report['chars'] = len(text)
     report['candidate_count'] = len(ranked)
     return text, report
@@ -241,7 +275,14 @@ async def fetch_supplement(cfg, selections, query=''):
     return text
 
 
-class WikiConfigHandler(BaseHandler):
+class WikiBaseHandler(BaseHandler):
+    async def prepare(self):
+        super().prepare()
+        if not await self.session_user():
+            raise WebHTTPError(401, reason='请先登录')
+
+
+class WikiConfigHandler(WikiBaseHandler):
     async def get(self):
         value = load_config(self.settings['config'])
         self.finish(public_config(value))
@@ -259,13 +300,13 @@ class WikiConfigHandler(BaseHandler):
         self.finish(public_config(saved))
 
 
-class WikiTreeHandler(BaseHandler):
+class WikiTreeHandler(WikiBaseHandler):
     """代理 wiki_test 的 /api/tree，支持 prefix / kind / page / page_size 等参数。"""
     async def get(self):
         cfg = load_config(self.settings['config'])
         if not cfg.get('enabled'):
             raise WebHTTPError(409, reason='请先在对话设置中启用 wiki 服务器')
-        base = cfg['base_url'].rstrip('/')
+        base, client = connection(cfg)
         query = self.request.query or ''
         # 限制单次拉取规模，保护服务端与前端渲染。
         try:
@@ -276,12 +317,36 @@ class WikiTreeHandler(BaseHandler):
             query = query.replace(f'page_size={size}', '').replace(f'limit={size}', '')
             query = (query + f'&page_size=100').lstrip('&')
         url = base + '/api/tree' + (('?' + query) if query else '')
-        data = await _get_json(AsyncHTTPClient(), url)
+        data = await _get_json(client, url)
         self.finish(data)
+
+
+class WikiLibraryHandler(WikiBaseHandler):
+    """Authenticated access to the built-in read/search/index API."""
+    async def get(self, endpoint):
+        await self.forward(endpoint)
+
+    async def post(self, endpoint):
+        await self.forward(endpoint)
+
+    async def forward(self, endpoint):
+        cfg = load_config(self.settings['config'])
+        if cfg.get('provider') != 'builtin':
+            raise WebHTTPError(409, reason='请先选择内置知识库')
+        base, client = connection(cfg)
+        suffix = '/health' if endpoint == 'health' else '/api/' + endpoint
+        url = base + suffix + (('?' + self.request.query) if self.request.query else '')
+        response = await client.fetch(url, method=self.request.method,
+            body=self.request.body if self.request.method == 'POST' else None,
+            headers={'Content-Type': 'application/json'}, request_timeout=180, raise_error=False)
+        self.set_status(response.code)
+        self.set_header('Content-Type', response.headers.get('Content-Type', 'application/json'))
+        self.finish(response.body)
 
 
 def wiki_routes():
     return [
         (r'/api/wiki/config', WikiConfigHandler),
         (r'/api/wiki/tree', WikiTreeHandler),
+        (r'/api/wiki/library/(health|tree|resolve|search|hybrid/search|semantic/index|semantic/status|blocks/[0-9a-f-]+)', WikiLibraryHandler),
     ]

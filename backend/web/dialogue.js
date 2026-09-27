@@ -36,8 +36,9 @@
   const wikiDirectoryFiles=new Map();
   const wikiButton=document.createElement('button');wikiButton.type='button';wikiButton.className='quiet';wikiButton.textContent='知识库';wikiButton.title='配置并勾选 wiki 知识库，作为对话的系统提示补充';$('.dialogue-controls').append(wikiButton);
   const wikiPanel=document.createElement('aside');wikiPanel.id='dialogue-wiki';wikiPanel.hidden=true;
-  wikiPanel.innerHTML='<header><strong>知识库（wiki 服务器）</strong><button type="button" class="quiet" data-close>✕</button></header><section class="dialogue-wiki-config"><label class="dialogue-wiki-enable"><input type="checkbox" id="wiki-enabled"> 启用知识库注入</label><label>服务器地址<input id="wiki-base-url" placeholder="http://127.0.0.1:8888"></label><label>单篇片段字符预算<input id="wiki-max-doc" type="number" min="0" max="20000" step="100"></label><label>本轮资料字符预算<input id="wiki-max-total" type="number" min="0" max="80000" step="500"></label><div class="dialogue-wiki-config-actions"><button type="button" id="wiki-save-config">保存设置</button></div><p data-config-notice role="status"></p></section><section class="dialogue-wiki-browse"><div class="dialogue-wiki-selections"><strong>已勾选范围：<span id="wiki-sel-count">0</span> 项</strong><button type="button" class="quiet" id="wiki-clear-sel">清空</button></div><div class="dialogue-wiki-tree-toolbar"><button type="button" id="wiki-tree-refresh">刷新目录</button><span data-tree-status></span></div><p class="dialogue-note">勾选不限篇数；文件夹按当前目录完整保存。回答时在勾选范围内搜索，分批读取相关片段，实际来源可在“本次提交”查看。</p><nav id="dialogue-wiki-tree" class="dialogue-wiki-tree"></nav></section>';
+  wikiPanel.innerHTML='<header><strong>知识库</strong><button type="button" class="quiet" data-close>✕</button></header><section class="dialogue-wiki-config"><label class="dialogue-wiki-enable"><input type="checkbox" id="wiki-enabled"> 启用知识库注入</label><label>知识库来源<select id="wiki-provider"><option value="builtin">Director 内置知识库</option><option value="external">外部 Wiki 服务</option></select></label><label id="wiki-external-url">服务器地址<input id="wiki-base-url" placeholder="http://127.0.0.1:8888"></label><label>单篇片段字符预算<input id="wiki-max-doc" type="number" min="0" max="20000" step="100"></label><label>本轮资料字符预算<input id="wiki-max-total" type="number" min="0" max="80000" step="500"></label><div class="dialogue-wiki-config-actions"><button type="button" id="wiki-save-config">保存设置</button></div><p data-config-notice role="status"></p></section><section class="dialogue-wiki-browse"><div class="dialogue-wiki-selections"><strong>已勾选范围：<span id="wiki-sel-count">0</span> 项</strong><button type="button" class="quiet" id="wiki-clear-sel">清空</button></div><div class="dialogue-wiki-tree-toolbar"><button type="button" id="wiki-tree-refresh">刷新目录</button><span data-tree-status></span></div><p class="dialogue-note">勾选不限篇数；文件夹按当前目录完整保存。回答时在勾选范围内搜索，分批读取相关片段，实际来源可在“本次提交”查看。</p><nav id="dialogue-wiki-tree" class="dialogue-wiki-tree"></nav></section>';
   $('.dialogue-main').append(wikiPanel);
+  wikiPanel.querySelector('#wiki-provider').addEventListener('change',()=>{wikiPanel.querySelector('#wiki-external-url').hidden=wikiPanel.querySelector('#wiki-provider').value==='builtin';});
   const wikiConfigNotice=wikiPanel.querySelector('[data-config-notice]'),wikiTreeStatus=wikiPanel.querySelector('[data-tree-status]'),wikiTreeEl=wikiPanel.querySelector('#dialogue-wiki-tree');
   wikiPanel.querySelector('[data-close]').onclick=()=>{wikiPanel.hidden=true;};
   const wikiConfirmDlg=document.createElement('dialog');wikiConfirmDlg.id='dialogue-wiki-confirm';
@@ -163,13 +164,14 @@
   wikiPanel.querySelector('#wiki-clear-sel').onclick=()=>wikiChange(()=>[]);
   wikiPanel.querySelector('#wiki-save-config').onclick=async()=>{
     const enabled=wikiPanel.querySelector('#wiki-enabled').checked;
+    const provider=wikiPanel.querySelector('#wiki-provider').value;
     const base_url=wikiPanel.querySelector('#wiki-base-url').value.trim();
     const max_doc=Number(wikiPanel.querySelector('#wiki-max-doc').value);
     const max_total=Number(wikiPanel.querySelector('#wiki-max-total').value);
-    if(!/^https?:\/\//.test(base_url)){wikiConfigNotice.textContent='服务器地址需以 http:// 或 https:// 开头';return;}
+    if(provider==='external'&&!/^https?:\/\//.test(base_url)){wikiConfigNotice.textContent='服务器地址需以 http:// 或 https:// 开头';return;}
     wikiConfigNotice.textContent='保存中…';
     try{
-      const result=await fetch('/api/wiki/config',{method:'POST',headers:{'Content-Type':'application/json','X-XSRFToken':xsrfToken()},body:JSON.stringify({enabled,base_url,max_chars_per_doc:isNaN(max_doc)?4000:max_doc,max_total_chars:isNaN(max_total)?16000:max_total})});
+      const result=await fetch('/api/wiki/config',{method:'POST',headers:{'Content-Type':'application/json','X-XSRFToken':xsrfToken()},body:JSON.stringify({enabled,provider,base_url,max_chars_per_doc:isNaN(max_doc)?4000:max_doc,max_total_chars:isNaN(max_total)?16000:max_total})});
       const cfg=await result.json();if(!result.ok)throw Error(cfg.error||cfg.detail||'保存失败');
       wikiEnabled=Boolean(cfg.enabled);wikiConfigNotice.textContent='设置已保存。'+(wikiEnabled?'可在下方浏览并勾选知识库。':'当前为关闭状态，发送时不会注入。');
       if(wikiEnabled)wikiRenderRoot();
@@ -182,6 +184,8 @@
       const cfg=await apiWiki('config');
       wikiEnabled=Boolean(cfg.enabled);
       wikiPanel.querySelector('#wiki-enabled').checked=wikiEnabled;
+      wikiPanel.querySelector('#wiki-provider').value=cfg.provider||'external';
+      wikiPanel.querySelector('#wiki-external-url').hidden=cfg.provider==='builtin';
       wikiPanel.querySelector('#wiki-base-url').value=cfg.base_url||'http://127.0.0.1:8888';
       wikiPanel.querySelector('#wiki-max-doc').value=cfg.max_chars_per_doc??4000;
       wikiPanel.querySelector('#wiki-max-total').value=cfg.max_total_chars??16000;
