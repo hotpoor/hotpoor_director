@@ -1,13 +1,12 @@
 """Real isolated PostgreSQL + internal HTTP: import, scope, paging and auth."""
 import asyncio
 import json
-import secrets
 import socket
 from pathlib import Path
 
 import pytest
 from tornado.httpclient import AsyncHTTPClient
-from backend.config import ROOT
+from backend.config import load_config
 from backend.database import initialize
 from backend.postgres import Postgres
 from backend.knowledge.runtime import KnowledgeRuntime
@@ -15,14 +14,14 @@ from backend.knowledge.import_kb import import_directory, content_block_id
 from backend import wiki
 
 
-def test_builtin_postgres_and_http(tmp_path):
+def test_builtin_postgres_and_http(tmp_path, monkeypatch):
     with socket.socket() as sock:
         sock.bind(('127.0.0.1', 0))
         port = sock.getsockname()[1]
-    config = {'data_dir': tmp_path, 'pg_bin': ROOT / 'runtime/pgsql/bin',
-              'postgres': {'mode': 'embedded', 'host': '127.0.0.1', 'port': port,
-                           'admin_user': 'test_owner', 'admin_password': secrets.token_hex(16),
-                           'user': 'test_app', 'password': secrets.token_hex(16)}}
+    # Use production directory permissions, including explicit Windows user ACLs.
+    monkeypatch.setenv('DIRECTOR_DATA_DIR', str(tmp_path))
+    config = load_config()
+    config['postgres']['port'] = port
     pg = Postgres(config)
     pg.start()
     try:
@@ -38,11 +37,14 @@ def test_builtin_postgres_and_http(tmp_path):
                 denied = await AsyncHTTPClient().fetch(base+'/health', raise_error=False)
                 assert denied.code == 403
                 assert (await wiki._get_json(client, base+'/health'))['ok']
+                empty = await wiki._get_json(client, base+'/api/tree')
+                assert empty['items'] == [] and empty['pagination']['total'] == 0
+                assert empty['imported'] is False
                 with pytest.raises(Exception):
                     await client.fetch('http://example.invalid/secret')
                 folder = tmp_path/'markdown'; folder.mkdir()
                 for i in range(103):
-                    (folder/f'{i:03}.md').write_text(f'财政预算研究 {i}。')
+                    (folder/f'{i:03}.md').write_text(f'财政预算研究 {i}。', encoding='utf-8')
                 await import_directory(folder, runtime.app.pools)
                 tree = await wiki._get_json(client, base+'/api/tree?kind=file&page_size=100')
                 assert tree['pagination']['total']==103 and tree['pagination']['has_next']
@@ -70,7 +72,7 @@ def test_builtin_postgres_and_http(tmp_path):
                     body=json.dumps({'q':'研究','block_ids':ids}), raise_error=False)
                 assert failed.code == 503  # Do not return lexical-only success.
                 # A file-tree path must not cause an updated document to be skipped.
-                (folder/'102.md').write_text('更新后的财政预算。')
+                (folder/'102.md').write_text('更新后的财政预算。', encoding='utf-8')
                 await import_directory(folder, runtime.app.pools)
                 updated = str(content_block_id('更新后的财政预算。'))
                 resolved = await wiki.resolve_scope(client,base,['102.md'])

@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import re
+import sys
 import urllib.request
 import http.cookiejar
 from urllib.parse import urlencode, urlparse, unquote
@@ -128,6 +129,10 @@ def main():
     if scope(a.thread)['revision']!=state['revision']:raise ValueError('检索期间勾选范围发生变化，请按最新范围重新检索。')
     print(json.dumps(output,ensure_ascii=False,indent=2))
 def entrypoint():
+    # Machine-readable output and errors must also be UTF-8 in Windows pipes.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8')
     try:main()
     except urllib.error.URLError as error:
         raise SystemExit('Director 文献服务请求失败，请确认 Director 已启动。' + str(error))

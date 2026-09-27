@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 import subprocess
+import sys
 import time
 import urllib.request
 
@@ -20,13 +21,16 @@ def ensure_qdrant(home):
 
     if healthy():
         return
-    binary = root / 'bin' / 'qdrant'
+    windows = sys.platform == 'win32'
+    binary = root / 'bin' / ('qdrant.exe' if windows else 'qdrant')
     if not binary.is_file() or not (root / 'config.yaml').is_file():
         raise RuntimeError(f'Qdrant installation missing at {root}')
     with (root / 'server.log').open('ab') as log:
+        process_options = ({'creationflags': subprocess.CREATE_NO_WINDOW} if windows
+                           else {'start_new_session': True})
         child = subprocess.Popen([str(binary), '--config-path', str(root / 'config.yaml'),
                                   '--disable-telemetry'], cwd=root, stdout=log, stderr=log,
-                                 stdin=subprocess.DEVNULL, start_new_session=True)
+                                 stdin=subprocess.DEVNULL, **process_options)
     (root / 'server.pid').write_text(str(child.pid))
     for _ in range(40):
         if healthy():

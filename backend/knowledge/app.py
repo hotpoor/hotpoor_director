@@ -293,7 +293,10 @@ class Tree(Base):
             if row:
                 rows.append(row)
         if not rows:
-            raise tornado.web.HTTPError(404, reason="file tree not imported")
+            self.write_json({"block_id": None, "kind": "file_tree", "root": None,
+                             "imported": False, "items": [],
+                             "pagination": page_meta(0, offset, size)})
+            return
         row = rows[0]
         body = json_body(row["body"])
         prefix = self.get_argument("prefix", "").strip("/")

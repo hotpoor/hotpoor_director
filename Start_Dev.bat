@@ -1,6 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
+if exist "%~dp0runtime\node\current\node.exe" set "PATH=%~dp0runtime\node\current;%PATH%"
 set ELECTRON_RUN_AS_NODE=
 if not exist "node_modules\electron\dist\electron.exe" (
   echo Electron is missing. Run scripts\setup.ps1 first.
