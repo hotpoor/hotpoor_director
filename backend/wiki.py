@@ -346,6 +346,14 @@ class WikiTreeHandler(WikiBaseHandler):
         self.finish(data)
 
 
+class WikiDocumentHandler(WikiBaseHandler):
+    async def get(self, block_id):
+        cfg = load_config(self.settings['config'])
+        base, client = connection(cfg)
+        data = await _get_json(client, base + '/api/blocks/' + block_id + '?include=markdown')
+        self.finish({'block_id': block_id, 'markdown': data.get('markdown') or ''})
+
+
 class WikiReadinessHandler(WikiBaseHandler):
     async def post(self):
         cfg = load_config(self.settings['config'])
@@ -412,6 +420,7 @@ def wiki_routes():
     return [
         (r'/api/wiki/config', WikiConfigHandler),
         (r'/api/wiki/tree', WikiTreeHandler),
+        (r'/api/wiki/document/([A-Za-z0-9-]{1,100})', WikiDocumentHandler),
         (r'/api/wiki/readiness', WikiReadinessHandler),
         (r'/api/wiki/progress', WikiProgressHandler),
         (r'/api/wiki/library/(health|tree|resolve|search|hybrid/search|semantic/index|semantic/status|blocks/[0-9a-f-]+)', WikiLibraryHandler),

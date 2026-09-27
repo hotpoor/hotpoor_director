@@ -2,6 +2,7 @@ const {app,BrowserWindow}=require('electron');
 const {spawn,spawnSync}=require('node:child_process');
 const fs=require('node:fs'),path=require('node:path'),readline=require('node:readline');
 const http=require('node:http');
+const sourceMarkdown='前文😀\n'.repeat(1000)+'财政预算是本篇相关资料的主题。<script>unsafe</script>\n'+'后文\n'.repeat(2000);
 const root=path.resolve(__dirname,'..'),directory=fs.mkdtempSync(path.join(root,'.test-data','wiki-ui-'));
 app.setPath('userData',path.join(directory,'profile'));
 let backend,win,wikiServer,failed=false;
@@ -18,13 +19,13 @@ app.whenReady().then(async()=>{
    return send({ready:true});
   }else if(url.pathname==='/api/hybrid/search'){
    if(body.block_ids.length!==120)throw Error('Incomplete request scope');
-   return send({items:[{block_id:'doc-119',paths:['folder/119.md'],score:1,channels:['lexical','semantic']}],pagination:{has_next:false},retrieval:{strategy:'hybrid_union_rrf',lexical_count:1,semantic_count:1,overlap_count:1,union_count:1}});
+   return send({items:[{block_id:'doc-119',paths:['folder/119.md'],score:1,channels:['lexical','semantic'],passages:[{char_start:4000}]}],pagination:{has_next:false},retrieval:{strategy:'hybrid_union_rrf',lexical_count:1,semantic_count:1,overlap_count:1,union_count:1}});
   }else if(url.pathname==='/api/tree'){
    items=[{kind:'directory',path:'folder',name:'folder',child_count:120},...Array.from({length:120},(_,i)=>({kind:'file',path:'folder/'+String(i).padStart(3,'0')+'.md',name:'资料 '+i}))];
   }else if(url.pathname==='/api/search'){
    items=[...Array.from({length:100},(_,i)=>({block_id:'outside'+i,paths:['outside/'+i+'.md'],score:100})),{block_id:'inside',paths:['folder/119.md'],score:1}];
   }else if(url.pathname==='/api/blocks/doc-119'){
-   res.setHeader('Content-Type','application/json');res.end(JSON.stringify({markdown:'财政预算是本篇相关资料的主题。'}));return;
+   res.setHeader('Content-Type','application/json');res.end(JSON.stringify({markdown:sourceMarkdown}));return;
   }else{res.writeHead(404);res.end();return;}
   const offset=(page-1)*size;
   res.setHeader('Content-Type','application/json');res.end(JSON.stringify({items:items.slice(offset,offset+size),pagination:{total:items.length,pages:Math.ceil(items.length/size),has_next:offset+size<items.length}}));
@@ -118,6 +119,15 @@ app.whenReady().then(async()=>{
   await js("document.querySelector('.dialogue-context').open=true;document.querySelector('.dialogue-context').dispatchEvent(new Event('toggle'));document.querySelector('.dialogue-context').scrollIntoView()");
   await new Promise(resolve=>setTimeout(resolve,250));
   fs.writeFileSync(path.join(directory,'wiki-retrieval.png'),(await win.webContents.capturePage()).toPNG());
+  await js("document.querySelector('.wiki-source-link').click()");
+  await wait("!!document.querySelector('#wiki-source-reader mark')");
+  if(!await js(`document.querySelector('#wiki-source-reader mark').textContent===${JSON.stringify(Array.from(sourceMarkdown).slice(3000,7000).join(''))}&&!document.querySelector('#wiki-source-reader script')`))throw Error('Unicode offsets or safe plaintext rendering failed');
+  await wait("document.querySelector('#wiki-source-reader pre').scrollTop>0");
+  if(!await js("document.querySelector('#wiki-source-reader [role=tab][aria-selected=true]')&&document.querySelector('#wiki-source-reader').getBoundingClientRect().left>=document.querySelector('.dialogue-main').getBoundingClientRect().right-1"))throw Error('Source reader is not docked on the right');
+  await new Promise(resolve=>setTimeout(resolve,250));
+  fs.writeFileSync(path.join(directory,'wiki-source-reader.png'),(await win.webContents.capturePage()).toPNG());
+  await js("document.querySelector('#wiki-source-reader [data-close]').click()");
+  if(!await js("document.querySelector('#wiki-source-reader').hidden&&!document.querySelector('#dialogue-mode').classList.contains('wiki-reader-open')"))throw Error('Reader did not close');
   console.log('Wiki UI verified: full folder selection, 120 persisted paths, partial state, reopen, confirmation, late-page in-scope retrieval and report. Artifacts:',directory);
  }catch(e){failed=true;console.error(e);if(win){console.error(await win.webContents.executeJavaScript("document.querySelector('#dialogue-status')?.textContent"));fs.writeFileSync(path.join(directory,'failure.png'),(await win.webContents.capturePage()).toPNG());}}
  finally{if(wikiServer)wikiServer.close();if(win)win.destroy();if(backend.exitCode===null){backend.stdin.end('shutdown\n');await new Promise(r=>backend.once('exit',r));}app.exit(failed?1:0);}
