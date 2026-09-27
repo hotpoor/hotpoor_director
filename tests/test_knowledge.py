@@ -80,6 +80,9 @@ def test_builtin_postgres_and_http(tmp_path, monkeypatch):
                 runtime.app.semantic.signature = 'fixture'
                 hybrid = await wiki._post_json(client,base+'/api/hybrid/search',{'q':'研究','block_ids':ids})
                 assert hybrid['retrieval']['lexical_only']==1
+                planned = await wiki._post_json(client,base+'/api/hybrid/search',{'q':'研究','block_ids':ids,'lexical_terms':['不存在的索引词']})
+                assert planned['retrieval']['lexical_count']==0 and planned['items']==[]
+                assert planned['retrieval']['lexical_terms']==['不存在的索引词']
                 assert other not in [x['block_id'] for x in hybrid['items']]
                 runtime.app.hybrid_cache.clear()
                 async def unavailable(*args):

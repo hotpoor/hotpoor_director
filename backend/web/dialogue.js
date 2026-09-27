@@ -84,7 +84,7 @@
   const wikiConfigNotice=wikiPanel.querySelector('[data-config-notice]'),wikiTreeStatus=wikiBrowse.querySelector('[data-tree-status]'),wikiTreeEl=wikiBrowse.querySelector('#dialogue-wiki-tree');
   wikiPanel.querySelector('[data-close]').onclick=()=>{wikiPanel.hidden=true;};
   const wikiConfirmDlg=document.createElement('dialog');wikiConfirmDlg.id='dialogue-wiki-confirm';
-  wikiConfirmDlg.innerHTML='<form method="dialog"><header><strong>确认知识库范围</strong><button type="button" class="quiet" data-cancel>✕</button></header><p>将在完整勾选范围内按问题搜索，分批读取相关资料。字符预算只限制本轮片段，不限制勾选范围；实际来源显示在“本次提交”中。</p><ul data-list></ul><div class="dialogue-wiki-confirm-actions"><button type="button" class="quiet" data-edit>编辑范围</button><button type="submit" value="cancel" data-cancel>取消</button><button type="submit" value="confirm" data-confirm>确认发送</button></div></form>';
+  wikiConfirmDlg.innerHTML='<form method="dialog"><header><strong>确认知识库范围</strong><button type="button" class="quiet" data-cancel>✕</button></header><p>先使用当前 AK 和模型提取关键词（增加一次模型调用），展示后自动检索勾选文献，再提交回答。字符预算只限制本轮片段；关键词和实际来源保存在“本次提交”中。</p><ul data-list></ul><div class="dialogue-wiki-confirm-actions"><button type="button" class="quiet" data-edit>编辑范围</button><button type="submit" value="cancel" data-cancel>取消</button><button type="submit" value="confirm" data-confirm>确认发送</button></div></form>';
   document.querySelector('#studio').append(wikiConfirmDlg);
   const wikiFileStates=new Map(),wikiKnownFiles=new Set();
   let wikiStatusTimer=null,wikiStatusLoading=false,wikiStatusRevision=0,wikiPreparing=false,wikiPrepareCancelled=false;
@@ -92,6 +92,8 @@
   const wikiPrepare=document.createElement('button');wikiPrepare.type='button';wikiPrepare.id='wiki-prepare-selected';wikiPrepare.textContent='整理已选资料';
   const wikiCancelPrepare=document.createElement('button');wikiCancelPrepare.type='button';wikiCancelPrepare.id='wiki-cancel-prepare';wikiCancelPrepare.className='quiet';wikiCancelPrepare.textContent='停止等待';wikiCancelPrepare.hidden=true;wikiCancelPrepare.onclick=()=>{wikiPrepareCancelled=true;};wikiBrowse.insertBefore(wikiCancelPrepare,wikiTreeEl);
   wikiBrowse.insertBefore(wikiPrepare,wikiTreeEl);wikiBrowse.insertBefore(wikiProcessing,wikiTreeEl);
+  const wikiKeywords=document.createElement('section');wikiKeywords.id='wiki-query-keywords';wikiKeywords.setAttribute('aria-live','polite');wikiKeywords.textContent='本轮检索关键词：发送问题后先由当前模型提取，再检索勾选文献。';wikiBrowse.insertBefore(wikiKeywords,wikiTreeEl);
+  function keywordDescription(plan){return (plan.status==='fallback'?plan.error:'模型提取：'+plan.keywords.join('、'))+'\n扩展词：'+(plan.expanded_keywords.join('、')||'无')+'\n实际检索分词：'+(plan.lexical_terms.join('、')||'无')+'\n向量查询：'+plan.semantic_query+'\n提取模型：'+plan.model;}
   function describeWikiPath(path,kind){
     const paths=kind==='directory'?[...(wikiDirectoryFiles.get(path)||[])]:[path];
     const entries=paths.map(p=>wikiFileStates.get(p));
@@ -165,8 +167,12 @@
       try{
         const value=await apiWiki('progress?request_id='+encodeURIComponent(id));
         if(wikiRequestProgress!==id)return;
+        if(value.phase==='keywords')wikiKeywords.textContent='正在由当前模型提取本轮检索关键词…';
+        if(value.query_plan)wikiKeywords.textContent=keywordDescription(value.query_plan);
         const messages={resolve:`正在核对 ${value.selected||0} 篇资料的文档编号`,index:`正在核对 ${value.documents||0} 篇资料的向量索引`,search:`双路检索：已返回 ${value.pages||0} 页结果，当前匹配 ${value.matched||0} 篇`,read:`读取命中片段：已读取 ${value.used||0} 篇，命中 ${value.matched||0} 篇，已整理 ${value.chars||0} 字符`,complete:`资料已准备：采用 ${value.used||0} 篇、${value.chars||0} 字符，正在提交回答模型`,failed:'资料检索失败，未继续提交回答模型'};
         if(messages[value.phase])status.textContent=messages[value.phase];
+        if(value.phase==='keywords')status.textContent='先由模型提取关键词，随后检索勾选文献…';
+        if(value.phase==='keywords_ready')status.textContent='关键词已准备，正在进入 Wiki 检索…';
       }catch(error){if(wikiRequestProgress===id)wikiProcessing.textContent='检索进度暂不可读：'+error.message;}
       await new Promise(resolve=>setTimeout(resolve,1000));
     }
@@ -633,6 +639,7 @@
       const report=turn.wiki_retrieval,section=document.createElement('section'),heading=document.createElement('p');
       heading.textContent='知识库：勾选 '+report.selected_count+' 篇 · '+(report.mode==='scope_fallback'?'范围读取':'问题检索')+'命中 '+report.matched_count+' 篇 · 实际提供 '+report.used.length+' 篇 / '+report.chars+' 字（不代表已读完全部勾选资料）';
       section.append(heading);
+      if(report.query_plan){const keywords=document.createElement('p');keywords.className='wiki-query-plan';keywords.textContent=keywordDescription(report.query_plan);section.append(keywords);}
       const stats=report.retrieval,counts=document.createElement('p');counts.className='wiki-channel-summary';
       if(stats&&['lexical_count','semantic_count','overlap_count','union_count'].every(key=>Number.isInteger(stats[key])&&stats[key]>=0)){
         counts.textContent='检索命中：分词 '+stats.lexical_count+' · 向量 '+stats.semantic_count+' · 两路重合 '+stats.overlap_count+' · 合并去重 '+stats.union_count+' 条文献记录（发送给模型的资料见下方）';
@@ -784,6 +791,7 @@
     if(!wikiBusy){wikiSelections=(body.wiki_selections||[]).slice();refreshWikiSelUI();}
     const selectionWarning=reset?restoreSelection(body):'';
     if(reset){turns=body.turns;older=body.prev_id;}else{const map=new Map(turns.map(t=>[t.id,t]));for(const t of body.turns)map.set(t.id,t);turns=[...map.values()];}
+    const plan=turns.at(-1)?.wiki_retrieval?.query_plan;if(plan)wikiKeywords.textContent=keywordDescription(plan);else if(reset)wikiKeywords.textContent='本轮检索关键词：发送问题后先由当前模型提取，再检索勾选文献。';
     pending=Boolean(body.pending_id);$('#dialogue-acknowledge').hidden=!body.interrupted;
     if(body.interrupted)status.textContent='服务或连接中断，请先在服务控制台核对请求；不会自动重发或重复计费。';else if(body.turns?.at(-1)?.status==='awaiting_tool'){const active=body.turns.at(-1).tool_calls?.find(call=>call.status==='approval_required');status.textContent=toolExecutions.get(current+':'+active?.id)?.phase||'模型正在等待你确认命令';}else if(selectionWarning)status.textContent=selectionWarning;
     render();controls();refreshAuthorization();

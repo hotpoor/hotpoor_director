@@ -386,6 +386,7 @@
 #dialogue-mode #wiki-processing-status{padding:8px;border:1px solid #343b34;border-radius:6px;color:#b7c6b6}
 .wiki-source-link{display:inline;padding:2px 0;border:0;background:transparent;color:#bbd5f4;text-align:left;font:inherit;overflow-wrap:anywhere;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
 .wiki-position-row{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0;font-size:11px}
+#wiki-query-keywords,.wiki-query-plan{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.6;padding:9px;border:1px solid #394351;border-radius:6px;color:#bed0e4}
 .wiki-source-metadata{font-size:12px;max-height:35vh;overflow:auto;flex-shrink:0}
 .wiki-source-metadata label{display:block;margin:8px 0}
 .wiki-source-metadata textarea{display:block;box-sizing:border-box;width:100%;resize:vertical;background:#242424;color:#ddd;border:1px solid #444}

@@ -165,13 +165,17 @@ async def resolve_scope(client, base, paths):
     return sorted(ids)
 
 
-async def search_pages(client, base, query, block_ids):
+async def search_pages(client, base, query, block_ids, query_plan=None):
     page = 1
     while True:
-        data = await _post_json(client, base + '/api/hybrid/search',
-            {'q': query, 'block_ids': block_ids, 'include': 'summary', 'page_size': 100, 'page': page})
+        payload = {'q': query, 'block_ids': block_ids, 'include': 'summary', 'page_size': 100, 'page': page}
+        if query_plan is not None:
+            payload['lexical_terms'] = query_plan['lexical_terms']
+        data = await _post_json(client, base + '/api/hybrid/search', payload)
         if not isinstance(data, dict) or not isinstance(data.get('items'), list):
             raise WebHTTPError(502, reason='Wiki 搜索结果格式不正确')
+        if query_plan is not None and data.get('retrieval',{}).get('lexical_terms') != query_plan['lexical_terms']:
+            raise WebHTTPError(502,reason='Wiki 未确认使用本轮关键词，请更新 Wiki 服务；未提交回答模型')
         yield data
         if not data['pagination']['has_next']:
             break
@@ -202,16 +206,19 @@ def excerpt(markdown, query, limit):
     return markdown[start:start + limit], start
 
 
-async def retrieve(cfg, selections, query='', progress=None):
+async def retrieve(cfg, selections, query='', progress=None, query_plan=None):
     """Fuse scoped lexical and vector retrieval, then fetch relevant bodies.
 
     Context size limits only the passages submitted, never the search scope.
-    No model requests are issued here. Failure aborts before a paid request.
+    No model requests are issued here. Failure aborts before the answer request;
+    an upstream keyword preparation request may already have completed.
     """
     progress = progress or (lambda *args, **kwargs: None)
     selections = clean_selections(selections)
     report = {'selected_count': len(selections), 'matched_count': 0, 'used': [],
               'mode': 'search', 'query': query, 'chars': 0}
+    if query_plan is not None:
+        report['query_plan'] = query_plan
     if not cfg.get('enabled') or not selections:
         return '', report
     max_doc = int(cfg.get('max_chars_per_doc', 0))
@@ -241,7 +248,7 @@ async def retrieve(cfg, selections, query='', progress=None):
     report['resolved_block_count'] = len(block_ids)
     progress('search', documents=len(block_ids), pages=0, matched=0)
     search_page = 0
-    async for data in search_pages(client, base, query.strip() or '概括文献的主要内容和核心论点', block_ids):
+    async for data in search_pages(client, base, query.strip() or '概括文献的主要内容和核心论点', block_ids, query_plan):
         search_page += 1
         progress('search', documents=len(block_ids), pages=search_page, matched=len(matched))
         report['retrieval'] = data['retrieval']

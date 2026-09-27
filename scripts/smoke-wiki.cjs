@@ -19,7 +19,8 @@ app.whenReady().then(async()=>{
    return send({ready:true});
   }else if(url.pathname==='/api/hybrid/search'){
    if(body.block_ids.length!==120)throw Error('Incomplete request scope');
-   return send({items:[{block_id:'doc-119',paths:['folder/119.md'],score:1,channels:['lexical','semantic'],passages:[{char_start:4000}],lexical_matches:{items:[{word:'财政',line_number:1001,line_id:'doc-119_abcdef',char_start:4000,positions:[{start:0,end:2}]}],total:1,has_next:false}}],pagination:{has_next:false},retrieval:{strategy:'hybrid_union_rrf',lexical_count:1,semantic_count:1,overlap_count:1,union_count:1}});
+   if(!body.lexical_terms?.length||body.lexical_terms.some(x=>['请','帮','查','一下'].includes(x)))throw Error('Model keywords were not used');
+   return send({items:[{block_id:'doc-119',paths:['folder/119.md'],score:1,channels:['lexical','semantic'],passages:[{char_start:4000}],lexical_matches:{items:[{word:'财政',line_number:1001,line_id:'doc-119_abcdef',char_start:4000,positions:[{start:0,end:2}]}],total:1,has_next:false}}],pagination:{has_next:false},retrieval:{strategy:'hybrid_union_rrf',lexical_terms:body.lexical_terms,lexical_count:1,semantic_count:1,overlap_count:1,union_count:1}});
   }else if(url.pathname==='/api/tree'){
    items=[{kind:'directory',path:'folder',name:'folder',child_count:120},...Array.from({length:120},(_,i)=>({kind:'file',path:'folder/'+String(i).padStart(3,'0')+'.md',name:'资料 '+i}))];
   }else if(url.pathname==='/api/search'){
@@ -103,7 +104,7 @@ app.whenReady().then(async()=>{
   await new Promise(r=>setTimeout(r,150));
   if(!await js("document.querySelector('#dialogue-sources').getBoundingClientRect().bottom<=document.querySelector('.dialogue-main').getBoundingClientRect().top+1&&document.querySelector('#dialogue-compose').getBoundingClientRect().bottom<=innerHeight"))throw Error('Narrow layout overlaps composer');
   win.setSize(1320,930);
-  await js("document.querySelector('#dialogue-question').textContent='财政预算';document.querySelector('#dialogue-compose').requestSubmit()");
+  await js("document.querySelector('#dialogue-question').textContent='请帮我查一下财政预算';document.querySelector('#dialogue-compose').requestSubmit()");
   await wait("document.querySelector('#dialogue-wiki-confirm').open");
   if(!await js("document.querySelector('#dialogue-wiki-confirm header strong').textContent.includes('120')"))throw Error('Scope was truncated on reopen');
   await js("document.querySelector('#dialogue-wiki-confirm ul button').click()");
@@ -115,6 +116,7 @@ app.whenReady().then(async()=>{
   if(!await js("document.querySelector('.dialogue-context').textContent.includes('勾选 120 篇')&&document.querySelector('.dialogue-context').textContent.includes('folder/119.md')&&!document.querySelector('.dialogue-context').textContent.includes('outside/')"))throw Error('Actual retrieval report missing or scope leaked');
   await new Promise(resolve=>setTimeout(resolve,250));
   if(!await js("document.querySelector('.wiki-channel-badge[data-channel=both]')?.textContent==='两路均命中'&&document.querySelector('.wiki-channel-summary')?.textContent.includes('分词 1 · 向量 1 · 两路重合 1 · 合并去重 1')"))throw Error('Retrieval provenance or overlap counts missing');
+  if(!await js("document.querySelector('#wiki-query-keywords').textContent.includes('模型提取：财政预算')&&document.querySelector('.wiki-query-plan').textContent.includes('实际检索分词：')"))throw Error('Keyword preparation is not visible or persisted');
   await wait("!document.querySelector('#dialogue-status').textContent.includes('模型正在回答')");
   await js("document.querySelector('.dialogue-context').open=true;document.querySelector('.dialogue-context').dispatchEvent(new Event('toggle'));document.querySelector('.dialogue-context').scrollIntoView()");
   await new Promise(resolve=>setTimeout(resolve,250));

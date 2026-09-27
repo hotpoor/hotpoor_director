@@ -35,6 +35,12 @@ async def fake_api(key, path, data=None):
         return {'data': [{'id': 'gpt-6-astra' if key == 'fixture-first' else 'fixture-chat', 'type': 'llm'},
                          {'id': 'fixture-image', 'type': 'image'}]}
     assert path in ('/v1/responses', '/v1/chat/completions')
+    messages = data.get('input', data.get('messages', []))
+    if messages and messages[0].get('content','').startswith('你负责知识库检索关键词提取'):
+        text = json.dumps({'keywords':['财政预算'],'expanded_keywords':[]},ensure_ascii=False)
+        if path == '/v1/responses':
+            return {'status':'completed','output':[{'type':'message','role':'assistant','content':[{'type':'output_text','text':text}]}],'usage':{'input_tokens':15,'output_tokens':8}}
+        return {'choices':[{'message':{'content':text}}],'usage':{'prompt_tokens':15,'completion_tokens':8}}
     if os.environ.get('DIRECTOR_README_SCENES') == '1':
         if data.get('tools'):
             return {'id': 'readme-response', 'status': 'completed', 'output': [

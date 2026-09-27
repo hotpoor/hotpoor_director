@@ -263,6 +263,13 @@ class Hybrid(Search):
         if ids is None:
             raise tornado.web.HTTPError(400, reason="explicit block_ids required")
         query = self.get_argument('q', '').strip()
+        lexical_terms = getattr(self, 'search_body', {}).get('lexical_terms')
+        if lexical_terms is None:
+            lexical_terms = sorted(terms(query))
+        elif (not isinstance(lexical_terms,list) or len(lexical_terms)>512 or
+              any(not isinstance(word,str) or not word or len(word)>256 for word in lexical_terms)):
+            raise tornado.web.HTTPError(400,reason='lexical_terms must be a bounded string array')
+        lexical_terms = sorted(set(lexical_terms))
         offset, size = pagination(self)
         include = detail_level(self)
         try:
@@ -273,8 +280,8 @@ class Hybrid(Search):
             raise tornado.web.HTTPError(400, reason="semantic_threshold must be between 0 and 1")
         if not ids or not query:
             return self.write_json({'items': [], 'pagination': page_meta(0, offset, size),
-                                    'retrieval': {'strategy': 'hybrid_union_rrf', 'lexical_count': 0, 'semantic_count': 0, 'union_count': 0}})
-        key = (query, tuple(str(x) for x in ids), threshold)
+                                    'retrieval': {'strategy': 'hybrid_union_rrf', 'lexical_count': 0, 'semantic_count': 0, 'union_count': 0, 'lexical_terms': lexical_terms}})
+        key = (query, tuple(str(x) for x in ids), threshold, tuple(lexical_terms))
         cached = self.application.hybrid_cache.get(key)
         if cached and time.monotonic() - cached[0] < 120:
             ranked, stats = cached[1:]
@@ -283,7 +290,7 @@ class Hybrid(Search):
                 rows = await self.application.pools['wiki'].fetch(
                     "SELECT books.block_id, count(*) AS score FROM word_entities CROSS JOIN LATERAL unnest(book_ids) AS books(block_id) "
                     "WHERE word=ANY($1::text[]) AND books.block_id=ANY($2::uuid[]) "
-                    "GROUP BY books.block_id ORDER BY score DESC, books.block_id", list(terms(query)), ids)
+                    "GROUP BY books.block_id ORDER BY score DESC, books.block_id", lexical_terms, ids)
                 return [dict(row) for row in rows]
             try:
                 lex, sem = await asyncio.gather(lexical(), self.application.semantic.search(query, list(key[1]), threshold))
@@ -295,7 +302,7 @@ class Hybrid(Search):
                      'overlap_count': both, 'union_count': len(ranked), 'lexical_only': len(lex)-both,
                      'semantic_only': len(sem)-both, 'semantic_threshold': threshold, 'rrf_k': 60,
                      'scope_count': len(ids), 'model': self.application.semantic.signature,
-                     'index_complete': True, 'passages_per_document': 3}
+                     'index_complete': True, 'passages_per_document': 3, 'lexical_terms': lexical_terms}
             if len(self.application.hybrid_cache) >= 8:
                 self.application.hybrid_cache.pop(next(iter(self.application.hybrid_cache)))
             self.application.hybrid_cache[key] = (time.monotonic(), ranked, stats)
@@ -314,7 +321,7 @@ class Hybrid(Search):
                 for passage in item.get('passages', [])]
             from .positions import matches
             results.append({**document_payload(row, include), **item,
-                            'lexical_matches': await matches(self.application.pools['wiki'],bid,terms(query))})
+                            'lexical_matches': await matches(self.application.pools['wiki'],bid,lexical_terms)})
         self.write_json({'items': results, 'pagination': page_meta(len(ranked), offset, size), 'retrieval': stats})
 
 
