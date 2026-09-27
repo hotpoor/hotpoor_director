@@ -385,6 +385,10 @@
 #dialogue-mode .wiki-document-processing{display:block;margin:0 4px 8px 24px;font-size:10px;line-height:1.5;color:#a7b6a6;overflow-wrap:anywhere}
 #dialogue-mode #wiki-processing-status{padding:8px;border:1px solid #343b34;border-radius:6px;color:#b7c6b6}
 .wiki-source-link{display:inline;padding:2px 0;border:0;background:transparent;color:#bbd5f4;text-align:left;font:inherit;overflow-wrap:anywhere;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.wiki-position-row{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0;font-size:11px}
+.wiki-source-metadata{font-size:12px;max-height:35vh;overflow:auto;flex-shrink:0}
+.wiki-source-metadata label{display:block;margin:8px 0}
+.wiki-source-metadata textarea{display:block;box-sizing:border-box;width:100%;resize:vertical;background:#242424;color:#ddd;border:1px solid #444}
 #wiki-source-reader[hidden]{display:none}
 #wiki-source-reader{display:flex;flex-direction:column;min-width:0;min-height:0;border-left:1px solid #383838;background:#181818;padding:12px;gap:10px;overflow:hidden}
 #wiki-source-reader header{display:flex;align-items:center;justify-content:space-between}

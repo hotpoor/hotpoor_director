@@ -56,7 +56,7 @@ class ScopeApplication(tornado.web.Application):
             (r'/', Page), (r'/(app.js|style.css)', Asset),
             (r'/health', Health), (r'/api/catalog', Catalog),
             (r'/api/scope/([a-zA-Z0-9_-]{1,100})', Scope),
-            (r'/wiki/(health|api/tree|api/resolve|api/search|api/hybrid/search|api/semantic/index|api/semantic/status|api/blocks/[0-9a-fA-F-]+)', WikiBridge),
+            (r'/wiki/(health|api/tree|api/resolve|api/word|api/search|api/hybrid/search|api/semantic/index|api/semantic/status|api/blocks/[0-9a-fA-F-]+)', WikiBridge),
         ], port=port, xsrf_cookies=True, compress_response=True)
 
     async def wiki_json(self, route, **params):

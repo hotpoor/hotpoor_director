@@ -31,6 +31,9 @@ def initialize(config):
                     db.execute(sql.SQL('GRANT USAGE ON SCHEMA public TO {}').format(role))
                     table = 'index_search' if name == 'wiki' else 'entities'
                     db.execute(sql.SQL('GRANT SELECT, INSERT, UPDATE, DELETE ON {} TO {}').format(sql.Identifier(table), role))
+                    if name == 'wiki':
+                        for extra in ('word_entities', 'word_occurrences', 'positional_documents'):
+                            db.execute(sql.SQL('GRANT SELECT, INSERT, UPDATE, DELETE ON {} TO {}').format(sql.Identifier(extra), role))
         finally:
             admin.execute('SELECT pg_advisory_unlock(804512320)')
 
@@ -54,6 +57,8 @@ class KnowledgeRuntime:
             params['database'] = params.pop('dbname')
             params['timeout'] = params.pop('connect_timeout')
             self.app.pools[name] = await asyncpg.create_pool(**params, min_size=1, max_size=4)
+        from .positions import backfill
+        await backfill(self.app.pools)
         self.server = HTTPServer(self.app, max_body_size=32 * 1024 * 1024)
         sockets = bind_sockets(0, '127.0.0.1')
         self.server.add_sockets(sockets)

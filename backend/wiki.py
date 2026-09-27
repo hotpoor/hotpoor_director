@@ -277,10 +277,15 @@ async def retrieve(cfg, selections, query='', progress=None):
                 continue
             limit = min(available, max_doc or available)
             semantic_passages = item.get('passages') or []
+            lexical_matches = item.get('lexical_matches', {})
             if semantic_passages:
                 start = max(0, min(len(markdown), int(semantic_passages[0]['char_start'])))
                 # Preserve context around the semantic hit; original text remains authoritative.
                 start = max(0, start - limit // 4)
+                passage = markdown[start:start + limit]
+            elif lexical_matches.get('items'):
+                hit = lexical_matches['items'][0]
+                start = max(0, hit['char_start'] + hit['positions'][0]['start'] - limit // 4)
                 passage = markdown[start:start + limit]
             else:
                 passage, start = excerpt(markdown, query, limit)
@@ -288,7 +293,8 @@ async def retrieve(cfg, selections, query='', progress=None):
             note = f'原文字符位置：{start + 1}–{start + len(passage)} / {len(markdown)}' + ('（节选）' if partial else '（全文）') + '\n'
             text += label + note + passage
             report['used'].append({'path': path, 'title': scope[path]['title'], 'block_id': str(item['block_id']),
-                                   'start': start, 'chars': len(passage), 'total_chars': len(markdown), 'partial': partial, 'channels': item.get('channels', []), 'score': item.get('score')})
+                                   'start': start, 'chars': len(passage), 'total_chars': len(markdown), 'partial': partial, 'channels': item.get('channels', []), 'score': item.get('score'),
+                                   'lexical_matches': lexical_matches, 'source_paths': item.get('source_paths', []), 'book_links': item.get('book_links', [])})
     report['chars'] = len(text)
     report['candidate_count'] = len(ranked)
     progress('complete', matched=len(matched), used=len(report['used']), chars=len(text))
@@ -351,7 +357,19 @@ class WikiDocumentHandler(WikiBaseHandler):
         cfg = load_config(self.settings['config'])
         base, client = connection(cfg)
         data = await _get_json(client, base + '/api/blocks/' + block_id + '?include=markdown')
-        self.finish({'block_id': block_id, 'markdown': data.get('markdown') or ''})
+        self.finish({'block_id': block_id, 'markdown': data.get('markdown') or '',
+                     'source_paths': data.get('source_paths', []), 'book_links': data.get('book_links', [])})
+
+    async def post(self, block_id):
+        cfg = load_config(self.settings['config'])
+        if cfg.get('provider') != 'builtin':
+            raise WebHTTPError(409,reason='来源编辑仅支持内置知识库')
+        base, client = connection(cfg)
+        try:
+            body = json.loads(self.request.body)
+        except ValueError:
+            raise WebHTTPError(400,reason='来源列表格式错误')
+        self.finish(await _post_json(client,base+'/api/blocks/'+block_id,body))
 
 
 class WikiReadinessHandler(WikiBaseHandler):
@@ -423,5 +441,5 @@ def wiki_routes():
         (r'/api/wiki/document/([A-Za-z0-9-]{1,100})', WikiDocumentHandler),
         (r'/api/wiki/readiness', WikiReadinessHandler),
         (r'/api/wiki/progress', WikiProgressHandler),
-        (r'/api/wiki/library/(health|tree|resolve|search|hybrid/search|semantic/index|semantic/status|blocks/[0-9a-f-]+)', WikiLibraryHandler),
+        (r'/api/wiki/library/(health|tree|resolve|word|search|hybrid/search|semantic/index|semantic/status|blocks/[0-9a-f-]+)', WikiLibraryHandler),
     ]

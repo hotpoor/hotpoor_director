@@ -19,13 +19,13 @@ app.whenReady().then(async()=>{
    return send({ready:true});
   }else if(url.pathname==='/api/hybrid/search'){
    if(body.block_ids.length!==120)throw Error('Incomplete request scope');
-   return send({items:[{block_id:'doc-119',paths:['folder/119.md'],score:1,channels:['lexical','semantic'],passages:[{char_start:4000}]}],pagination:{has_next:false},retrieval:{strategy:'hybrid_union_rrf',lexical_count:1,semantic_count:1,overlap_count:1,union_count:1}});
+   return send({items:[{block_id:'doc-119',paths:['folder/119.md'],score:1,channels:['lexical','semantic'],passages:[{char_start:4000}],lexical_matches:{items:[{word:'财政',line_number:1001,line_id:'doc-119_abcdef',char_start:4000,positions:[{start:0,end:2}]}],total:1,has_next:false}}],pagination:{has_next:false},retrieval:{strategy:'hybrid_union_rrf',lexical_count:1,semantic_count:1,overlap_count:1,union_count:1}});
   }else if(url.pathname==='/api/tree'){
    items=[{kind:'directory',path:'folder',name:'folder',child_count:120},...Array.from({length:120},(_,i)=>({kind:'file',path:'folder/'+String(i).padStart(3,'0')+'.md',name:'资料 '+i}))];
   }else if(url.pathname==='/api/search'){
    items=[...Array.from({length:100},(_,i)=>({block_id:'outside'+i,paths:['outside/'+i+'.md'],score:100})),{block_id:'inside',paths:['folder/119.md'],score:1}];
   }else if(url.pathname==='/api/blocks/doc-119'){
-   res.setHeader('Content-Type','application/json');res.end(JSON.stringify({markdown:sourceMarkdown}));return;
+   res.setHeader('Content-Type','application/json');res.end(JSON.stringify({markdown:sourceMarkdown,source_paths:['C:/original/book.md','D:/backup/book.md'],book_links:['https://example.org/book','https://example.org/mirror']}));return;
   }else{res.writeHead(404);res.end();return;}
   const offset=(page-1)*size;
   res.setHeader('Content-Type','application/json');res.end(JSON.stringify({items:items.slice(offset,offset+size),pagination:{total:items.length,pages:Math.ceil(items.length/size),has_next:offset+size<items.length}}));
@@ -126,6 +126,9 @@ app.whenReady().then(async()=>{
   if(!await js("document.querySelector('#wiki-source-reader [role=tab][aria-selected=true]')&&document.querySelector('#wiki-source-reader').getBoundingClientRect().left>=document.querySelector('.dialogue-main').getBoundingClientRect().right-1"))throw Error('Source reader is not docked on the right');
   await new Promise(resolve=>setTimeout(resolve,250));
   fs.writeFileSync(path.join(directory,'wiki-source-reader.png'),(await win.webContents.capturePage()).toPNG());
+  await js("document.querySelector('.wiki-position-row button').click()");
+  await wait("document.querySelector('#wiki-source-reader mark')?.textContent==='财政'");
+  if(!await js("document.querySelector('#wiki-source-reader>p').textContent.includes('Markdown 第 1001 行')&&document.querySelector('#wiki-source-reader>p').textContent.includes('分词命中位置')&&document.querySelector('.wiki-source-metadata [data-paths]').value.split('\\n').length===2&&document.querySelector('.wiki-source-metadata [data-links]').value.split('\\n').length===2"))throw Error('Exact line location or multiple source metadata missing');
   await js("document.querySelector('#wiki-source-reader [data-close]').click()");
   if(!await js("document.querySelector('#wiki-source-reader').hidden&&!document.querySelector('#dialogue-mode').classList.contains('wiki-reader-open')"))throw Error('Reader did not close');
   console.log('Wiki UI verified: full folder selection, 120 persisted paths, partial state, reopen, confirmation, late-page in-scope retrieval and report. Artifacts:',directory);

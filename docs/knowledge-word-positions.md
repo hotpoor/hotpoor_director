@@ -1,0 +1,23 @@
+# 词条实体与 Markdown 出现位置
+
+每个规范化词有一个确定性 UUID `block_id`，存于 `wiki.public.word_entities`。`book_ids` 是从出现位置提取的去重 UUID 数组。同一个词在多个文档中的出现共用词条 ID。
+
+`word_occurrences` 按词、书、行保存位置：`term_id`、`book_id`、`line_id`、`line_number`、`page`、`paragraph_id`、`char_start`、`positions`、`kind`。`positions` 是 `[{start,end}, ...]`，行内 Unicode 字符从 0 起算，右端不包含。Markdown 行号从 1 起算，空行计入。页面仅从明确的分页标记提取；没有页码时为 null。这里是文件分页标记，不是推测的印刷页码。
+
+`line_id` 是 `<内容UUID>_<六位局部ID>`；同一内容内检测短 ID 冲突并重新生成。文档仍用现有内容 UUID，整篇作为一个内容包，未强制拆成十页，因此既有内容和引用不会被重新编号。内容修改产生新 UUID，原版本按项目既有规则保留；删除文件不等于删除历史版本。
+
+文档实体位于 `wiki1` 或 `wiki2` 的 `entities`。其 `body.source_paths` 和 `body.book_links` 均为列表，允许同一内容在多个位置备份。相同内容重导入时合并去重；右侧原文阅读器可以编辑两个来源列表。不会根据文件名伪造网络链接。`line_blocks` 保存逐行正文、页码、段落及全文位置；图片 Markdown 行标记为 image，并保留原始图片引用。
+
+## 检索与展示
+
+分词检索从词实体的 `book_ids` 汇总文档，并返回分页位置明细。`POST /api/word` 接受 `word`、可选 `block_ids` 范围、`page`、`page_size`，返回词实体和 `occurrences`。`GET /api/blocks/<UUID>?include=lines` 分页读取正文行。
+
+对话保存最多前 100 条词语/行命中，明确展示是否截断。每行每次出现可点击，在右侧原文标签页精确高亮该词，并显示原文行号和可用页码。该高亮与发送给模型的节选高亮明确区分；定位不调用回答模型。
+
+向量返回保留原分数和片段，补充对应 `line_ids`，不为此重复计算已有向量。当前仍按既有字符预算发送连续原文，不声称所有索引命中位置都已发送。
+
+## 迁移和校验
+
+初始化新增表，启动时按 `positional_documents.version` 幂等补齐已有文档。每篇索引的词条、位置、book_ids 和兼容的 index_search 在一个事务内更新，并使用事务锁避免导入与迁移交错。原始内容保持不变。旧 index_search 保留作兼容与状态计数，词条实体为新分词检索入口。
+
+本机迁移前备份了 wiki、wiki1、wiki2，备份放在 `.local/knowledge-backups/`，不会提交到 Git。迁移后逐条用原文验证位置，并检查 book_ids 与位置明细一致。真实数据库集成测试覆盖重复导入、范围过滤、词条 ID、重复位置、移除出现位置和多来源保存；界面测试覆盖行号定位、emoji 偏移以及来源列表显示。

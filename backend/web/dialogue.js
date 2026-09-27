@@ -48,6 +48,15 @@
   const wikiReader=document.createElement('aside');wikiReader.id='wiki-source-reader';wikiReader.hidden=true;wikiReader.setAttribute('aria-label','引用原文');
   wikiReader.innerHTML='<header><strong>引用原文</strong><button type="button" class="quiet" data-close aria-label="关闭原文">✕</button></header><nav role="tablist" aria-label="已打开的引用"></nav><p role="status"></p><button type="button" class="quiet" data-locate>定位引用片段</button><pre tabindex="0" role="tabpanel" aria-label="Markdown 原文"></pre>';
   $('.dialogue-layout').append(wikiReader);
+  const wikiSourceMetadata=document.createElement('details');wikiSourceMetadata.className='wiki-source-metadata';
+  wikiSourceMetadata.innerHTML='<summary>原始文件路径与书籍链接</summary><label>文件路径（每行一个，可保留多个备份）<textarea data-paths rows="3"></textarea></label><label>书籍链接（每行一个）<textarea data-links rows="3"></textarea></label><button type="button" data-save>保存来源列表</button><small role="status"></small>';
+  wikiReader.insertBefore(wikiSourceMetadata,wikiReader.querySelector('pre'));
+  wikiSourceMetadata.querySelector('[data-save]').onclick=async()=>{
+    const item=wikiReaderTabs.get(wikiReaderActive),key=wikiReaderActive;if(!item)return;
+    const values=selector=>[...new Set(wikiSourceMetadata.querySelector(selector).value.split('\n').map(x=>x.trim()).filter(Boolean))];
+    const notice=wikiSourceMetadata.querySelector('small');notice.textContent='正在保存…';
+    try{const response=await fetch('/api/wiki/document/'+encodeURIComponent(item.block_id),{method:'POST',headers:{'Content-Type':'application/json','X-XSRFToken':xsrfToken()},body:JSON.stringify({source_paths:values('[data-paths]'),book_links:values('[data-links]')})});const data=await response.json();if(!response.ok)throw Error(data.error||'保存失败');if(key===wikiReaderActive)notice.textContent='已保存多个来源。';}catch(e){if(key===wikiReaderActive)notice.textContent=e.message;}
+  };
   const wikiReaderTabs=new Map();let wikiReaderActive='',wikiReaderRevision=0;
   wikiReader.querySelector('[data-close]').onclick=()=>{wikiReader.hidden=true;dialog.classList.remove('wiki-reader-open');++wikiReaderRevision;};
   function locateWikiQuote(){const mark=wikiReader.querySelector('mark'),body=wikiReader.querySelector('pre');if(mark)body.scrollTop=mark.offsetTop-body.clientHeight/3;}
@@ -57,14 +66,16 @@
     const revision=++wikiReaderRevision;wikiReader.hidden=false;dialog.classList.add('wiki-reader-open');
     const nav=wikiReader.querySelector('nav');nav.replaceChildren();
     for(const [key,entry] of wikiReaderTabs){const button=document.createElement('button');button.type='button';button.setAttribute('role','tab');button.setAttribute('aria-selected',String(key===wikiReaderActive));button.textContent=(entry.title||entry.path.split('/').pop())+' · '+(entry.start+1);button.title=entry.path;button.onclick=()=>openWikiQuote(entry);nav.append(button);}
-    const body=wikiReader.querySelector('pre'),notice=wikiReader.querySelector('[role=status]');body.replaceChildren();notice.textContent='正在读取原文…';wikiReader.querySelector('[data-locate]').disabled=true;
+    const body=wikiReader.querySelector('pre'),notice=wikiReader.querySelector('[role=status]');body.replaceChildren();notice.textContent='正在读取原文…';wikiReader.querySelector('[data-locate]').disabled=true;wikiSourceMetadata.querySelector('[data-save]').disabled=true;wikiSourceMetadata.querySelector('small').textContent='';
     try{
       const result=await apiWiki('document/'+encodeURIComponent(item.block_id));if(revision!==wikiReaderRevision)return;
+      wikiSourceMetadata.querySelector('[data-paths]').value=(result.source_paths||[]).join('\n');wikiSourceMetadata.querySelector('[data-links]').value=(result.book_links||[]).join('\n');wikiSourceMetadata.querySelector('[data-save]').disabled=false;
       // Python reports Unicode code-point offsets; JS string offsets count UTF-16 units.
       const chars=Array.from(result.markdown),start=item.start,end=start+item.chars;
       if(chars.length!==item.total_chars||!Number.isInteger(start)||start<0||end>chars.length){body.textContent=result.markdown;notice.textContent='原文与引用记录的长度不一致，已展示当前原文，无法准确高亮旧位置。';return;}
       const mark=document.createElement('mark');mark.textContent=chars.slice(start,end).join('');body.append(document.createTextNode(chars.slice(0,start).join('')),mark,document.createTextNode(chars.slice(end).join('')));
-      notice.textContent=item.path+' · 原文字符 '+(start+1)+'–'+end+' / '+chars.length+' · 高亮为本次提供给模型的片段';wikiReader.querySelector('[data-locate]').disabled=false;
+      const lineNumber=chars.slice(0,start).join('').split(/\r\n|\n|\r/).length;
+      notice.textContent=item.path+' · Markdown 第 '+lineNumber+' 行'+(item.page?' · 文件第 '+item.page+' 页':'')+' · 原文字符 '+(start+1)+'–'+end+' / '+chars.length+(item.position_hit?' · 高亮为分词命中位置':' · 高亮为本次提供给模型的片段');wikiReader.querySelector('[data-locate]').disabled=false;
       requestAnimationFrame(()=>{if(revision===wikiReaderRevision)locateWikiQuote();});
     }catch(error){if(revision===wikiReaderRevision)notice.textContent='无法打开原文：'+error.message;}
   }
@@ -637,6 +648,15 @@
         badge.title=lexical&&semantic?'这篇文献同时被分词关键词检索和向量语义检索找到。':lexical?'通过分词后的关键词匹配找到这篇文献。':semantic?'通过语义相似度找到这篇文献。':'历史记录或服务未提供渠道信息，无法追溯。';
         const link=document.createElement('button');link.type='button';link.className='wiki-source-link';link.textContent=item.path+' · 原文字符 '+(item.start+1)+'–'+(item.start+item.chars)+' / '+item.total_chars+(item.partial?'（节选）':'（全文）');link.title='在右侧打开并高亮引用片段';link.disabled=!item.block_id;link.onclick=()=>openWikiQuote(item);
         li.append(badge,link);sources.append(li);
+        if(item.lexical_matches?.items?.length){
+          const hits=document.createElement('details'),label=document.createElement('summary');label.textContent='分词位置 · '+item.lexical_matches.total+' 条词语／行记录'+(item.lexical_matches.has_next?'（本次展示前 '+item.lexical_matches.items.length+' 条）':'');hits.append(label);
+          for(const hit of item.lexical_matches.items){
+            const row=document.createElement('div');row.className='wiki-position-row';const title=document.createElement('span');title.textContent='“'+hit.word+'” · Markdown 第 '+hit.line_number+' 行'+(hit.page?' · 第 '+hit.page+' 页':'');row.append(title);
+            for(const position of hit.positions){const button=document.createElement('button');button.type='button';button.className='wiki-source-link';button.textContent='字符 '+(position.start+1)+'–'+position.end;button.title=hit.line_id;button.onclick=()=>openWikiQuote({...item,start:hit.char_start+position.start,chars:position.end-position.start,position_hit:true,page:hit.page});row.append(button);}
+            hits.append(row);
+          }
+          li.append(hits);
+        }
       }
       section.append(sources);
       const explanation=document.createElement('p');explanation.className='wiki-channel-summary';explanation.textContent='分词：关键词匹配；向量：语义相似匹配。标签表示文献的检索来源，不表示回答中的每句话都由该渠道验证。';section.append(explanation);

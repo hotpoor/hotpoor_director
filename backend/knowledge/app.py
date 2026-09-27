@@ -57,6 +57,9 @@ def document_payload(row, include="summary", line_offset=0, line_limit=DEFAULT_P
               "title": body.get("title"), "path": body.get("path"),
               "paths": body.get("paths", []), "createtime": row["createtime"],
               "updatetime": row["updatetime"]}
+    result['book_id'] = row['block_id']
+    result['source_paths'] = body.get('source_paths', [])
+    result['book_links'] = body.get('book_links', [])
     if include in {"markdown", "full"}:
         result["markdown"] = body.get("markdown", "")
     if include in {"lines", "full"}:
@@ -169,15 +172,16 @@ class Search(Base):
             return self.write_json({"items": [], "pagination": page_meta(0, offset, size)})
         words = terms(query)
         where = "word=ANY($1::text[])"
+        source = "word_entities CROSS JOIN LATERAL unnest(book_ids) AS books(block_id)"
         args = [list(words)]
         if block_ids is not None:
             args.append(block_ids)
-            where += " AND block_id=ANY($2::uuid[])"
+            where += " AND books.block_id=ANY($2::uuid[])"
         total = await self.application.pools["wiki"].fetchval(
-            "SELECT count(DISTINCT block_id) FROM index_search WHERE " + where, *args)
+            "SELECT count(DISTINCT books.block_id) FROM " + source + " WHERE " + where, *args)
         index_rows = await self.application.pools["wiki"].fetch(
-            "SELECT block_id, count(*) AS score FROM index_search WHERE " + where +
-            f" GROUP BY block_id ORDER BY score DESC, block_id LIMIT ${len(args)+1} OFFSET ${len(args)+2}",
+            "SELECT books.block_id, count(*) AS score FROM " + source + " WHERE " + where +
+            f" GROUP BY books.block_id ORDER BY score DESC, books.block_id LIMIT ${len(args)+1} OFFSET ${len(args)+2}",
             *args, size, offset)
         selected = index_rows
         grouped = {"wiki1": [], "wiki2": []}
@@ -195,6 +199,8 @@ class Search(Base):
             for row in rows:
                 item = document_payload(row, include)
                 item["score"] = scores[row["block_id"]]
+                from .positions import matches
+                item['lexical_matches'] = await matches(self.application.pools['wiki'],row['block_id'],words)
                 results.append(item)
         results.sort(key=lambda item: (-item["score"], str(item["block_id"])))
         self.write_json({"items": results, "pagination": page_meta(total, offset, size)})
@@ -275,9 +281,9 @@ class Hybrid(Search):
         else:
             async def lexical():
                 rows = await self.application.pools['wiki'].fetch(
-                    "SELECT block_id, count(*) AS score FROM index_search "
-                    "WHERE word=ANY($1::text[]) AND block_id=ANY($2::uuid[]) "
-                    "GROUP BY block_id ORDER BY score DESC, block_id", list(terms(query)), ids)
+                    "SELECT books.block_id, count(*) AS score FROM word_entities CROSS JOIN LATERAL unnest(book_ids) AS books(block_id) "
+                    "WHERE word=ANY($1::text[]) AND books.block_id=ANY($2::uuid[]) "
+                    "GROUP BY books.block_id ORDER BY score DESC, books.block_id", list(terms(query)), ids)
                 return [dict(row) for row in rows]
             try:
                 lex, sem = await asyncio.gather(lexical(), self.application.semantic.search(query, list(key[1]), threshold))
@@ -300,7 +306,15 @@ class Hybrid(Search):
                 'SELECT block_id, body, createtime, updatetime FROM entities WHERE block_id=$1', bid)
             if row is None:
                 raise tornado.web.HTTPError(409, reason='Retrieved document missing')
-            results.append({**document_payload(row, include), **item})
+            # Attach stable source lines to old and new vector payloads without re-embedding.
+            lines = json_body(row['body']).get('line_blocks', [])
+            item = dict(item)
+            item['passages'] = [{**passage, 'line_ids': [line['line_id'] for line in lines
+                if line.get('char_start', -1) < passage['char_end'] and line.get('char_end', -1) > passage['char_start']]}
+                for passage in item.get('passages', [])]
+            from .positions import matches
+            results.append({**document_payload(row, include), **item,
+                            'lexical_matches': await matches(self.application.pools['wiki'],bid,terms(query))})
         self.write_json({'items': results, 'pagination': page_meta(len(ranked), offset, size), 'retrieval': stats})
 
 
@@ -348,6 +362,24 @@ class Tree(Base):
         self.write_json(payload)
 
 class Block(Base):
+    async def post(self, block_id):
+        try:
+            bid = uuid.UUID(block_id)
+            value = json.loads(self.request.body)
+            if not isinstance(value,dict) or set(value) != {'source_paths','book_links'}:
+                raise ValueError()
+            for key, items in value.items():
+                if not isinstance(items,list) or len(items)>1000 or any(not isinstance(x,str) or not x.strip() or len(x)>4096 for x in items):
+                    raise ValueError()
+                value[key] = list(dict.fromkeys(x.strip() for x in items))
+        except (ValueError,TypeError):
+            raise tornado.web.HTTPError(400,reason='Expected source_paths and book_links arrays')
+        result = await self.application.pools[entity_db(bid)].execute(
+            "UPDATE entities SET body=body || $2::jsonb WHERE block_id=$1 AND body->>'kind'='document'",bid,json.dumps(value))
+        if result == 'UPDATE 0':
+            raise tornado.web.HTTPError(404)
+        self.write_json(value)
+
     async def get(self, block_id):
         try:
             bid = uuid.UUID(block_id)
@@ -360,6 +392,23 @@ class Block(Base):
         line_offset, line_limit = pagination(self)
         self.write_json(document_payload(row, include, line_offset, line_limit))
 
+
+class Word(Search):
+    async def get(self):
+        word = self.get_argument('word','').strip().lower()
+        offset,size = pagination(self)
+        row = await self.application.pools['wiki'].fetchrow('SELECT * FROM word_entities WHERE word=$1',word)
+        if not row:
+            raise tornado.web.HTTPError(404,reason='Word not indexed')
+        ids = self.scoped_ids()
+        books = [x for x in row['book_ids'] if ids is None or x in ids]
+        db = self.application.pools['wiki']
+        total = await db.fetchval('SELECT count(*) FROM word_occurrences WHERE term_id=$1 AND book_id=ANY($2::uuid[])',row['block_id'],books)
+        records = await db.fetch('SELECT * FROM word_occurrences WHERE term_id=$1 AND book_id=ANY($2::uuid[]) ORDER BY book_id,line_number LIMIT $3 OFFSET $4',row['block_id'],books,size,offset)
+        self.write_json({'block_id':row['block_id'],'word':word,'book_ids':books,
+                         'occurrences':[{**dict(x),'positions':json_body(x['positions']),'content_block_id':x['book_id']} for x in records],
+                         'pagination':page_meta(total,offset,size)})
+
 class Application(tornado.web.Application):
     def __init__(self, token, semantic_root):
         self.token = token
@@ -368,3 +417,4 @@ class Application(tornado.web.Application):
         self.semantic = Semantic(semantic_root)
         self.hybrid_cache = {}
         self.pools = {}
+        self.add_handlers(r'.*',[(r'/api/word',Word)])

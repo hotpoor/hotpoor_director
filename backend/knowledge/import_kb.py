@@ -32,8 +32,8 @@ def now():
     return int(time.time() * 1000)
 
 def line_blocks(block_id, text):
-    return [{"line_id": line_id(block_id, number, line), "line_number": number, "text": line}
-            for number, line in enumerate(text.splitlines(), 1)]
+    from .positions import source_lines
+    return list(source_lines(block_id, text))
 
 def tree_block_id(root):
     return uuid.UUID(hashlib.md5(f"{TREE_NAMESPACE}:{root}".encode("utf-8")).hexdigest())
@@ -59,6 +59,8 @@ async def upsert_entity(pool, block_id, body, created=None):
         paths = set(previous.get("paths", []))
         paths.update(body.get("paths", []))
         body["paths"] = sorted(paths)
+        for key in ('source_paths', 'book_links'):
+            body[key] = sorted(set(previous.get(key, [])) | set(body.get(key, [])))
     timestamp = now()
     await pool.execute("""INSERT INTO entities(block_id, body, createtime, updatetime)
         VALUES($1, $2::jsonb, $3, $3)
@@ -110,15 +112,15 @@ async def import_directory(root, pools, progress=None):
             "title": path.name,
             "path": relative,
             "paths": [relative],
+            "source_paths": [str(path.resolve())],
+            "book_links": [],
             "markdown": text,
             "line_blocks": line_blocks(block_id, text),
         }
         entity_pool = entity_dbs[entity_db(block_id)]
         await upsert_entity(entity_pool, block_id, body)
-        async with index_db.acquire() as connection, connection.transaction():
-            await connection.execute("DELETE FROM index_search WHERE block_id=$1", block_id)
-            await connection.executemany("INSERT INTO index_search(word, block_id) VALUES($1, $2) ON CONFLICT DO NOTHING",
-                [(word, block_id) for word in terms(text + "\n" + "\n".join(body["paths"]))])
+        from .positions import index_document
+        await index_document(index_db, block_id, text)
         if progress:
             progress({'phase': 'importing', 'completed': number, 'total': len(files), 'skipped': skipped})
         if number % 100 == 0:

@@ -118,6 +118,25 @@ def test_builtin_postgres_and_http(tmp_path, monkeypatch):
                     await import_directory(empty_folder, runtime.app.pools)
                 assert (await wiki._get_json(client, base+'/api/tree'))['root'] == imported['root']
                 assert (await wiki._get_json(client,base+'/api/blocks/'+updated+'?include=markdown'))['markdown']=='更新后的财政预算。'
+                from backend.knowledge.positions import index_document, word_id
+                location_text = '## 第 12 页\n\n😀研究，研究。'
+                location_id = content_block_id(location_text)
+                await index_document(runtime.app.pools['wiki'],location_id,location_text)
+                term = await wiki._post_json(client,base+'/api/word',{'word':'研究','block_ids':[str(location_id)]})
+                assert term['block_id'] == str(word_id('研究'))
+                assert term['book_ids'] == [str(location_id)]
+                hit = term['occurrences'][0]
+                assert hit['line_number']==3 and hit['page']==12
+                assert hit['positions']==[{'start':1,'end':3},{'start':4,'end':6}]
+                await index_document(runtime.app.pools['wiki'],location_id,location_text)
+                assert await runtime.app.pools['wiki'].fetchval('SELECT count(*) FROM word_occurrences WHERE book_id=$1 AND term_id=$2',location_id,word_id('研究')) == 1
+                await index_document(runtime.app.pools['wiki'],location_id,'')
+                remaining = await runtime.app.pools['wiki'].fetchval('SELECT book_ids FROM word_entities WHERE word=$1','研究')
+                assert location_id not in remaining and len(remaining)>=100
+                metadata = {'source_paths':['C:/original/book.md','D:/backup/book.md'],'book_links':['https://example.org/book','https://example.org/mirror']}
+                assert await wiki._post_json(client,base+'/api/blocks/'+updated,metadata) == metadata
+                full = await wiki._get_json(client,base+'/api/blocks/'+updated+'?include=markdown')
+                assert full['source_paths']==metadata['source_paths'] and full['book_links']==metadata['book_links']
 
             finally:
                 await runtime.close()
