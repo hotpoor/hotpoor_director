@@ -60,6 +60,10 @@ else app.whenReady().then(async () => {
       title:'Hotpoor Director · 导演工作站', backgroundColor:'#101010', autoHideMenuBar:true,
       icon:path.join(root, 'assets', windows ? 'icon.ico' : 'icon.png'),
       webPreferences:{preload:path.join(__dirname,'preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,backgroundThrottling:process.env.DIRECTOR_SMOKE_TEST !== '1'}});
+    const {createWikiImporter}=require('./wiki-import.cjs');
+    const wikiImporter=createWikiImporter({window,origin,dialog,executable,prefix:app.isPackaged?[]:['-m','backend'],root:app.isPackaged?process.resourcesPath:root,dataDirectory,pgBin:path.join(app.isPackaged?process.resourcesPath:path.join(root,'runtime'),'pgsql','bin')});
+    ipcMain.handle('director:wiki-import-folder',(event,requestId)=>wikiImporter.run(event,requestId));
+    window.on('close',event=>{if(wikiImporter.busy){event.preventDefault();void dialog.showMessageBox(window,{type:'info',message:'知识库正在导入，请等待完成后再关闭。'});}});
     ipcMain.handle('director:open-authorization', async (event, value) => {
       if (event.sender !== window.webContents || event.senderFrame?.url !== origin + '/') throw Error('Invalid sender');
       const url = new URL(value);

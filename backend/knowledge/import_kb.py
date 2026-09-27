@@ -1,5 +1,8 @@
 import hashlib
 import json
+import asyncio
+import os
+import stat
 import time
 import uuid
 from pathlib import Path
@@ -63,16 +66,41 @@ async def upsert_entity(pool, block_id, body, created=None):
         block_id, json.dumps(body, ensure_ascii=False),
         existing["createtime"] if existing else (created or timestamp))
 
-async def import_directory(root, pools):
+def markdown_files(root):
+    """Enumerate supported documents without following links or dependency folders."""
+    files = []
+    skipped = 0
+    def linked(path):
+        return path.is_symlink() or bool(getattr(path.lstat(), 'st_file_attributes', 0) & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0))
+    def scan_error(error):
+        raise error
+    for directory, children, names in os.walk(root, followlinks=False, onerror=scan_error):
+        children[:] = sorted(name for name in children if not name.startswith('.') and name not in ('node_modules', '__pycache__') and not linked(Path(directory) / name))
+        for name in sorted(names):
+            path = Path(directory) / name
+            if name.startswith('.') or linked(path) or path.suffix.lower() not in ('.md', '.markdown'):
+                skipped += 1
+                continue
+            files.append(path)
+    return sorted(files), skipped
+
+
+async def import_directory(root, pools, progress=None):
     root = Path(root).expanduser().resolve()
     if not root.is_dir():
         raise ValueError(f"Markdown root does not exist: {root}")
     index_db = pools['wiki']
     entity_dbs = {name: pools[name] for name in ('wiki1', 'wiki2')}
-    files = sorted(root.rglob("*.md"))
+    if progress:
+        progress({'phase': 'scanning', 'completed': 0, 'total': 0})
+    files, skipped = await asyncio.to_thread(markdown_files, root)
+    if not files:
+        raise ValueError('所选文件夹及子目录中没有 .md 或 .markdown 文件；原目录未更改。')
+    if progress:
+        progress({'phase': 'importing', 'completed': 0, 'total': len(files), 'skipped': skipped})
     print(f"importing {len(files)} markdown files from {root}")
     for number, path in enumerate(files, 1):
-        relative = str(path.relative_to(root))
+        relative = path.relative_to(root).as_posix()
         text = path.read_text(encoding="utf-8", errors="replace").replace("\x00", "")
         block_id = content_block_id(text)
         body = {
@@ -91,6 +119,8 @@ async def import_directory(root, pools):
             await connection.execute("DELETE FROM index_search WHERE block_id=$1", block_id)
             await connection.executemany("INSERT INTO index_search(word, block_id) VALUES($1, $2) ON CONFLICT DO NOTHING",
                 [(word, block_id) for word in terms(text + "\n" + "\n".join(body["paths"]))])
+        if progress:
+            progress({'phase': 'importing', 'completed': number, 'total': len(files), 'skipped': skipped})
         if number % 100 == 0:
             print(number)
 
@@ -99,9 +129,9 @@ async def import_directory(root, pools):
         "kind": "file_tree",
         "block_id": str(tree_id),
         "root": str(root),
-        "paths": [str(path.relative_to(root)) for path in files],
+        "paths": [path.relative_to(root).as_posix() for path in files],
         "tree": build_tree(files, root),
     }
     await upsert_entity(entity_dbs[entity_db(tree_id)], tree_id, tree_body)
     print(f"stored file tree as {tree_id}")
-    return {"documents": len(files), "tree_block_id": str(tree_id)}
+    return {"documents": len(files), "skipped": skipped, "tree_block_id": str(tree_id)}

@@ -30,7 +30,7 @@ app.whenReady().then(async()=>{
   res.setHeader('Content-Type','application/json');res.end(JSON.stringify({items:items.slice(offset,offset+size),pagination:{total:items.length,pages:Math.ceil(items.length/size),has_next:offset+size<items.length}}));
  });
  await new Promise(resolve=>wikiServer.listen(0,'127.0.0.1',resolve));
- backend=spawn(path.join(root,'.venv/bin/python'),['tests/dialogue_backend.py','serve','--port','0','--desktop','--dev'],{cwd:root,stdio:['pipe','pipe','pipe'],env:{...process.env,DIRECTOR_DATA_DIR:directory,DIRECTOR_BOOTSTRAP_TOKEN:'dialogue-bootstrap'}});
+ backend=spawn(path.join(root,process.platform==='win32'?'.venv/Scripts/python.exe':'.venv/bin/python'),['tests/dialogue_backend.py','serve','--port','0','--desktop','--dev'],{cwd:root,stdio:['pipe','pipe','pipe'],env:{...process.env,PYTHONIOENCODING:'utf-8',DIRECTOR_DATA_DIR:directory,DIRECTOR_BOOTSTRAP_TOKEN:'dialogue-bootstrap'}});
  backend.stderr.on('data',d=>process.stderr.write(d));
  try{
   const port=await new Promise((resolve,reject)=>{const t=setTimeout(()=>reject(Error('Startup timeout')),60000);readline.createInterface({input:backend.stdout}).on('line',line=>{try{const v=JSON.parse(line);if(v.event==='ready'){clearTimeout(t);resolve(v.port);}}catch{}});backend.once('exit',()=>reject(Error('Backend stopped')));});
@@ -44,6 +44,7 @@ app.whenReady().then(async()=>{
   await js(`window.testApi=async(path,body,expected=200)=>{const r=await fetch(path,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json','X-XSRFToken':decodeURIComponent(document.cookie.split('; ').find(x=>x.startsWith('_xsrf=')).slice(6))},body:body===undefined?undefined:JSON.stringify(body)});const d=await r.json();if(r.status!==expected)throw Error(r.status+' '+JSON.stringify(d));return d;};void 0`);
   await js(`(async()=>{await testApi('/api/setup',{login:'dialogue-ui',password:'dialogue-password-123'});await testApi('/api/login',{login:'dialogue-ui',password:'dialogue-password-123'});await directorStudio.enter(await testApi('/api/me'));document.querySelector('#open-dialogue').click();})()`);
   await wait("document.querySelector('#dialogue-model').value==='gpt-6-astra'");
+  await js(`window.directorDesktop={importWikiFolder:async callback=>{callback({phase:'importing',completed:2,total:2});return window.cancelWikiImport?{cancelled:true}:{ok:true,documents:2,skipped:1};}};void 0`);
   await js(`testApi('/api/wiki/config',{enabled:true,provider:'builtin'})`);
   if(!await js(`(async()=>{const result=await testApi('/api/wiki/library/health');return result.ok&&result.databases.length===3;})()`))throw Error('Built-in Wiki is not healthy');
   const wikiOrigin='http://127.0.0.1:'+wikiServer.address().port;
@@ -56,6 +57,12 @@ app.whenReady().then(async()=>{
   await wait("document.querySelector('[data-config-notice]').textContent.includes('设置已保存')");
   if(!await js("document.querySelector('#wiki-external-url').hidden"))throw Error('Built-in mode still requires URL');
   if(!await js("(async()=>{const cfg=await testApi('/api/wiki/config');return cfg.provider==='builtin'&&!('_knowledge' in cfg);})()"))throw Error('Provider switch or secret filtering failed');
+  if(await js("document.querySelector('#wiki-import-folder').disabled"))throw Error('Native import entry disabled');
+  await js("window.cancelWikiImport=true;document.querySelector('#wiki-import-folder').click()");
+  await wait("document.querySelector('#wiki-import-status').textContent.includes('已取消')&&!document.querySelector('#wiki-import-folder').disabled");
+  await js("window.cancelWikiImport=false;document.querySelector('#wiki-import-folder').click()");
+  await wait("document.querySelector('#wiki-import-status').textContent.includes('已导入 2 篇')&&!document.querySelector('#wiki-import-folder').disabled");
+
   await js("document.querySelector('#wiki-provider').value='external';document.querySelector('#wiki-provider').dispatchEvent(new Event('change'));document.querySelector('#wiki-save-config').click()");
   await wait("document.querySelector('input[data-wiki-kind=directory]')");
   await js("document.querySelector('input[data-wiki-kind=directory]').click()");

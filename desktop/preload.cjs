@@ -1,6 +1,13 @@
 const {contextBridge,ipcRenderer}=require('electron');
 contextBridge.exposeInMainWorld('directorDesktop',Object.freeze({
   isDesktop:true,
+  importWikiFolder:async onProgress=>{
+    const requestId=globalThis.crypto.randomUUID();
+    const listener=(_event,value)=>{if(value.requestId===requestId&&typeof onProgress==='function')onProgress(value);};
+    ipcRenderer.on('director:wiki-import-progress',listener);
+    try{return await ipcRenderer.invoke('director:wiki-import-folder',requestId);}
+    finally{ipcRenderer.removeListener('director:wiki-import-progress',listener);}
+  },
   openAuthorization:url=>ipcRenderer.invoke('director:open-authorization',url),
   runCommand:async(request,onOutput)=>{
     const executionId=request.executionId||globalThis.crypto.randomUUID();

@@ -36,7 +36,7 @@
   const wikiDirectoryFiles=new Map();
   const wikiButton=document.createElement('button');wikiButton.type='button';wikiButton.className='quiet';wikiButton.textContent='知识库';wikiButton.title='配置并勾选 wiki 知识库，作为对话的系统提示补充';$('.dialogue-controls').append(wikiButton);
   const wikiPanel=document.createElement('aside');wikiPanel.id='dialogue-wiki';wikiPanel.hidden=true;
-  wikiPanel.innerHTML='<header><strong>知识库</strong><button type="button" class="quiet" data-close>✕</button></header><section class="dialogue-wiki-config"><label class="dialogue-wiki-enable"><input type="checkbox" id="wiki-enabled"> 启用知识库注入</label><label>知识库来源<select id="wiki-provider"><option value="builtin">Director 内置知识库</option><option value="external">外部 Wiki 服务</option></select></label><label id="wiki-external-url">服务器地址<input id="wiki-base-url" placeholder="http://127.0.0.1:8888"></label><label>单篇片段字符预算<input id="wiki-max-doc" type="number" min="0" max="20000" step="100"></label><label>本轮资料字符预算<input id="wiki-max-total" type="number" min="0" max="80000" step="500"></label><div class="dialogue-wiki-config-actions"><button type="button" id="wiki-save-config">保存设置</button></div><p data-config-notice role="status"></p></section><section class="dialogue-wiki-browse"><div class="dialogue-wiki-selections"><strong>已勾选范围：<span id="wiki-sel-count">0</span> 项</strong><button type="button" class="quiet" id="wiki-clear-sel">清空</button></div><div class="dialogue-wiki-tree-toolbar"><button type="button" id="wiki-tree-refresh">刷新目录</button><span data-tree-status></span></div><p class="dialogue-note">勾选不限篇数；文件夹按当前目录完整保存。回答时在勾选范围内搜索，分批读取相关片段，实际来源可在“本次提交”查看。</p><nav id="dialogue-wiki-tree" class="dialogue-wiki-tree"></nav></section>';
+  wikiPanel.innerHTML='<header><strong>知识库</strong><button type="button" class="quiet" data-close>✕</button></header><section class="dialogue-wiki-config"><label class="dialogue-wiki-enable"><input type="checkbox" id="wiki-enabled"> 启用知识库注入</label><label>知识库来源<select id="wiki-provider"><option value="builtin">Director 内置知识库</option><option value="external">外部 Wiki 服务</option></select></label><label id="wiki-external-url">服务器地址<input id="wiki-base-url" placeholder="http://127.0.0.1:8888"></label><label>单篇片段字符预算<input id="wiki-max-doc" type="number" min="0" max="20000" step="100"></label><label>本轮资料字符预算<input id="wiki-max-total" type="number" min="0" max="80000" step="500"></label><div class="dialogue-wiki-config-actions"><button type="button" id="wiki-save-config">保存设置</button></div><p data-config-notice role="status"></p></section><section class="dialogue-wiki-browse"><div class="dialogue-wiki-selections"><strong>已勾选范围：<span id="wiki-sel-count">0</span> 项</strong><button type="button" class="quiet" id="wiki-clear-sel">清空</button></div><div class="dialogue-wiki-tree-toolbar"><button type="button" id="wiki-import-folder">导入文件夹…</button><button type="button" id="wiki-tree-refresh">刷新目录</button><span data-tree-status></span></div><p class="dialogue-note">勾选不限篇数；文件夹按当前目录完整保存。回答时在勾选范围内搜索，分批读取相关片段，实际来源可在“本次提交”查看。</p><p class="dialogue-note" id="wiki-import-help">递归读取文件夹中的 .md、.markdown；忽略隐藏目录、依赖目录及链接。导入后浏览所选文件夹，历史文档保留。</p><p class="dialogue-note" id="wiki-import-status" role="status" aria-live="polite"></p><nav id="dialogue-wiki-tree" class="dialogue-wiki-tree"></nav></section>';
   $('.dialogue-main').append(wikiPanel);
   wikiPanel.querySelector('#wiki-provider').addEventListener('change',()=>{wikiPanel.querySelector('#wiki-external-url').hidden=wikiPanel.querySelector('#wiki-provider').value==='builtin';});
   const wikiConfigNotice=wikiPanel.querySelector('[data-config-notice]'),wikiTreeStatus=wikiPanel.querySelector('[data-tree-status]'),wikiTreeEl=wikiPanel.querySelector('#dialogue-wiki-tree');
@@ -160,6 +160,31 @@
     if(!wikiEnabled){const p=document.createElement('p');p.className='dialogue-note';p.textContent='请先在上方“启用知识库注入”并保存设置，然后点“刷新目录”。';wikiTreeEl.append(p);return;}
     await wikiLoadChildren('',wikiTreeEl);
   }
+  const wikiImportButton=wikiPanel.querySelector('#wiki-import-folder'),wikiImportStatus=wikiPanel.querySelector('#wiki-import-status');
+  let wikiImportBusy=false;
+  function updateWikiImport(){
+    wikiImportButton.disabled=wikiImportBusy||wikiPanel.querySelector('#wiki-provider').value!=='builtin'||!window.directorDesktop?.importWikiFolder;
+    wikiImportButton.title=!window.directorDesktop?.importWikiFolder?'请使用桌面客户端导入本机文件夹':wikiPanel.querySelector('#wiki-provider').value!=='builtin'?'请先选择 Director 内置知识库':'';
+  }
+  wikiPanel.querySelector('#wiki-provider').addEventListener('change',updateWikiImport);
+  updateWikiImport();
+  wikiImportButton.onclick=async()=>{
+    if(wikiImportBusy||!window.directorDesktop?.importWikiFolder)return;
+    wikiImportBusy=true;updateWikiImport();wikiImportStatus.textContent='请选择文件夹…';
+    try{
+      const cfg=await apiWiki('config');
+      if(cfg.provider!=='builtin'){wikiImportStatus.textContent='请先选择 Director 内置知识库并保存设置，再导入文件夹。';return;}
+      wikiEnabled=Boolean(cfg.enabled);
+      const result=await window.directorDesktop.importWikiFolder(progress=>{
+        wikiImportStatus.textContent=progress.phase==='scanning'?'正在递归扫描 Markdown 文件…':progress.phase==='importing'?`正在导入 ${progress.completed} / ${progress.total} 篇…`:'正在准备本机知识库…';
+      });
+      if(result.cancelled){wikiImportStatus.textContent='已取消，知识库未更改。';return;}
+      if(!result.ok)throw Error(result.error||'导入未完成');
+      wikiImportStatus.textContent=`已导入 ${result.documents} 篇 Markdown，跳过 ${result.skipped||0} 个其他或隐藏文件。`+(wikiEnabled?'可在下方勾选使用；向量索引会按选定范围另行建立。':'请先启用知识库并保存设置，再刷新目录。');
+      if(wikiEnabled)await wikiRenderRoot();
+    }catch(error){wikiImportStatus.textContent=error.message;}
+    finally{wikiImportBusy=false;updateWikiImport();}
+  };
   wikiPanel.querySelector('#wiki-tree-refresh').onclick=()=>wikiRenderRoot();
   wikiPanel.querySelector('#wiki-clear-sel').onclick=()=>wikiChange(()=>[]);
   wikiPanel.querySelector('#wiki-save-config').onclick=async()=>{
@@ -184,7 +209,7 @@
       const cfg=await apiWiki('config');
       wikiEnabled=Boolean(cfg.enabled);
       wikiPanel.querySelector('#wiki-enabled').checked=wikiEnabled;
-      wikiPanel.querySelector('#wiki-provider').value=cfg.provider||'external';
+      wikiPanel.querySelector('#wiki-provider').value=cfg.provider||'external';updateWikiImport();
       wikiPanel.querySelector('#wiki-external-url').hidden=cfg.provider==='builtin';
       wikiPanel.querySelector('#wiki-base-url').value=cfg.base_url||'http://127.0.0.1:8888';
       wikiPanel.querySelector('#wiki-max-doc').value=cfg.max_chars_per_doc??4000;

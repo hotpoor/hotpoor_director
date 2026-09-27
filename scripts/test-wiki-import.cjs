@@ -1,0 +1,21 @@
+const assert=require('node:assert/strict');
+const {PassThrough}=require('node:stream');
+const {EventEmitter}=require('node:events');
+const {createWikiImporter}=require('../desktop/wiki-import.cjs');
+(async()=>{
+ const messages=[],webContents={send:(_channel,value)=>messages.push(value)},window={webContents,isDestroyed:()=>false},origin='http://127.0.0.1:1234';
+ const event={sender:webContents,senderFrame:{url:origin+'/'}};
+ let options,args,process;
+ const importer=createWikiImporter({window,origin,dialog:{showOpenDialog:async()=>({canceled:false,filePaths:['C:/Folder with spaces/nested']})},executable:'python',prefix:['-m','backend'],root:'repo',dataDirectory:'private',pgBin:'pgsql',spawnProcess:(_exe,a,o)=>{args=a;options=o;process=new EventEmitter();process.stdout=new PassThrough();process.stderr=new PassThrough();return process;}});
+ await assert.rejects(importer.run({sender:{}},'fixture'),/Invalid sender/);
+ const pending=importer.run(event,'fixture');await new Promise(resolve=>setImmediate(resolve));
+ assert(importer.busy);assert.equal((await importer.run(event,'other')).ok,false);
+ assert.deepEqual(args,['-m','backend','wiki-import','--root','C:/Folder with spaces/nested']);assert.equal(options.windowsHide,true);assert.equal(options.shell,undefined);
+ process.stdout.write(JSON.stringify({event:'wiki-import-progress',phase:'importing',completed:2,total:2})+'\n');
+ process.stdout.write(JSON.stringify({documents:2,skipped:1,tree_block_id:'fixture-tree'})+'\n');
+ process.emit('close',0);
+ assert.deepEqual(await pending,{ok:true,documents:2,skipped:1,tree_block_id:'fixture-tree'});assert(!importer.busy);assert(messages.some(x=>x.completed===2));
+ const cancelled=createWikiImporter({window,origin,dialog:{showOpenDialog:async()=>({canceled:true,filePaths:[]})}});
+ assert.equal((await cancelled.run(event,'cancel')).cancelled,true);assert(!cancelled.busy);
+ console.log('Wiki folder import: native selection, argument boundaries, progress, busy guard and cancellation passed.');
+})().catch(error=>{console.error(error);process.exitCode=1;});

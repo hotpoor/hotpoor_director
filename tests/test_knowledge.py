@@ -82,6 +82,25 @@ def test_builtin_postgres_and_http(tmp_path, monkeypatch):
                 assert config['postgres']['port']==port
                 from knowledge_scope_checks import exercise_scope
                 await exercise_scope(runtime)
+                # Native folder import must recurse and switch the displayed tree.
+                nested = tmp_path / 'second-library' / '中文目录' / 'deeper'
+                nested.mkdir(parents=True)
+                (nested / 'notes.MD').write_text('Recursive import fixture', encoding='utf-8')
+                (nested / 'more.markdown').write_text('Another nested document', encoding='utf-8')
+                (nested / 'ignore.pdf').write_bytes(b'not imported')
+                updates = []
+                result = await import_directory(tmp_path / 'second-library', runtime.app.pools, progress=updates.append)
+                assert result['documents'] == 2 and result['skipped'] == 1
+                assert updates[-1]['completed'] == updates[-1]['total'] == 2
+                imported = await wiki._get_json(client, base+'/api/tree?kind=file')
+                assert {item['path'] for item in imported['items']} == {'中文目录/deeper/notes.MD', '中文目录/deeper/more.markdown'}
+                assert (await wiki.resolve_scope(client, base, ['中文目录/deeper/notes.MD'])) == [str(content_block_id('Recursive import fixture'))]
+                empty_folder = tmp_path / 'empty-import'; empty_folder.mkdir()
+                with pytest.raises(ValueError, match='没有'):
+                    await import_directory(empty_folder, runtime.app.pools)
+                assert (await wiki._get_json(client, base+'/api/tree'))['root'] == imported['root']
+                assert (await wiki._get_json(client,base+'/api/blocks/'+updated+'?include=markdown'))['markdown']=='更新后的财政预算。'
+
             finally:
                 await runtime.close()
             assert '_knowledge' not in config

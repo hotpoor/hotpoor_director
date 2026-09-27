@@ -42,7 +42,12 @@ async def run(args):
             from backend.knowledge.import_kb import import_directory
             if not args.root:
                 raise ValueError('wiki-import requires --root')
-            result = await import_directory(args.root, knowledge.app.pools)
+            try:
+                result = await import_directory(args.root, knowledge.app.pools,
+                    progress=lambda value: print(json.dumps({'event': 'wiki-import-progress', **value}), flush=True))
+            except (ValueError, OSError) as error:
+                print(json.dumps({'event': 'wiki-import-error', 'message': str(error) if isinstance(error, ValueError) else '文件扫描或读取失败，请检查所选目录的读取权限。'}), flush=True)
+                raise
             print(json.dumps(result), flush=True)
             return
         if args.command == 'create-user':

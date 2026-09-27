@@ -289,7 +289,7 @@ class Tree(Base):
         rows = []
         for name in ("wiki1", "wiki2"):
             row = await self.application.pools[name].fetchrow(
-                "SELECT block_id, body, createtime, updatetime FROM entities WHERE body->>'kind'='file_tree'")
+                "SELECT block_id, body, createtime, updatetime FROM entities WHERE body->>'kind'='file_tree' ORDER BY updatetime DESC LIMIT 1")
             if row:
                 rows.append(row)
         if not rows:
@@ -297,7 +297,7 @@ class Tree(Base):
                              "imported": False, "items": [],
                              "pagination": page_meta(0, offset, size)})
             return
-        row = rows[0]
+        row = max(rows, key=lambda item: item["updatetime"])
         body = json_body(row["body"])
         prefix = self.get_argument("prefix", "").strip("/")
         kind = self.get_argument("kind", "all").lower()

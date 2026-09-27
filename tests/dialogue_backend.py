@@ -20,7 +20,10 @@ config = load_config()
 if not (config['data_dir'] / 'postgres').exists():
     with socket.socket() as sock:
         sock.bind(('127.0.0.1', 0)); config['postgres']['port'] = sock.getsockname()[1]
-    (config['data_dir'] / 'config.json').write_text(json.dumps({k: v for k, v in config.items() if k not in ('data_dir', 'pg_bin')}))
+    # Windows marks local config hidden; update the existing file without CREATE_ALWAYS.
+    with (config['data_dir'] / 'config.json').open('r+', encoding='utf-8') as stream:
+        json.dump({k: v for k, v in config.items() if k not in ('data_dir', 'pg_bin')}, stream)
+        stream.truncate()
 inference.save_keys(config, {'active_key_id': 'first', 'enabled_key_ids': ['first', 'second'], 'keys': [
     {'id': 'first', 'name': '创作 AK', 'api_key': 'fixture-first'},
     {'id': 'second', 'name': '讨论 AK', 'api_key': 'fixture-second'},
