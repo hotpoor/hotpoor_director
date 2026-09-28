@@ -13,6 +13,7 @@ from psycopg.types.json import Jsonb
 from tornado.httpclient import AsyncHTTPClient, HTTPClientError, HTTPRequest
 import tornado.web
 
+from backend.h3_options import validate_h3_options, apply_h3_options, required_h3_nodes
 from backend.reference_media import prepare_reference
 from backend.comfy_settings import endpoint
 from backend.workspace import PrivateHandler, owned, ID
@@ -129,6 +130,7 @@ def workflow(kind, mode, p, refs, job_id):
             del graph['6']
             graph['7']['inputs']['model'] = ['1', 0]
             graph['10']['inputs']['model'] = ['1', 0]
+    apply_h3_options(graph, p)
     counts = {'image': 0, 'video': 0, 'audio': 0}
     for i, ref in enumerate(refs):
         media = ref if isinstance(ref, dict) else {'name': ref, 'kind': 'image'}
@@ -238,12 +240,20 @@ class GenerateHandler(PrivateHandler):
                 raise ValueError()
             if expected_model == 'ltx-2.5' and p['steps'] != 11:
                 raise ValueError()
+            p.update(validate_h3_options(expected_model, data, p['steps']))
             refs = data.get('refs', []) if mode != 'text' else []
             limit = 8 if expected_model == 'minimax-h3-ref2va' else 1 if kind == 'image' or expected_model == 'ltx-2.5' else 2
             if not isinstance(refs, list) or any(not isinstance(ref, str) or not ID.fullmatch(ref) for ref in refs) or (mode != 'text' and not 1 <= len(refs) <= limit):
                 raise ValueError()
         except (ValueError, TypeError, KeyError, OverflowError):
             raise tornado.web.HTTPError(400, reason='请检查提示词、尺寸、步数、种子和参考图数量')
+        for node_id in required_h3_nodes(p):
+            try:
+                info = await comfy_at(endpoint(self.settings), '/object_info/' + node_id)
+            except (HTTPClientError, OSError, asyncio.TimeoutError):
+                raise tornado.web.HTTPError(400, reason='无法检查 H3 优化节点，请连接 ComfyUI 后重试')
+            if node_id not in info:
+                raise tornado.web.HTTPError(400, reason=f'ComfyUI 缺少 {node_id}，请安装对应扩展并重启，或关闭此优化；尚未提交生成')
         if p['seed'] == -1:
             p['seed'] = secrets.randbelow(2**53)
         assets = [await owned(self.projects, ref, self.owner, 'asset') for ref in refs]
@@ -406,11 +416,13 @@ class HistoryHandler(PrivateHandler):
                     for media in output.get(key, []):
                         if isinstance(media, dict) and media.get('filename') and media.get('type') == 'output':
                             outputs.append({k: media.get(k, '') for k in ('filename', 'subfolder', 'type')})
+            if body.get('params', {}).get('h3_upscale', 1) > 1:
+                outputs.sort(key=lambda output: '_rtx' not in output['filename'])
             status = entry.get('status', {})
             if any(event == 'execution_interrupted' for event, _ in status.get('messages', [])):
                 body.update(status='cancelled', outputs=[])
             elif status.get('status_str') == 'error':
-                body.update(status='failed', error='生成失败，请查看 ComfyUI 错误信息')
+                body.update(status='failed', outputs=outputs, error='生成失败，请查看 ComfyUI 错误信息')
                 for event, detail in status.get('messages', []):
                     if event == 'execution_error':
                         body['error'] = str(detail.get('exception_message', body['error']))[:1500]
