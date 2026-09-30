@@ -7,6 +7,7 @@ import time
 import uuid
 from pathlib import Path
 from urllib.parse import quote
+from backend.qwen_models import QWEN_IMAGE21_IDS
 from tornado.iostream import StreamClosedError
 
 from psycopg.types.json import Jsonb
@@ -73,7 +74,7 @@ def validate_project(data):
         for draft in drafts.values():
             if not isinstance(draft, dict) or not isinstance(draft.get('prompt', ''), str) or len(draft.get('prompt', '')) > 12000:
                 raise ValueError('提示词格式不正确')
-            if 'model' in draft and draft['model'] not in ('z-image-turbo', 'z-image', 'minimax-h3', 'minimax-h3-ref2va', 'ltx-2.5') and draft['model'] not in CLOUD_BY_ID:
+            if 'model' in draft and draft['model'] not in QWEN_IMAGE21_IDS and draft['model'] not in ('z-image-turbo', 'z-image', 'minimax-h3', 'minimax-h3-ref2va', 'ltx-2.5') and draft['model'] not in CLOUD_BY_ID:
                 raise ValueError('未知模型')
             if not isinstance(draft.get('negative_prompt', ''), str) or len(draft.get('negative_prompt', '')) > 12000:
                 raise ValueError('反向提示词格式不正确')
@@ -82,7 +83,7 @@ def validate_project(data):
             validate_h3_draft(draft)
             if 'turbo_mode' in draft and not isinstance(draft['turbo_mode'], bool):
                 raise ValueError('加速模式参数必须为布尔值')
-            if not isinstance(refs, list) or len(refs) > 8 or any(not isinstance(ref, str) or not ID.fullmatch(ref) for ref in refs):
+            if not isinstance(refs, list) or len(refs) > (10 if draft.get('model') in QWEN_IMAGE21_IDS else 8) or any(not isinstance(ref, str) or not ID.fullmatch(ref) for ref in refs):
                 raise ValueError('参考图片列表不正确')
             for key in ('width', 'height', 'steps', 'seed', 'denoise', 'duration', 'cfg', 'standard_steps'):
                 if key in draft and not finite(draft[key], -1, 2**53 - 1):

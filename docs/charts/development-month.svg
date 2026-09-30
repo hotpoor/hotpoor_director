@@ -105,18 +105,20 @@
 <rect x="28" y="275" width="54" height="48" rx="5" fill="#ebedf0" stroke="#d1d9e0"/>
 <text x="35" y="290" font-size="11" fill="#1f2328">21</text>
 </g>
-<g><title>2026-09-22：0 条开发记录</title>
-<rect x="96" y="275" width="54" height="48" rx="5" fill="#ebedf0" stroke="#d1d9e0"/>
+<g><title>2026-09-22：1 条开发记录</title>
+<rect x="96" y="275" width="54" height="48" rx="5" fill="#9be9a8" stroke="#d1d9e0"/>
 <text x="103" y="290" font-size="11" fill="#1f2328">22</text>
+<text x="123" y="311" text-anchor="middle" font-size="16" font-weight="600" fill="#1f2328">1</text>
 </g>
 <g><title>2026-09-23：13 条开发记录</title>
 <rect x="164" y="275" width="54" height="48" rx="5" fill="#30a14e" stroke="#d1d9e0"/>
 <text x="171" y="290" font-size="11" fill="#ffffff">23</text>
 <text x="191" y="311" text-anchor="middle" font-size="16" font-weight="600" fill="#ffffff">13</text>
 </g>
-<g><title>2026-09-24：0 条开发记录</title>
-<rect x="232" y="275" width="54" height="48" rx="5" fill="#ebedf0" stroke="#d1d9e0"/>
+<g><title>2026-09-24：1 条开发记录</title>
+<rect x="232" y="275" width="54" height="48" rx="5" fill="#9be9a8" stroke="#d1d9e0"/>
 <text x="239" y="290" font-size="11" fill="#1f2328">24</text>
+<text x="259" y="311" text-anchor="middle" font-size="16" font-weight="600" fill="#1f2328">1</text>
 </g>
 <g><title>2026-09-25：0 条开发记录</title>
 <rect x="300" y="275" width="54" height="48" rx="5" fill="#ebedf0" stroke="#d1d9e0"/>
@@ -143,9 +145,9 @@
 <rect x="164" y="333" width="54" height="48" rx="5" fill="#ffffff" stroke="#d1d9e0" stroke-dasharray="3 3"/>
 <text x="171" y="348" font-size="11" fill="#1f2328">30</text>
 </g>
-<text x="540" y="136" font-size="36" font-weight="600">112</text>
+<text x="540" y="136" font-size="36" font-weight="600">114</text>
 <text x="540" y="159" font-size="13" fill="#59636e">本月开发记录</text>
-<text x="540" y="207" font-size="28" font-weight="600">11</text>
+<text x="540" y="207" font-size="28" font-weight="600">13</text>
 <text x="540" y="230" font-size="13" fill="#59636e">有记录的日期</text>
 <text x="540" y="272" font-size="12" fill="#59636e">格子上方：日期</text>
 <text x="540" y="292" font-size="12" fill="#59636e">格子下方：记录条数</text>

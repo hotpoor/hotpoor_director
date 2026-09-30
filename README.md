@@ -78,6 +78,7 @@ flowchart LR
 
 | 卡片 | 当前可生成 | 暂未配置 |
 | --- | --- | --- |
+| Qwen Image 2.1 · 本地 | 文生图、1–10 张图片编辑，原生透明 PNG；40 步 / CFG 1 | 研究许可证，商用需另行授权；本机尺寸最高 1536×1536、32 像素对齐 |
 | Z Image Turbo | 文生图；单张原图的 VAE 重绘（图生图） | 独立参考图条件模型/工作流 |
 | Z Image 标准版 BF16 | 文生图、单图 VAE 重绘；反向提示词、CFG（默认 40 步 / CFG 4） | 独立参考图条件模型/工作流 |
 | MiniMax H3 fl2va | 文生视频；首帧、可选尾帧图生视频，带原生音频，使用已安装的 8-step Turbo LoRA | 多图参考请选择 Ref2VA 模型 |
@@ -642,3 +643,17 @@ Hotpoor Director 负责工作台界面与服务编排；以上开源技术由各
 当前时间轴提供编排与预览，尚无成片渲染导出；浏览器多视频播放不保证逐帧同步。云端生成不提供客户端取消 / 排序，提交中断时不会自动重发付费请求。对话归个人账号私有，不参与项目分享与同步。本机代理的执行目录是工作目录校验，不是系统沙箱。
 
 画布与存储截图主要采集于 2026-09-15，时间轴截图采集于 2026-09-18，对话截图更新于 2026-09-23。截图使用独立测试账号及模拟云响应，展示界面功能，不代表模型生成质量或真实服务联通结果；较早截图的控件样式可能与当前版本不同。
+
+### Qwen Image 2.1 本地配置
+
+模型下拉框提供 INT8 和 GGUF Q6_K、Q8_0、Q5_K_M、Q4_K_M、Q4_0 六个独立选项，草稿与历史保留具体档位。GGUF 需要安装支持 `qwen_image21` 的 [leejet/ComfyUI-GGUF](https://github.com/leejet/ComfyUI-GGUF)，并将对应普通版权重 `qwen-image-2.1-{档位}.gguf` 放入 diffusion_models；编码器与 VAE 沿用下列文件。本机仅 Q6_K 完成文生图与双参考图 GPU 实测，其余 GGUF 档位已下载校验并验证工作流映射，尚未实测出图。
+
+选择「Qwen Image 2.1 · 本地」，使用「文生图」或「图片编辑」；编辑模式可添加 1–10 张图片，点击参考图按钮插入 `<image1>`、`<image2>`。输入与输出均保留 PNG 透明通道。生成透明背景时在提示词中明确要求 RGBA / transparent background。此模式采用原生条件编辑，固定 CFG 1，不提供原图重绘强度。默认 1024×1024、40 步；本机输出尺寸需为 32 的倍数，最大 1536×1536。
+
+ComfyUI 需要支持 `TextEncodeQwenImage21` 和 `QwenImage21Cache`，并安装以下权重（可通过 `extra_model_paths.yaml` 指向独立模型盘）：
+
+- `diffusion_models/qwen_image_2.1_int8_convrot.safetensors`
+- `text_encoders/qwen3vl_8b_w4a8.safetensors`
+- `vae/qwen_image_2.1_vae_bf16.safetensors`
+
+[官方模型与工作流](https://huggingface.co/Comfy-Org/Qwen-Image-2.1)；[Qwen Research License](https://github.com/QwenLM/Qwen-Image-2.1/blob/main/LICENSE)。本地研究与评估可用，商业使用须取得另行授权。

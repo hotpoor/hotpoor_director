@@ -14,6 +14,7 @@ from tornado.httpclient import AsyncHTTPClient, HTTPClientError, HTTPRequest
 import tornado.web
 
 from backend.h3_options import validate_h3_options, apply_h3_options, required_h3_nodes
+from backend.qwen_models import QWEN_IMAGE21_GGUF, QWEN_IMAGE21_IDS
 from backend.reference_media import prepare_reference
 from backend.comfy_settings import endpoint
 from backend.workspace import PrivateHandler, owned, ID
@@ -22,6 +23,10 @@ from backend.billing import job_cost, summarize
 
 COMFY = 'http://127.0.0.1:8188'
 MODELS = [
+    dict(id='qwen-image-2.1', name='Qwen Image 2.1 · 本地', type='image', modes=['text', 'reference'],
+         mode_labels={'reference': '图片编辑'}, ref_limit=10, default_steps=40,
+         default_width=1024, default_height=1024, dimension_step=32,
+         note='文生图、1–10 张图片编辑；用 <image1>、<image2> 引用。可在提示词中要求 RGBA 透明背景。当前本机输出最高 1536×1536；研究许可证，商业使用需另行授权。'),
     dict(id='z-image-turbo', name='Z Image Turbo · 本地', type='image', modes=['text', 'image'],
          note='图生图使用原图潜空间重绘；参考图模式需另接支持参考条件的模型，当前未配置。'),
     dict(id='z-image', name='Z Image 标准版 BF16 · 本地', type='image', modes=['text', 'image'],
@@ -37,12 +42,20 @@ MODELS = [
 ]
 
 
+for index, (model_id, filename) in enumerate(QWEN_IMAGE21_GGUF.items(), 1):
+    quant = filename.removeprefix('qwen-image-2.1-').removesuffix('.gguf')
+    MODELS.insert(index, {**MODELS[0], 'id': model_id, 'name': f'Qwen Image 2.1 · GGUF {quant} · 本地'})
+MODELS[0]['name'] = 'Qwen Image 2.1 · INT8 · 本地'
+
+
 for model in MODELS:
     is_image = model['type'] == 'image'
     model['size_limits'] = dict(minimum=256, maximum=1536,
-        step=64 if model['id']=='ltx-2.5' else 16 if is_image else 32,
+        step=model.get('dimension_step', 16 if is_image else 32),
         max_pixels=1536**2 if is_image else 1344*768,
         presets=[[1024,1024],[1280,720],[720,1280]] if is_image else [[512,320],[768,512],[512,768]])
+    if model['id'] in QWEN_IMAGE21_IDS:
+        model['size_limits']['presets'] = [[1024,1024],[1280,768],[768,1280]]
 
 MODELS.extend(CLOUD_MODELS)
 
@@ -78,6 +91,8 @@ def node(kind, **inputs):
 
 def workflow(kind, mode, p, refs, job_id):
     width, height, seed, steps = p['width'], p['height'], p['seed'], p['steps']
+    if p.get('model') in QWEN_IMAGE21_IDS:
+        return qwen_image21_workflow(mode, p, refs, job_id)
     if kind == 'image':
         standard = p.get('model') == 'z-image'
         graph = {
@@ -149,6 +164,32 @@ def workflow(kind, mode, p, refs, job_id):
         else:
             graph[key] = node('LoadImage', image=filename)
             graph['5']['inputs'][f'ref_images.ref_image_{number}' if reference else ('first_frame' if i == 0 else 'last_frame')] = [key, 0]
+    return graph
+
+
+def qwen_image21_workflow(mode, p, refs, job_id):
+    # Official Qwen 2.1 conditioning; references are not VAE img2img noise inputs.
+    graph = {
+        '1': node('UNETLoader', unet_name='qwen_image_2.1_int8_convrot.safetensors', weight_dtype='default'),
+        '2': node('CLIPLoader', clip_name='qwen3vl_8b_w4a8.safetensors', type='qwen_image', device='default'),
+        '3': node('VAELoader', vae_name='qwen_image_2.1_vae_bf16.safetensors'),
+        '4': node('TextEncodeQwenImage21', clip=['2', 0], vae=['3', 0], prompt=p['prompt'], negative_prompt='',
+                  resolution=min(1024, round((p['width'] * p['height']) ** .5 / 32) * 32)),
+        '6': node('QwenImage21Cache', model=['1', 0], device='auto', dtype='default'),
+        '7': node('EmptyLatentImage', width=p['width'], height=p['height'], batch_size=1),
+        '8': node('KSampler', model=['6', 0], positive=['4', 0], negative=['4', 1], latent_image=['7', 0],
+                  seed=p['seed'], steps=p['steps'], cfg=1, sampler_name='euler', scheduler='simple', denoise=1),
+        '9': node('VAEDecode', samples=['8', 0], vae=['3', 0]),
+        '10': node('SaveImage', images=['9', 0], filename_prefix='director/' + job_id),
+    }
+    if p['model'] in QWEN_IMAGE21_GGUF:
+        graph['1'] = node('UnetLoaderGGUF', unet_name=QWEN_IMAGE21_GGUF[p['model']])
+    if mode == 'reference':
+        for i, ref in enumerate(refs, 1):
+            key, alpha = str(20 + 2*i), str(21 + 2*i)
+            graph[key] = node('LoadImage', image=ref)
+            graph[alpha] = node('JoinImageWithAlpha', image=[key, 0], alpha=[key, 1])
+            graph['4']['inputs'][f'images.image_{i}'] = [alpha, 0]
     return graph
 
 
@@ -242,7 +283,7 @@ class GenerateHandler(PrivateHandler):
                 raise ValueError()
             p.update(validate_h3_options(expected_model, data, p['steps']))
             refs = data.get('refs', []) if mode != 'text' else []
-            limit = 8 if expected_model == 'minimax-h3-ref2va' else 1 if kind == 'image' or expected_model == 'ltx-2.5' else 2
+            limit = 10 if expected_model in QWEN_IMAGE21_IDS else 8 if expected_model == 'minimax-h3-ref2va' else 1 if kind == 'image' or expected_model == 'ltx-2.5' else 2
             if not isinstance(refs, list) or any(not isinstance(ref, str) or not ID.fullmatch(ref) for ref in refs) or (mode != 'text' and not 1 <= len(refs) <= limit):
                 raise ValueError()
         except (ValueError, TypeError, KeyError, OverflowError):
