@@ -17,9 +17,10 @@ def main():
     model = os.environ.get('DIRECTOR_TEST_MODEL', 'z-image-turbo')
     mode = os.environ.get('DIRECTOR_TEST_MODE', 'image')
     standard = model == 'z-image'
+    qwen = model.startswith('qwen-image-2.1')
     video = model in ('minimax-h3-ref2va', 'ltx-2.5')
     turbo = model == 'minimax-h3-ref2va' and os.environ.get('DIRECTOR_TEST_TURBO') == '1'
-    suffix = '-'+model+'-'+mode if video else '-standard-' + mode if standard else ''
+    suffix = '-'+model+'-'+mode if video or qwen else '-standard-' + mode if standard else ''
     if turbo:
         suffix += '-turbo'
     env = {**os.environ, 'DIRECTOR_DATA_DIR': str(DIRECTORY)}
@@ -47,6 +48,20 @@ def main():
                 path = '/api/projects/' + project['block_id']
                 payload = {'request_id':uuid.uuid4().hex,'card_id':card_id,'mode':mode,'model':model,
                            'prompt':'A monochrome cinema emblem on a dark background','width':512 if standard else 256,'height':512 if standard else 256,'steps':11 if model=='ltx-2.5' else 20 if video else 30 if standard else 4,'duration':1,'seed':42,'denoise':.5,'refs':[asset], 'negative_prompt':'blurry, low quality', 'cfg':4}
+                if qwen:
+                    payload.update(width=512, height=512, steps=40,
+                        prompt='This is an RGBA image with transparency. A blue ceramic mug, clean product illustration. The image has alpha channel and the background is transparent.')
+                    if mode == 'reference':
+                        extra = client.post('/api/assets', files={'file': ('mug.png', (DIRECTORY / 'generated-qwen-image-2.1-text.png').read_bytes(), 'image/png')})
+                        extra.raise_for_status()
+                        payload['refs'] = [extra.json()['id'], asset]
+                        payload['prompt'] = 'Change the blue mug in <image1> to red. Put the cinema emblem from <image2> on the front of the mug. Keep the background transparent.'
+                    for invalid in [{'mode':'image'}, {'width':520}, {'turbo_mode':True}]+([{'refs':[]},{'refs':[asset]*11}] if mode=='reference' else []):
+                        assert client.post(path+'/generate',json={**payload,**invalid}).status_code==400
+                    saved = project['body']
+                    saved['canvas']['cards'][0]['drafts'] = {mode:{**payload, 'refs':payload['refs'] if mode=='reference' else []}}
+                    post(path,saved)
+                    assert client.get(path).json()['body']['canvas']['cards'][0]['drafts'][mode]['model']==model
                 if model=='minimax-h3-ref2va':
                     payload['turbo_mode'] = turbo
                     if turbo:
@@ -95,6 +110,8 @@ def main():
                         if turbo:
                             assert record['body']['params']['turbo_mode'] is True
                             assert record['body']['params']['steps'] == 4
+                        if qwen:
+                            assert record['body']['model'] == model and record['body']['params']['steps'] == 40
                         if standard:
                             assert record['body']['model'] == model
                             assert record['body']['params']['negative_prompt'] == payload['negative_prompt']

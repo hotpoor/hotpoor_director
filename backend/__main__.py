@@ -26,13 +26,29 @@ async def run(args):
     entity_pools = []
     server = None
     app = None
+    knowledge = None
     try:
         await asyncio.to_thread(postgres.start)
         await asyncio.to_thread(initialize, config)
+        from backend.knowledge.runtime import KnowledgeRuntime
+        knowledge = KnowledgeRuntime(config)
+        await knowledge.start()
         pool = make_pool(config)
         await pool.open(wait=True)
         if args.command == 'init-db':
-            print('Three databases initialized.', flush=True)
+            print('Director and Wiki databases initialized on the same PostgreSQL instance.', flush=True)
+            return
+        if args.command == 'wiki-import':
+            from backend.knowledge.import_kb import import_directory
+            if not args.root:
+                raise ValueError('wiki-import requires --root')
+            try:
+                result = await import_directory(args.root, knowledge.app.pools,
+                    progress=lambda value: print(json.dumps({'event': 'wiki-import-progress', **value}), flush=True))
+            except (ValueError, OSError) as error:
+                print(json.dumps({'event': 'wiki-import-error', 'message': str(error) if isinstance(error, ValueError) else '文件扫描或读取失败，请检查所选目录的读取权限。'}), flush=True)
+                raise
+            print(json.dumps(result), flush=True)
             return
         if args.command == 'create-user':
             login = args.login or input('Login: ')
@@ -58,12 +74,13 @@ async def run(args):
             await entity_pool.open(wait=True)
         from tornado.httpclient import AsyncHTTPClient
         AsyncHTTPClient.configure('tornado.simple_httpclient.SimpleAsyncHTTPClient', max_buffer_size=220 * 1024 * 1024)
+        await knowledge.start_scope()
         app = application(config, pool, EntityStore(pool, entity_pools))
         await app.settings['inference_manager'].start()
         server = tornado.httpserver.HTTPServer(app, max_body_size=210 * 1024 * 1024)
         sockets = tornado.netutil.bind_sockets(args.port, '127.0.0.1')
         server.add_sockets(sockets)
-        print(json.dumps({'event': 'ready', 'port': sockets[0].getsockname()[1]}), flush=True)
+        print(json.dumps({'event': 'ready', 'port': sockets[0].getsockname()[1], 'codex_scope_url': knowledge.scope_url}), flush=True)
         await stopped.wait()
     finally:
         if server:
@@ -78,12 +95,15 @@ async def run(args):
             await pool.close()
         for entity_pool in entity_pools:
             await entity_pool.close()
+        if knowledge:
+            await knowledge.close()
         await asyncio.to_thread(postgres.stop)
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('command', choices=('serve', 'init-db', 'create-user'), nargs='?', default='serve')
+    parser.add_argument('command', choices=('serve', 'init-db', 'create-user', 'wiki-import'), nargs='?', default='serve')
+    parser.add_argument('--root', help='Markdown directory for wiki-import')
     parser.add_argument('--login')
     parser.add_argument('--port', type=int, default=8765)
     parser.add_argument('--desktop', action='store_true')

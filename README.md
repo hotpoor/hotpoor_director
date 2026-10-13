@@ -57,7 +57,7 @@ flowchart LR
 | 云端协作 | 多目标双向同步、三方差异、独立副本、成员角色、只读分享、更新合并与编辑锁 | [同步与协作](#同步与协作) |
 | 模型与费用 | 多应用 / 管理 AK、每卡片选 AK、模型发现、绑定组织费用、项目账单导入 | [模型 AK、费用与云存储](#模型-ak费用与云存储) |
 | AI 对话 | 分类、标题与描述、归档恢复、Markdown 目录与表格、附件、模型搜索、字号与折叠阅读 | 顶部「对话模式」，左下角「设置」 |
-| 上下文与知识库 | 历史轮次、分包持久化、自动分段总结、外部 wiki 目录选择及发送确认 | [历史与持久化](#历史与持久化)、[知识库](#知识库参考) |
+| 上下文与知识库 | 历史轮次、分包持久化、自动分段总结、内置/外部 Wiki 目录选择及发送确认 | [历史与持久化](#历史与持久化)、[知识库](#知识库参考) |
 | 本机代理 | 逐条命令确认、实时输出、停止、执行目录、加密凭据、单对话完全访问授权 | 仅 Electron 桌面端；[执行说明](#代理执行确认--输出--继续回答) |
 | 数据与开发 | UUID 实体分片、本地账号、源码热刷新、Windows 打包、隔离测试、助手 CLI | [配置与数据](#配置与数据)、[构建和验证](#构建和验证) |
 
@@ -79,6 +79,7 @@ flowchart LR
 
 | 卡片 | 当前可生成 | 暂未配置 |
 | --- | --- | --- |
+| Qwen Image 2.1 · 本地 | 文生图、1–10 张图片编辑，原生透明 PNG；40 步 / CFG 1 | 研究许可证，商用需另行授权；本机尺寸最高 1536×1536、32 像素对齐 |
 | Z Image Turbo | 文生图；单张原图的 VAE 重绘（图生图） | 独立参考图条件模型/工作流 |
 | Z Image 标准版 BF16 | 文生图、单图 VAE 重绘；反向提示词、CFG（默认 40 步 / CFG 4） | 独立参考图条件模型/工作流 |
 | MiniMax H3 fl2va | 文生视频；首帧、可选尾帧图生视频，带原生音频，使用已安装的 8-step Turbo LoRA | 多图参考请选择 Ref2VA 模型 |
@@ -102,6 +103,8 @@ LTX 的宽高是最终输出尺寸，须为 64 的倍数，默认 512×320；帧
 在 ComfyUI 原启动命令后添加 `--listen 0.0.0.0 --port 8188`，等待运行和排队任务结束、同步生成历史后重启。Windows 防火墙可按 ComfyUI 实际 Python 程序、有线网卡、专用网络和 `LocalSubnet` 限定 TCP 8188 入站。其他设备访问 `http://服务机器的局域网IP:8188`，工作台连接配置中的 Host 填该 IP；服务机器自身仍可使用 `127.0.0.1`。
 
 ComfyUI 默认没有账号保护，只向可信局域网开放，不需要路由器公网端口映射。此设置只开放 ComfyUI，不开放工作台 Tornado 或 PostgreSQL。局域网设备需安装自己的工作台，或使用 ComfyUI 自带网页；本地队列排序扩展目前仅接受回环请求，因此远程工作台的队列拖动排序暂不支持。
+
+本地 H3 卡片新增「H3 生成策略」：首尾帧模型可切标准 / Turbo 6–8 步；两种 H3 均可按任务选择 Sage Attention、RTX 2×/4× 超分，保存原片和音轨，并在提交前检查扩展节点。默认不启用额外扩展。详见 [策略分析、依赖与验证](docs/H3-LOCAL-STRATEGIES.md)。
 
 ### H3 多元素参考
 
@@ -380,19 +383,15 @@ env SERVICE_TOKEN={{credential:research_token}} python3 script.py
 
 ### 知识库参考
 
-在「设置 → 知识库」填写 wiki 服务地址，启用并保存，然后刷新目录。先创建或打开一个对话，再勾选参考文档或目录；选择范围保存在该对话中。发送前展示范围确认，可返回修改或取消。
+Codex 独立文献勾选页也可由 Director 同进程提供；本机已启用，原 8890 链接及 scope.py 命令保持兼容，详见 [Codex 独立勾选说明](docs/BUILTIN-KNOWLEDGE.md#codex-独立文献勾选)。
 
-![知识库设置：服务地址、正文容量与目录选择](docs/screenshots/dialogue-wiki.png)
+Wiki 已合入 Director 后端。打开「设置 → 知识库」，选择「Director 内置知识库」，启用并保存、刷新目录。无需单独启动 wiki_test。新安装默认内置；已有外部服务配置保持兼容，可在来源下拉框中切换。
 
-当前适配提供 `/api/tree`、`/api/search` 和 `/api/blocks/:id` 的 wiki 服务，默认地址为 `http://127.0.0.1:8888`；需要独立运行兼容服务，并非任意网站地址都能接入。服务配置保存于数据目录的 `.wiki-server.json`。
+知识库与 Director 共用 `config.json` 指定的 PostgreSQL 实例，保留六个逻辑库和原文档 ID；Qdrant、Ollama 仍是独立服务。导入使用 `python -m backend wiki-import --root /absolute/path/to/Markdown`。数据位置、迁移与回退、接口及验证见 [内置知识库说明](docs/BUILTIN-KNOWLEDGE.md)。
 
-在对话中打开「设置 → 知识库」，启用服务、保存地址并刷新目录。勾选文件夹会完整读取其所有分页，保存当前目录中的全部文件路径，不再限制 50 篇或 50 页。父目录显示全选/部分选择；取消单篇会同步更新父目录状态。读取或保存失败时保留原范围，不把不完整结果当作已保存。
+勾选文件夹会完整读取所有分页并保存当前文件清单，不限制 50 篇或 50 页；失败保留原范围。每轮先解析所选路径，在完整 ID 范围内并行召回分词和向量结果，取并集、RRF 排序并完整分页，任一路失败均报错。字符预算限制本轮提交的原文片段，不缩小检索范围；「本次提交」展示实际来源和覆盖位置。勾选不等于模型已阅读全文。新增资料导入后须刷新并重新勾选。
 
-每次提问按问题搜索全部结果分页，仅保留勾选范围内的命中，再以最多 4 个并发请求分批读取正文。没有关键词命中时，利用 wiki_test 对 Markdown 路径的索引扫描解析完整范围。正文较长时选取与问题相关的片段，不固定只读开头；单篇和本轮字符预算只控制送入模型的资料量，不缩小检索范围。本轮总预算包括来源说明、标题和路径。预算为 0 时不注入资料。
-
-「本次提交」显示勾选数、命中数、实际提供的资料、原文字符位置及全文/节选标记。这里的“勾选”不表示模型已阅读全文，资料不足时应继续细化问题。选材与检索本身不会额外调用付费模型；分页或正文读取失败时中止本次提交，不静默漏读。目录选择保存的是当时的文件清单，新增资料导入 Wiki 后应刷新并重新勾选；旧版本只保存了前 50 篇的范围也需重新勾选。
-
-专项验证：`python -m pytest -q tests/test_wiki.py tests/test_dialogue.py`、`node scripts/test-wiki-selection.cjs`、`node_modules/.bin/electron scripts/smoke-wiki.cjs`。Electron 测试使用独立数据库和模拟 Wiki/模型响应，不访问个人凭据或付费服务。
+专项验证：`python -m pytest -q tests/test_knowledge.py tests/test_knowledge_semantic.py tests/test_wiki.py tests/test_dialogue.py`、`node scripts/test-wiki-selection.cjs`、`node_modules/.bin/electron scripts/smoke-wiki.cjs`。Electron 测试使用独立数据库及模拟检索/模型回复；真实 Qdrant 与 Ollama 需另行验证。
 
 ### 本机文件链接
 
@@ -651,6 +650,20 @@ Hotpoor Director 负责工作台界面与服务编排；以上开源技术由各
 当前时间轴提供编排与预览，尚无成片渲染导出；浏览器多视频播放不保证逐帧同步。云端生成不提供客户端取消 / 排序，提交中断时不会自动重发付费请求。对话归个人账号私有，不参与项目分享与同步。本机代理的执行目录是工作目录校验，不是系统沙箱。
 
 画布与存储截图主要采集于 2026-09-15，时间轴截图采集于 2026-09-18，对话截图更新于 2026-09-23。截图使用独立测试账号及模拟云响应，展示界面功能，不代表模型生成质量或真实服务联通结果；较早截图的控件样式可能与当前版本不同。
+
+### Qwen Image 2.1 本地配置
+
+模型下拉框提供 INT8 和 GGUF Q6_K、Q8_0、Q5_K_M、Q4_K_M、Q4_0 六个独立选项，草稿与历史保留具体档位。GGUF 需要安装支持 `qwen_image21` 的 [leejet/ComfyUI-GGUF](https://github.com/leejet/ComfyUI-GGUF)，并将对应普通版权重 `qwen-image-2.1-{档位}.gguf` 放入 diffusion_models；编码器与 VAE 沿用下列文件。本机仅 Q6_K 完成文生图与双参考图 GPU 实测，其余 GGUF 档位已下载校验并验证工作流映射，尚未实测出图。
+
+选择「Qwen Image 2.1 · 本地」，使用「文生图」或「图片编辑」；编辑模式可添加 1–10 张图片，点击参考图按钮插入 `<image1>`、`<image2>`。输入与输出均保留 PNG 透明通道。生成透明背景时在提示词中明确要求 RGBA / transparent background。此模式采用原生条件编辑，固定 CFG 1，不提供原图重绘强度。默认 1024×1024、40 步；本机输出尺寸需为 32 的倍数，最大 1536×1536。
+
+ComfyUI 需要支持 `TextEncodeQwenImage21` 和 `QwenImage21Cache`，并安装以下权重（可通过 `extra_model_paths.yaml` 指向独立模型盘）：
+
+- `diffusion_models/qwen_image_2.1_int8_convrot.safetensors`
+- `text_encoders/qwen3vl_8b_w4a8.safetensors`
+- `vae/qwen_image_2.1_vae_bf16.safetensors`
+
+[官方模型与工作流](https://huggingface.co/Comfy-Org/Qwen-Image-2.1)；[Qwen Research License](https://github.com/QwenLM/Qwen-Image-2.1/blob/main/LICENSE)。本地研究与评估可用，商业使用须取得另行授权。
 
 ### 截图与共享快捷键
 

@@ -20,7 +20,10 @@ config = load_config()
 if not (config['data_dir'] / 'postgres').exists():
     with socket.socket() as sock:
         sock.bind(('127.0.0.1', 0)); config['postgres']['port'] = sock.getsockname()[1]
-    (config['data_dir'] / 'config.json').write_text(json.dumps({k: v for k, v in config.items() if k not in ('data_dir', 'pg_bin')}))
+    # Windows marks local config hidden; update the existing file without CREATE_ALWAYS.
+    with (config['data_dir'] / 'config.json').open('r+', encoding='utf-8') as stream:
+        json.dump({k: v for k, v in config.items() if k not in ('data_dir', 'pg_bin')}, stream)
+        stream.truncate()
 inference.save_keys(config, {'active_key_id': 'first', 'enabled_key_ids': ['first', 'second'], 'keys': [
     {'id': 'first', 'name': '创作 AK', 'api_key': 'fixture-first'},
     {'id': 'second', 'name': '讨论 AK', 'api_key': 'fixture-second'},
@@ -32,6 +35,12 @@ async def fake_api(key, path, data=None):
         return {'data': [{'id': 'gpt-6-astra' if key == 'fixture-first' else 'fixture-chat', 'type': 'llm'},
                          {'id': 'fixture-image', 'type': 'image'}]}
     assert path in ('/v1/responses', '/v1/chat/completions')
+    messages = data.get('input', data.get('messages', []))
+    if messages and messages[0].get('content','').startswith('你负责知识库检索关键词提取'):
+        text = json.dumps({'keywords':['财政预算'],'expanded_keywords':[]},ensure_ascii=False)
+        if path == '/v1/responses':
+            return {'status':'completed','output':[{'type':'message','role':'assistant','content':[{'type':'output_text','text':text}]}],'usage':{'input_tokens':15,'output_tokens':8}}
+        return {'choices':[{'message':{'content':text}}],'usage':{'prompt_tokens':15,'completion_tokens':8}}
     if os.environ.get('DIRECTOR_README_SCENES') == '1':
         if data.get('tools'):
             return {'id': 'readme-response', 'status': 'completed', 'output': [

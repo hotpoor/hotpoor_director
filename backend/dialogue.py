@@ -606,7 +606,20 @@ class DialogueHandler(PrivateHandler):
                 wiki_cfg = wiki.load_config(self.settings['config'])
                 selections = (body.get('wiki_selections') or []) if wiki_cfg.get('enabled') else []
                 if selections:
-                    supplement, wiki_report = await wiki.retrieve(wiki_cfg, selections, question)
+                    query_plan = None
+                    def wiki_progress(phase, **values):
+                        wiki.record_progress(self.owner, data['request_id'], phase, query_plan=query_plan, **values)
+                    try:
+                        from backend import wiki_query
+                        if int(wiki_cfg.get('max_total_chars',0))>0:
+                            wiki_progress('keywords')
+                            recent = [{'question': t['question'][:2000], 'answer': (t.get('answer') or '')[:2000]} for t in context_turns[-2:]]
+                            query_plan = await wiki_query.prepare(self.settings['config'],self.owner,conversation_id,data['request_id'],question,recent,key,model,path)
+                            wiki_progress('keywords_ready')
+                        supplement, wiki_report = await wiki.retrieve(wiki_cfg, selections, question, progress=wiki_progress, query_plan=query_plan)
+                    except Exception:
+                        wiki_progress('failed')
+                        raise
                     if supplement:
                         index = 0
                         while index < len(messages) and messages[index].get('role') == 'system':

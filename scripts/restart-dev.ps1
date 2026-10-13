@@ -3,6 +3,10 @@ param([switch]$DryRun)
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
+$localNode = Join-Path $root 'runtime\node\current'
+if (Test-Path -LiteralPath (Join-Path $localNode 'node.exe')) {
+    $env:PATH = $localNode + [IO.Path]::PathSeparator + $env:PATH
+}
 $electron = Join-Path $root 'node_modules\electron\dist\electron.exe'
 $python = Join-Path $root '.venv\Scripts\python.exe'
 $pgCtl = Join-Path $root 'runtime\pgsql\bin\pg_ctl.exe'

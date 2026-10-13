@@ -1,7 +1,7 @@
 /* A single settings surface, with existing controls and persistence preserved. */
 (() => {
   'use strict';
-  window.createDirectorDialogueSettings=({root,sections,onEnter})=>{
+  window.createDirectorDialogueSettings=({root,sections,onEnter,onClose})=>{
     const panel=document.createElement('section');panel.id='dialogue-settings-page';panel.hidden=true;panel.setAttribute('role','region');panel.setAttribute('aria-label','设置');
     panel.innerHTML='<header><div><span>Director</span><h2>设置</h2></div><button type="button" class="quiet" data-close>返回对话 <span aria-hidden="true">×</span></button></header><div class="dialogue-settings-layout"><nav aria-label="设置分类"></nav><div class="dialogue-settings-content"></div></div>';
     root.append(panel);
@@ -24,7 +24,7 @@
       content.scrollTop=0;entries.get(id).body.focus({preventScroll:true});onEnter?.(id);
     }
     function close(){
-      if(panel.hidden)return;panel.hidden=true;page='';launcher.setAttribute('aria-expanded','false');root.querySelector('.dialogue-layout').inert=false;
+      if(panel.hidden)return;panel.hidden=true;page='';launcher.setAttribute('aria-expanded','false');root.querySelector('.dialogue-layout').inert=false;onClose?.();
       const target=previousFocus?.isConnected&&!previousFocus.closest('[hidden]')?previousFocus:launcher;
       if(root.open)target.focus({preventScroll:true});
     }
