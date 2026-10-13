@@ -90,3 +90,41 @@ def test_history_confirms_stop_and_keeps_completion(running, entry, expected):
     for sql, _ in h.jobs.statements:
         if sql.startswith('UPDATE'):
             assert 'AND body=%s' in sql
+
+
+def test_missing_history_recovers_saved_image_without_resubmitting():
+    h, row = handler()
+    row['body']['type'] = 'image'
+    async def comfy(path, data=None):
+        if path == '/queue': return {'queue_running': [], 'queue_pending': []}
+        return {}
+    response = SimpleNamespace(headers={'Content-Type': 'image/png', 'Content-Length': '1234'})
+    with patch('backend.generation.owned', AsyncMock(return_value=row)), patch('backend.generation.comfy', comfy), patch('backend.generation.AsyncHTTPClient') as client:
+        client.return_value.fetch = AsyncMock(return_value=response)
+        asyncio.run(HistoryHandler.get(h, 'b'*32))
+        request = client.return_value.fetch.call_args.args[0]
+        assert request.method == 'HEAD'
+        assert 'a'*32 + '_00001_.png' in request.url
+    assert row['body']['status'] == 'completed'
+    assert row['body']['recovered_from_output'] is True
+    assert row['body']['outputs'][0]['subfolder'] == 'director'
+    assert any(sql.startswith('UPDATE') and 'AND body=%s' in sql for sql, _ in h.jobs.statements)
+
+
+@pytest.mark.parametrize('queue,cancelled', [(None,False), ({'queue_running':[[0,'comfy-a']]},False), ({'queue_pending':[[0,'comfy-a']]},False), ({},True)])
+def test_missing_history_does_not_recover_active_or_cancelled_prompt(queue, cancelled):
+    from backend.generation import recover_image_output
+    body = {'type':'image', 'prompt_id':'comfy-a', 'cancel_requested':cancelled}
+    with patch('backend.generation.AsyncHTTPClient') as client:
+        assert asyncio.run(recover_image_output('a'*32, body, queue)) is None
+        client.assert_not_called()
+
+
+@pytest.mark.parametrize('response', [HTTPError(404), SimpleNamespace(headers={'Content-Type':'text/html','Content-Length':'12'}), SimpleNamespace(headers={'Content-Type':'image/png','Content-Length':'0'})])
+def test_missing_history_requires_existing_nonempty_png(response):
+    from backend.generation import recover_image_output
+    from tornado.httpclient import HTTPClientError
+    if isinstance(response, HTTPError): response = HTTPClientError(404)
+    with patch('backend.generation.AsyncHTTPClient') as client:
+        client.return_value.fetch = AsyncMock(side_effect=response) if isinstance(response, Exception) else AsyncMock(return_value=response)
+        assert asyncio.run(recover_image_output('a'*32, {'type':'image'}, {})) is None

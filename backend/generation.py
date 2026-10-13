@@ -85,6 +85,24 @@ async def comfy_at(url, path, data=None):
     return await comfy(path, data, base_url=url)
 
 
+async def recover_image_output(job_id, body, queue):
+    # Fixed image workflows save one PNG using the generation UUID. Only recover
+    # after the server confirms the prompt is absent from both queues.
+    if body.get('type') != 'image' or queue is None or body.get('cancel_requested'):
+        return None
+    if any(item[1] == body.get('prompt_id') for item in queue.get('queue_running', []) + queue.get('queue_pending', [])):
+        return None
+    media = dict(filename=job_id + '_00001_.png', subfolder='director', type='output')
+    try:
+        response = await AsyncHTTPClient().fetch(HTTPRequest(
+            body.get('comfy_url', COMFY) + '/view?' + urlencode(media), method='HEAD', request_timeout=5))
+    except (HTTPClientError, OSError, asyncio.TimeoutError):
+        return None
+    if response.headers.get('Content-Type', '').split(';')[0] != 'image/png' or int(response.headers.get('Content-Length', '0')) <= 0:
+        return None
+    return media
+
+
 def node(kind, **inputs):
     return {'class_type': kind, 'inputs': inputs}
 
@@ -430,6 +448,22 @@ class HistoryHandler(PrivateHandler):
             except (HTTPClientError, OSError, ValueError):
                 body['progress'] = {'phase': 'unavailable'}
                 continue
+            if not entry:
+                recovery_queue = queue
+                if body.get('comfy_url', COMFY) != endpoint(self.settings):
+                    try:
+                        recovery_queue = await comfy_at(body['comfy_url'], '/queue')
+                    except (HTTPClientError, OSError, ValueError):
+                        recovery_queue = None
+                media = await recover_image_output(row['block_id'], body, recovery_queue)
+                if media:
+                    body.update(status='completed', outputs=[media], recovered_from_output=True, elapsed_ms=None)
+                    body.pop('progress', None)
+                    async with self.jobs.connection() as conn:
+                        updated = await (await conn.execute('UPDATE entities SET body=%s WHERE block_id=%s AND body=%s RETURNING *', (Jsonb(body), row['block_id'], Jsonb(original)), block_id=row['block_id'])).fetchone()
+                    if not updated:
+                        row.update(await owned(self.jobs, row['block_id'], self.owner, 'generation'))
+                    continue
             if not entry and body.get('cancel_requested'):
                 present = queue is None or any(item[1] == body['prompt_id'] for item in queue.get('queue_running', []) + queue.get('queue_pending', []))
                 if present:
