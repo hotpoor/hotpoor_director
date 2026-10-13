@@ -275,3 +275,63 @@ def test_qiniu_fetches_video_directly_and_reuses_finished_fetch_on_retry(tmp_pat
     assert 'sha256' not in result  # Never invent a checksum for server-side copies.
     assert len(pool.rows)==1 and not (tmp_path/'generated').exists()
     assert [call.args[0] for call in phase.await_args_list]==['fetching_output','verifying_output']*2
+
+
+COS_URL = 'https://fixture-1250000000.cos.ap-shanghai.myqcloud.com/a.png'
+
+
+def test_cos_split_dns_uses_public_ip_with_original_tls_hostname():
+    dns = SimpleNamespace(fetch=AsyncMock(return_value=SimpleNamespace(body=json.dumps(
+        {'Status':0,'Answer':[{'type':1,'data':'1.1.1.1'}]}).encode())))
+    head = SimpleNamespace(fetch=AsyncMock(return_value=SimpleNamespace(code=200,headers={'Content-Length':'4'})),close=Mock())
+    async def run():
+        with patch.object(asyncio.get_running_loop(),'getaddrinfo',AsyncMock(return_value=[(2,1,6,'',('169.254.0.47',443))])):
+            return await s.verify_public(COS_URL,4)
+    with patch.object(s,'AsyncHTTPClient',return_value=dns),patch('tornado.simple_httpclient.SimpleAsyncHTTPClient',return_value=head) as factory:
+        assert asyncio.run(run()) == COS_URL
+    resolver=factory.call_args.kwargs['resolver']
+    assert resolver.mapping == {('fixture-1250000000.cos.ap-shanghai.myqcloud.com',443):('1.1.1.1',443)}
+    request=head.fetch.call_args.args[0]
+    assert request.url == COS_URL and request.validate_cert is not False
+    assert request.follow_redirects is False
+    assert 'Authorization' not in request.headers
+    head.close.assert_called_once()
+
+
+@pytest.mark.parametrize('url',[
+    'https://169.254.169.254/latest/meta-data/',
+    'https://cdn.example.com/a',
+    COS_URL.replace('https:', 'http:'),
+    COS_URL.replace('.myqcloud.com', '.myqcloud.com.evil.example'),
+    COS_URL.replace('.com/', '.com:8443/'),
+])
+def test_cos_fallback_does_not_allow_other_private_targets(url):
+    client=SimpleNamespace(fetch=AsyncMock())
+    async def run():
+        with patch.object(asyncio.get_running_loop(),'getaddrinfo',AsyncMock(return_value=[(2,1,6,'',('169.254.0.47',443))])):
+            await s.verify_public(url,4)
+    with patch.object(s,'AsyncHTTPClient',return_value=client),pytest.raises(s.StorageError):asyncio.run(run())
+    client.fetch.assert_not_called()
+
+
+@pytest.mark.parametrize('answer',[[],[{'type':1,'data':'127.0.0.1'}],[{'type':1,'data':'1.1.1.1'},{'type':1,'data':'169.254.0.47'}]])
+def test_cos_public_dns_fails_closed(answer):
+    client=SimpleNamespace(fetch=AsyncMock(return_value=SimpleNamespace(body=json.dumps({'Status':0,'Answer':answer}).encode())))
+    with patch.object(s,'AsyncHTTPClient',return_value=client),patch('tornado.simple_httpclient.SimpleAsyncHTTPClient') as factory,pytest.raises(ValueError):
+        asyncio.run(s.cos_public_head(COS_URL,urlsplit(COS_URL)))
+    factory.assert_not_called()
+
+
+def test_cos_redirect_does_not_inherit_private_access_and_size_still_checked():
+    async def run(response):
+        with patch.object(asyncio.get_running_loop(),'getaddrinfo',AsyncMock(return_value=[(2,1,6,'',('169.254.0.47',443))])),patch.object(s,'cos_public_head',AsyncMock(wraps=s.cos_public_head)) as helper,patch.object(s,'AsyncHTTPClient') as client:
+            # Only the COS first request is mocked; private redirect uses actual guard.
+            original=s.cos_public_head.__wrapped__ if hasattr(s.cos_public_head,'__wrapped__') else helper._mock_wraps
+            async def first(url,parts):
+                if url==COS_URL:return response
+                return await original(url,parts)
+            helper.side_effect=first
+            with pytest.raises(s.StorageError):await s.verify_public(COS_URL,4)
+            client.assert_not_called()
+    asyncio.run(run(SimpleNamespace(code=302,headers={'Location':'https://169.254.169.254/'})))
+    asyncio.run(run(SimpleNamespace(code=200,headers={'Content-Length':'5'})))

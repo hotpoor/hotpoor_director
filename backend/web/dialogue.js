@@ -402,8 +402,12 @@
   $('#dialogue-agent-folders-close').hidden=true;credentialPanel.querySelector('[data-close]').hidden=true;
   wikiButton.hidden=true;wikiPanel.hidden=false;wikiPanel.querySelector('[data-close]').hidden=true;
   connectionButton.hidden=true;preferenceButton.hidden=true;$('#dialogue-agent-folders-button').hidden=true;credentialButton.hidden=true;
+  const screenshotSettings=document.createElement('div');
+  const screenshotButton=document.createElement('button');screenshotButton.type='button';screenshotButton.className='quiet';screenshotButton.textContent='截图与快捷键';screenshotButton.disabled=!window.directorDesktop?.screenshotSettings;
+  screenshotButton.onclick=()=>window.directorDesktop.screenshotSettings().catch(error=>{status.textContent=error.message;});screenshotSettings.append(screenshotButton);
   dialogueSettings=window.createDirectorDialogueSettings({root:dialog,sections:[
     {id:'general',title:'对话与显示',description:'调整运行模式、阅读字号和对话历史。',nodes:[generalSettings,preferencePanel]},
+    ...(window.directorDesktop?.screenshotSettings?[{id:'screenshot',title:'截图与快捷键',description:'截取屏幕到剪贴板，设置产品线共享快捷键和本应用接管优先级。',nodes:[screenshotSettings]}]:[]),
     {id:'models',title:'模型与连接',description:'管理模型来源和接口。具体回答模型可随时在输入框下方选择。',nodes:[modelSettings]},
     {id:'folders',title:'执行目录',description:'选择允许代理运行命令的工作目录。',nodes:[$('#dialogue-agent-folders')]},
     {id:'credentials',title:'本机凭据',description:'为代理保存可按名称引用的凭据。',nodes:[credentialPanel]},

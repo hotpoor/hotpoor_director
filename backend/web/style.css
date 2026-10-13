@@ -286,3 +286,11 @@ img[data-preview]{cursor:zoom-in}#image-preview{position:fixed;inset:0;width:100
 .generation-workbench>.edit-lock-badge{top:-22px;right:12px}
 a[href^="file://"]{color:#e0a458;text-decoration:underline dotted;cursor:pointer}
 a[href^="file://"]:hover{color:#f4c078}
+
+.media-source{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:8px 0;font-size:12px;min-width:0}.media-source>span{color:var(--muted,#888)}.media-source>a{flex:1 1 180px;min-width:0;overflow-wrap:anywhere;user-select:text;color:inherit;text-decoration:underline}.media-source button{flex:none}.output-sources{padding:0 4px}.output-sources>small{display:block;margin:8px 0}
+
+/* Batch source selection for canvas connections. */
+.canvas-selection-box{position:absolute;z-index:30;pointer-events:none;border:1px solid #8bc9ff;background:rgba(100,180,255,.14)}
+#canvas.box-import-active,#canvas.box-import-active .generation-card{cursor:crosshair}
+#canvas .generation-card.box-import-selected{outline:2px solid #8bc9ff;outline-offset:3px}
+#studio #box-import[aria-pressed="true"]{background:#24455f;color:#d7eeff;border-color:#8bc9ff}

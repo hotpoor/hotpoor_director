@@ -24,6 +24,7 @@ else app.whenReady().then(async () => {
   const dataDirectory = process.env.DIRECTOR_DATA_DIR || (development &&
     (fs.existsSync(path.join(localDirectory, 'config.json')) || !fs.existsSync(path.join(savedDirectory, 'config.json')))
     ? localDirectory : savedDirectory);
+  const screenshots = require('./screenshot/index.cjs').createScreenCapture({directory: dataDirectory, title: 'Hotpoor Director', defaultPriority: 100});
   const vault=createVault(dataDirectory,safeStorage);
   const authorization=createAuthorization(dataDirectory);
   const agentPermissionsPath=path.join(dataDirectory,'agent-permissions.json');
@@ -60,6 +61,10 @@ else app.whenReady().then(async () => {
       title:'Hotpoor Director · 导演工作站', backgroundColor:'#101010', autoHideMenuBar:true,
       icon:path.join(root, 'assets', windows ? 'icon.ico' : 'icon.png'),
       webPreferences:{preload:path.join(__dirname,'preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true,backgroundThrottling:process.env.DIRECTOR_SMOKE_TEST !== '1'}});
+    ipcMain.handle('director:screenshot-settings', event => {
+      if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame || event.senderFrame.url !== origin + '/') throw Error('Invalid sender');
+      return screenshots.openSettings();
+    });
     ipcMain.handle('director:open-authorization', async (event, value) => {
       if (event.sender !== window.webContents || event.senderFrame?.url !== origin + '/') throw Error('Invalid sender');
       const url = new URL(value);

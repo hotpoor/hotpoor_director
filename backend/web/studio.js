@@ -97,6 +97,7 @@
     if(importing||window.directorComments?.busy())throw Error('请等待素材上传或评论发送完成');
     await save();
     clearTimeout(state.polling);
+    cancelBoxImport();
     state.project = null;
     updateElapsedClocks();
     $('#editor').hidden = true; $('#dashboard').hidden = false;
@@ -184,6 +185,7 @@
     $('#canvas').style.backgroundPosition = `${x}px ${y}px`;
   }
   function renderCanvas() {
+    cancelBoxImport();
     const liveChats=new Map([...document.querySelectorAll('.chat-card')].map(el=>[el.dataset.card,el]));
     $('#canvas-world').innerHTML = '<svg class="connection-layer" aria-label="卡片连接线"><defs><marker id="connection-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8" fill="#aaa"/></marker></defs><g class="connection-paths"></g></svg>';wireDrag=null;keyboardPort=null;
     for (const card of cards()) { const candidate=liveChats.get(card.id);const live=card.type==='chat'&&candidate?._commentCard===card?candidate:null;const el=live||document.createElement('article');if(!live){el.className='generation-card';el.dataset.card=card.id;}$('#canvas-world').append(el);if(live)position(card,el);else renderCard(card); }
@@ -282,7 +284,7 @@
       }else{
         for(const job of state.history.filter(h=>h.body.card_id===source.id&&h.body.status==='completed'))for(const [index,output] of job.body.outputs.entries()){
           const key=job.block_id+':'+index;if(seen.has(key))continue;seen.add(key);
-          materials.push({attachment:{source:'output',id:job.block_id,index,url:`/api/outputs/${job.block_id}/${index}`,mime:job.body.type==='image'?'image/png':'video/mp4',name:job.body.model},key,storage:output.remote_url?'cloud':undefined,url:output.remote_url||`/api/outputs/${job.block_id}/${index}`,name:cardName(source)+' · '+date(job.createtime)+' · 结果 '+(index+1),mime:job.body.type==='image'?'image/png':'video/mp4'});
+          materials.push({attachment:{source:'output',id:job.block_id,index,url:outputUrl(job,index),mime:job.body.type==='image'?'image/png':'video/mp4',name:job.body.model},key,storage:output.remote_url?'cloud':undefined,url:output.remote_url||`/api/outputs/${job.block_id}/${index}`,name:cardName(source)+' · '+date(job.createtime)+' · 结果 '+(index+1),mime:job.body.type==='image'?'image/png':'video/mp4'});
         }
       }
     }
@@ -355,7 +357,7 @@
       const url=esc(card.storage==='cloud'?card.url:'/api/assets/'+card.asset_id);
       const media=card.mime?.startsWith('image/')?`<img src="${url}" data-preview-copy="${card.storage==='cloud'?'/api/storage/uploads/'+card.asset_id+'/image':''}" data-preview="${url}" data-preview-title="${esc(card.name)}" role="button" tabindex="0" alt="${esc(card.name)}">`:card.mime?.startsWith('video/')?videoMedia(url):`<div class="audio-art">♫</div><audio src="${url}" controls preload="metadata"></audio>`;
       el.classList.add('asset-card');
-      el.innerHTML=`<header class="card-heading"><span class="card-grip">⠿</span><strong title="${esc(cardName(card))}">${esc(cardName(card))}</strong><button class="quiet rename-card" title="重命名卡片" aria-label="重命名卡片">✎</button><button class="quiet remove-card" title="移除素材卡片">✕</button></header><div class="asset-content">${media}<small>${card.storage==='cloud'?'云存储 · ':''}${esc(card.mime)} · ${((card.size||0)/1024/1024).toFixed(2)} MB</small>${card.storage==='cloud'?'<button class="quiet copy-cloud-url">复制公网 URL</button>':''}<p class="media-error" hidden>浏览器无法播放此文件，请检查编码格式。</p></div>${['n','s','e','w','ne','nw','se','sw'].map(dir=>`<div class="resize-handle resize-${dir}" data-resize="${dir}"></div>`).join('')}`;
+      el.innerHTML=`<header class="card-heading"><span class="card-grip">⠿</span><strong title="${esc(cardName(card))}">${esc(cardName(card))}</strong><button class="quiet rename-card" title="重命名卡片" aria-label="重命名卡片">✎</button><button class="quiet remove-card" title="移除素材卡片">✕</button></header><div class="asset-content">${media}<small>${card.storage==='cloud'?'云存储 · ':''}${esc(card.mime)} · ${((card.size||0)/1024/1024).toFixed(2)} MB</small>${card.storage==='cloud'?mediaSource(card.url):'<small>本机素材，无公网源地址</small>'}<p class="media-error" hidden>浏览器无法播放此文件，请检查编码格式。</p></div>${['n','s','e','w','ne','nw','se','sw'].map(dir=>`<div class="resize-handle resize-${dir}" data-resize="${dir}"></div>`).join('')}`;
       el.insertAdjacentHTML('beforeend',cardPorts());el.querySelector('.asset-content').insertAdjacentHTML('beforeend','<details class="imported-library" open></details>');renderLibrary(card);
       return;
     }
@@ -480,9 +482,30 @@
     }catch(error){tell(error.message);}
     finally{video.pause();video.removeAttribute('src');video.load();importing=false;button.disabled=false;}
   }
+  function publicMediaUrl(value){
+    try{const url=new URL(value);return ['http:','https:'].includes(url.protocol)&&!url.username&&!url.password?url.href:'';}catch{return '';}
+  }
+  function outputUrl(row,index=0){
+    return publicMediaUrl(row.body.outputs[index]?.remote_url)||`/api/outputs/${row.block_id}/${index}`;
+  }
+  function mediaSource(url,label='源地址'){
+    const source=publicMediaUrl(url);if(!source)return '';
+    return `<div class="media-source"><span>${esc(label)}</span><a href="${esc(source)}" target="_blank" rel="noopener noreferrer" title="${esc(source)}">${esc(source)}</a><button class="quiet" data-copy-source="${esc(source)}">复制地址</button></div>`;
+  }
+  function outputSources(row){
+    return `<div class="output-sources">${row.body.outputs.map((output,index)=>{
+      let source=publicMediaUrl(output.remote_url);
+      if(!source&&row.body.provider!=='service-inference'&&publicMediaUrl(row.body.comfy_url)&&output.filename){
+        const url=new URL(row.body.comfy_url.replace(/\/$/,'')+'/view');
+        for(const key of ['filename','subfolder','type'])if(output[key]!=null)url.searchParams.set(key,output[key]);
+        source=url.href;
+      }
+      return source?mediaSource(source,`结果 ${index+1} · 源地址`):`<small>结果 ${index+1} · 本机文件，无公网源地址</small>`;
+    }).join('')}</div>`;
+  }
   function jobMedia(row,index=0,mini=false,frames=true) {
-    const url = `/api/outputs/${row.block_id}/${index}`;
-    return row.body.type === 'video' ? (!mini&&frames?videoMedia(url):`<video src="${url}" ${mini?'preload="none"':'controls preload="metadata"'}></video>`) : `<img src="${url}" data-preview="${url}" data-preview-title="${esc(row.body.model)} · ${date(row.createtime)}" ${mini?'':'role="button" tabindex="0"'} title="${mini?'点击切换当前图片':'点击放大预览'}" alt="生成图片" loading="lazy">`;
+    const url = esc(outputUrl(row,index));
+    return row.body.type === 'video' ? (!mini&&frames?videoMedia(outputUrl(row,index)):`<video src="${url}" ${mini?'preload="none"':'controls preload="metadata"'}></video>`) : `<img src="${url}" data-preview="${url}" data-preview-copy="/api/outputs/${row.block_id}/${index}" data-preview-title="${esc(row.body.model)} · ${date(row.createtime)}" ${mini?'':'role="button" tabindex="0"'} title="${mini?'点击切换当前图片':'点击放大预览'}" alt="生成图片" loading="lazy">`;
   }
   function formatDuration(milliseconds){
     if(milliseconds==null||!Number.isFinite(milliseconds))return '待返回';
@@ -564,7 +587,7 @@
     updateElapsedClocks();
     if(progressOnly)return;
     const savedPins=new Map([...el.querySelectorAll('[data-pinned-job]')].map(node=>[node.dataset.pinnedJob,{node,playing:!node.querySelector('video')?.paused}]));
-    el.innerHTML = `<div class="result-stage">${selected?.body.outputs.length ? jobMedia(selected,0,false,false) : `<div class="result-placeholder"><span>${card.type==='image'?'◧':'▷'}</span><p>${selected ? esc(selected.body.provider==='service-inference'&&['submitting','queued','running'].includes(selected.body.status)?cloudPhase(selected.body):(labels[selected.body.status] || selected.body.status)) : '你的下一帧，从这里诞生'}</p></div>`}</div>${selected?.body.type==='image'&&selected.body.outputs.length>1?`<div class="group-output-heading">组图 · ${selected.body.outputs.length} 张，点击查看</div><div class="group-outputs">${selected.body.outputs.map((_,i)=>`<div>${jobMedia(selected,i,false,false)}<small>第 ${i+1} 张</small></div>`).join('')}</div>`:''}${selected?.body.type==='video'&&selected.body.outputs.length?videoFrameTools(`/api/outputs/${selected.block_id}/0`):''}${selected?.body.outputs.length?`<label class="hide-result"><input type="checkbox" data-hide-job="${selected.block_id}"> 隐藏当前生成结果</label>`:''}<div class="pin-toolbar"><span>PIN / 对比位</span>${card.type==='video'?`<label class="sync-pins-label" title="至少固定两个视频；联动播放、暂停、进度和倍速"><input type="checkbox" class="sync-pins" ${card.syncPinPlayback?'checked':''} ${pins.length<2?'disabled':''}> 同时播放</label>`:''}<input class="pin-limit" aria-label="对比位数量" type="number" min="0" max="8" value="${card.pinLimit ?? 2}"><button class="quiet pin-current" ${selected?.body.outputs.length?'':'disabled'}>＋ 固定当前</button></div>${pins.length?`<div class="pinned-results">${pins.map(h=>`<div data-pinned-job="${h.block_id}">${jobMedia(h,0,false,false)}<button class="quiet" data-unpin="${h.block_id}" title="取消固定">✕</button></div>`).join('')}</div>`:''}<div class="history-heading"><span>生成历史 / ${rows.length}</span><small>最新在左</small></div><div class="history-cost-summary">${esc(costTotals(allRows))} · 云端费用未知 ${allRows.filter(h=>h.body.provider==='service-inference'&&!h.body.cost).length} 条（含隐藏记录）</div><div class="history-strip">${rows.map(h=>`<button data-history="${h.block_id}" class="${h===selected?'selected':''}" title="${esc(labels[h.body.status])} · ${date(h.createtime)}">${h.body.outputs.length?jobMedia(h,0,true):`<span>${esc(labels[h.body.status])}</span>`}</button>`).join('') || '<small>还没有生成记录</small>'}</div><details class="hidden-history" ${card.hiddenOpen?'open':''}><summary>已隐藏 / ${hiddenRows.length}</summary><div class="hidden-items">${hiddenRows.map(h=>`<div class="hidden-item">${jobMedia(h,0,false,false)}<small>${esc(h.body.model)} · ${date(h.createtime)}</small><button data-restore-job="${h.block_id}">恢复到生成历史</button></div>`).join('')||'<p>没有隐藏的结果</p>'}</div></details><details class="history-details" ${card.detailsOpen?'open':''}><summary>生成信息${selected?' · '+esc(labels[selected.body.status]):''}</summary>${selected?`<dl><dt>模型</dt><dd>${esc(selected.body.model)}</dd><dt>创建时间</dt><dd>${date(selected.createtime)}</dd><dt>参数</dt><dd>${esc(parameterSummary(selected.body))}</dd>${selected.body.model==='z-image'?`<dt>CFG</dt><dd>${selected.body.params.cfg ?? 4}</dd><dt>反向提示词</dt><dd>${esc(selected.body.params.negative_prompt || '未填写')}</dd>`:''}<dt>耗时</dt><dd title="${selected.body.elapsed_ms!=null?esc(selected.body.elapsed_ms+' 毫秒'):''}">${formatDuration(selected.body.elapsed_ms)}</dd><dt>费用</dt><dd>${esc(costText(selected.body))}${selected.body.provider==='service-inference'&&selected.body.type==='video'&&selected.body.remote_task_id?` <button class="quiet query-cost" data-cost-job="${selected.block_id}" ${['submitting','queued','running'].includes(selected.body.status)?'disabled':''}>查询费用</button>`:''}</dd><dt>Tokens / 用量</dt><dd>${selected.body.usage.tokens ?? '未提供'}</dd><dt>提示词</dt><dd>${esc(selected.body.params.prompt)}</dd>${selected.body.provider==='service-inference'?`<dt>使用 Key</dt><dd>${esc(selected.body.credential_name||'原有 Key')}</dd><dt>结果保存位置</dt><dd>${esc(selected.body.output_storage==='cloud'?'云存储 · '+(selected.body.storage_profile_name||'已选配置'):'本机')}</dd><dt>云端任务 ID</dt><dd>${esc(selected.body.remote_task_id||'同步图片请求')}</dd><dt>服务用量</dt><dd>${esc(JSON.stringify(selected.body.usage))}</dd><dt>参考 URL</dt><dd>${esc(['first_frame','last_frame','image_urls','video_urls','audio_urls'].map(k=>selected.body.params[k]||'').filter(Boolean).join('\n')||'无')}</dd>`:''}${selected.body.error?`<dt>错误</dt><dd>${esc(selected.body.error)}</dd>`:''}</dl><div class="history-materials-heading">本次使用素材 · ${(selected.body.refs || []).length}</div>${historyMaterials(selected.body)}<button class="quiet reuse-params" data-job="${selected.block_id}">复用这次参数</button>`:'<p>选择一条历史查看模型、参数和用量。</p>'}</details>`;
+    el.innerHTML = `<div class="result-stage">${selected?.body.outputs.length ? jobMedia(selected,0,false,false) : `<div class="result-placeholder"><span>${card.type==='image'?'◧':'▷'}</span><p>${selected ? esc(selected.body.provider==='service-inference'&&['submitting','queued','running'].includes(selected.body.status)?cloudPhase(selected.body):(labels[selected.body.status] || selected.body.status)) : '你的下一帧，从这里诞生'}</p></div>`}</div>${selected?.body.type==='image'&&selected.body.outputs.length>1?`<div class="group-output-heading">组图 · ${selected.body.outputs.length} 张，点击查看</div><div class="group-outputs">${selected.body.outputs.map((_,i)=>`<div>${jobMedia(selected,i,false,false)}<small>第 ${i+1} 张</small></div>`).join('')}</div>`:''}${selected?.body.type==='video'&&selected.body.outputs.length?videoFrameTools(`/api/outputs/${selected.block_id}/0`):''}${selected?.body.outputs.length?outputSources(selected):''}${selected?.body.outputs.length?`<label class="hide-result"><input type="checkbox" data-hide-job="${selected.block_id}"> 隐藏当前生成结果</label>`:''}<div class="pin-toolbar"><span>PIN / 对比位</span>${card.type==='video'?`<label class="sync-pins-label" title="至少固定两个视频；联动播放、暂停、进度和倍速"><input type="checkbox" class="sync-pins" ${card.syncPinPlayback?'checked':''} ${pins.length<2?'disabled':''}> 同时播放</label>`:''}<input class="pin-limit" aria-label="对比位数量" type="number" min="0" max="8" value="${card.pinLimit ?? 2}"><button class="quiet pin-current" ${selected?.body.outputs.length?'':'disabled'}>＋ 固定当前</button></div>${pins.length?`<div class="pinned-results">${pins.map(h=>`<div data-pinned-job="${h.block_id}">${jobMedia(h,0,false,false)}<button class="quiet" data-unpin="${h.block_id}" title="取消固定">✕</button></div>`).join('')}</div>`:''}<div class="history-heading"><span>生成历史 / ${rows.length}</span><small>最新在左</small></div><div class="history-cost-summary">${esc(costTotals(allRows))} · 云端费用未知 ${allRows.filter(h=>h.body.provider==='service-inference'&&!h.body.cost).length} 条（含隐藏记录）</div><div class="history-strip">${rows.map(h=>`<button data-history="${h.block_id}" class="${h===selected?'selected':''}" title="${esc(labels[h.body.status])} · ${date(h.createtime)}">${h.body.outputs.length?jobMedia(h,0,true):`<span>${esc(labels[h.body.status])}</span>`}</button>`).join('') || '<small>还没有生成记录</small>'}</div><details class="hidden-history" ${card.hiddenOpen?'open':''}><summary>已隐藏 / ${hiddenRows.length}</summary><div class="hidden-items">${hiddenRows.map(h=>`<div class="hidden-item">${jobMedia(h,0,false,false)}<small>${esc(h.body.model)} · ${date(h.createtime)}</small><button data-restore-job="${h.block_id}">恢复到生成历史</button></div>`).join('')||'<p>没有隐藏的结果</p>'}</div></details><details class="history-details" ${card.detailsOpen?'open':''}><summary>生成信息${selected?' · '+esc(labels[selected.body.status]):''}</summary>${selected?`<dl><dt>模型</dt><dd>${esc(selected.body.model)}</dd><dt>创建时间</dt><dd>${date(selected.createtime)}</dd><dt>参数</dt><dd>${esc(parameterSummary(selected.body))}</dd>${selected.body.model==='z-image'?`<dt>CFG</dt><dd>${selected.body.params.cfg ?? 4}</dd><dt>反向提示词</dt><dd>${esc(selected.body.params.negative_prompt || '未填写')}</dd>`:''}<dt>耗时</dt><dd title="${selected.body.elapsed_ms!=null?esc(selected.body.elapsed_ms+' 毫秒'):''}">${formatDuration(selected.body.elapsed_ms)}</dd><dt>费用</dt><dd>${esc(costText(selected.body))}${selected.body.provider==='service-inference'&&selected.body.type==='video'&&selected.body.remote_task_id?` <button class="quiet query-cost" data-cost-job="${selected.block_id}" ${['submitting','queued','running'].includes(selected.body.status)?'disabled':''}>查询费用</button>`:''}</dd><dt>Tokens / 用量</dt><dd>${selected.body.usage.tokens ?? '未提供'}</dd><dt>提示词</dt><dd>${esc(selected.body.params.prompt)}</dd>${selected.body.provider==='service-inference'?`<dt>使用 Key</dt><dd>${esc(selected.body.credential_name||'原有 Key')}</dd><dt>结果保存位置</dt><dd>${esc(selected.body.output_storage==='cloud'?'云存储 · '+(selected.body.storage_profile_name||'已选配置'):'本机')}</dd><dt>云端任务 ID</dt><dd>${esc(selected.body.remote_task_id||'同步图片请求')}</dd><dt>服务用量</dt><dd>${esc(JSON.stringify(selected.body.usage))}</dd><dt>参考 URL</dt><dd>${esc(['first_frame','last_frame','image_urls','video_urls','audio_urls'].map(k=>selected.body.params[k]||'').filter(Boolean).join('\n')||'无')}</dd>`:''}${selected.body.error?`<dt>错误</dt><dd>${esc(selected.body.error)}</dd>`:''}</dl><div class="history-materials-heading">本次使用素材 · ${(selected.body.refs || []).length}</div>${historyMaterials(selected.body)}<button class="quiet reuse-params" data-job="${selected.block_id}">复用这次参数</button>`:'<p>选择一条历史查看模型、参数和用量。</p>'}</details>`;
     for(const node of el.querySelectorAll('[data-pinned-job]')){const previous=savedPins.get(node.dataset.pinnedJob);if(previous){node.replaceWith(previous.node);const video=previous.node.querySelector('video');if(previous.playing&&video?.paused)pinAction(video,'play',()=>video.play());}}
     scroller.scrollTop = scrollTop;
     el.querySelector('.history-details').scrollTop = detailScroll;
@@ -692,7 +715,7 @@
   function commentMaterials(target) {
     const result=[];
     for(const card of cards())if(card.type==='asset'&&/^(image|video)\//.test(card.mime))result.push({source:card.storage==='cloud'?'cloud':'asset',id:card.asset_id,url:card.storage==='cloud'?card.url:'/api/assets/'+card.asset_id,mime:card.mime,name:cardName(card)});
-    for(const job of state.history.filter(h=>h.body.status==='completed'&&cards().some(c=>c.id===h.body.card_id)))for(const [index] of job.body.outputs.entries())result.push({source:'output',id:job.block_id,index,url:'/api/outputs/'+job.block_id+'/'+index,mime:job.body.type==='image'?'image/png':'video/mp4',name:cardName(cardById(job.body.card_id))+' · '+date(job.createtime)+' · 结果 '+(index+1)+' ['+job.block_id.slice(0,6).toUpperCase()+']'});
+    for(const job of state.history.filter(h=>h.body.status==='completed'&&cards().some(c=>c.id===h.body.card_id)))for(const [index] of job.body.outputs.entries())result.push({source:'output',id:job.block_id,index,url:outputUrl(job,index),mime:job.body.type==='image'?'image/png':'video/mp4',name:cardName(cardById(job.body.card_id))+' · '+date(job.createtime)+' · 结果 '+(index+1)+' ['+job.block_id.slice(0,6).toUpperCase()+']'});
     for(const card of cards())if(card.type==='chat'&&card.id!==target?.id)for(const a of window.directorComments.outputs(card.chat_id))result.push({...a,name:cardName(card)+' · '+a.commentLabel+' · '+a.name+(a.review?.kind==='video'?' · 原片 '+a.review.start.toFixed(2)+'–'+a.review.end.toFixed(2)+' s':'')});
     if(target){const linked=upstreamMaterials(target).filter(m=>m.attachment).map(m=>({...m.attachment,name:'已关联 · '+m.name}));return [...linked,...result];}
     return result;
@@ -768,6 +791,7 @@
       target?.querySelector('input,select')?.focus({preventScroll:true});return;
     }
     if(button.dataset.refMention){insertReferenceMention(card,el,button.dataset.refMention);return;}
+    if(button.dataset.copySource){try{await navigator.clipboard.writeText(button.dataset.copySource);tell('源地址已复制');}catch(e){tell('复制失败：'+e.message);}return;}
     if(button.classList.contains('copy-cloud-url')){try{await navigator.clipboard.writeText(card.url);tell('公网 URL 已复制');}catch(e){tell('复制失败：'+e.message);}return;}
     if(button.dataset.sizePreset){const [w,h]=button.dataset.sizePreset.split(',').map(Number);Object.assign(draft(card),{width:w,height:h});el.querySelector('[data-field=width]').value=w;el.querySelector('[data-field=height]').value=h;updateSizeFeedback(card);changed();return;}
     if(button.dataset.extractFrame){await extractFrame(card,button);return;}
@@ -800,6 +824,93 @@
       catch(error){feedback.textContent=error.message;}finally{button.disabled=false;}
     }
   });
+  // Selection is transient; only the resulting connections are saved.
+  let boxImport = null;
+  const boxButton = $('#box-import');
+  const boxOverlay = document.createElement('div');
+  boxOverlay.className = 'canvas-selection-box';
+  boxOverlay.hidden = true;
+  $('#canvas').append(boxOverlay);
+  function canBoxImport() {
+    return state.project && !window.directorPublicShare && !state.conflict &&
+      (!state.project.permission || ['owner','editor','admin'].includes(state.project.permission.role));
+  }
+  function cancelBoxImport() {
+    if(boxImport?.pointer!==undefined && $('#canvas').hasPointerCapture(boxImport.pointer))$('#canvas').releasePointerCapture(boxImport.pointer);
+    boxImport = null; boxOverlay.hidden = true;
+    boxButton.setAttribute('aria-pressed','false');
+    $('#canvas').classList.remove('box-import-active');
+    for(const el of document.querySelectorAll('.box-import-selected'))el.classList.remove('box-import-selected');
+  }
+  function toggleBoxImport() {
+    if(boxImport){cancelBoxImport();tell('已取消框选引入');return;}
+    if(!canBoxImport()){tell('当前画布不可编辑');return;}
+    if(drag || wireDrag)return;
+    boxImport={project:state.project.block_id,phase:'select',ids:[]};
+    keyboardPort=null;
+    boxButton.setAttribute('aria-pressed','true');
+    $('#canvas').classList.add('box-import-active');
+    $('#canvas').focus({preventScroll:true});
+    tell('拖动框选来源卡片，然后点击目标卡片引入；B 或 Esc 取消');
+  }
+  function boxPoint(event) {
+    const r=$('#canvas').getBoundingClientRect(),v=state.project.body.canvas.viewport;
+    return {x:(event.clientX-r.left-v.x)/v.zoom,y:(event.clientY-r.top-v.y)/v.zoom};
+  }
+  function updateBoxImport(event) {
+    const end=boxPoint(event),start=boxImport.start;
+    const rect={x:Math.min(start.x,end.x),y:Math.min(start.y,end.y),w:Math.abs(start.x-end.x),h:Math.abs(start.y-end.y)};
+    const v=state.project.body.canvas.viewport;
+    Object.assign(boxOverlay.style,{left:(rect.x*v.zoom+v.x)+'px',top:(rect.y*v.zoom+v.y)+'px',width:(rect.w*v.zoom)+'px',height:(rect.h*v.zoom)+'px'});
+    boxImport.ids=cards().filter(c=>c.x<rect.x+rect.w && c.x+c.w>rect.x && c.y<rect.y+rect.h && c.y+c.h>rect.y).map(c=>c.id);
+    for(const el of document.querySelectorAll('.generation-card[data-card]'))el.classList.toggle('box-import-selected',boxImport.ids.includes(el.dataset.card));
+  }
+  function importBoxSelection(target) {
+    if(!canBoxImport() || boxImport?.project!==state.project.block_id){cancelBoxImport();return;}
+    const sources=boxImport.ids.filter(id=>id!==target && cardById(id) && !connections().some(e=>e.source===id&&e.target===target));
+    if(!sources.length){tell('没有可新增的来源，请选择其他目标卡片，或按 B 重新框选');return;}
+    if(connections().length+sources.length>1000){tell('连接线超过 1000 条，请减少选择或断开已有连线');return;}
+    for(const source of sources)connections().push({id:uid(),source,target});
+    cancelBoxImport();renderConnections();renderLibraries();changed();
+    tell('已引入 '+sources.length+' 张来源卡片，可在目标卡片的引入素材库中使用');
+  }
+  boxButton.onclick=toggleBoxImport;
+  document.addEventListener('keydown',event=>{
+    if($('#editor').hidden || !state.project || document.querySelector('dialog[open]'))return;
+    if(event.key==='Escape' && boxImport){event.preventDefault();cancelBoxImport();tell('已取消框选引入');return;}
+    if(event.target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"])') || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || event.repeat)return;
+    if(event.key.toLowerCase()==='b'){event.preventDefault();toggleBoxImport();}
+  });
+  $('#canvas').addEventListener('pointerdown',event=>{
+    if(!boxImport)return;
+    if(!canBoxImport() || boxImport.project!==state.project?.block_id){cancelBoxImport();return;}
+    if(event.button!==0)return;
+    event.preventDefault();event.stopImmediatePropagation();
+    if(boxImport.phase==='target'){boxImport.suppressClick=false;return;}
+    boxImport.start=boxPoint(event);boxImport.pointer=event.pointerId;boxImport.phase='drawing';
+    boxOverlay.hidden=false;$('#canvas').setPointerCapture(event.pointerId);updateBoxImport(event);
+  },true);
+  $('#canvas').addEventListener('pointermove',event=>{
+    if(boxImport?.phase!=='drawing' || event.pointerId!==boxImport.pointer)return;
+    event.preventDefault();event.stopImmediatePropagation();updateBoxImport(event);
+  },true);
+  $('#canvas').addEventListener('pointerup',event=>{
+    if(!boxImport)return;
+    event.preventDefault();event.stopImmediatePropagation();
+    if(boxImport.phase!=='drawing' || event.pointerId!==boxImport.pointer)return;
+    updateBoxImport(event);boxOverlay.hidden=true;
+    if($('#canvas').hasPointerCapture(event.pointerId))$('#canvas').releasePointerCapture(event.pointerId);
+    boxImport.phase=boxImport.ids.length?'target':'select';boxImport.suppressClick=true;
+    tell(boxImport.ids.length?'已选 '+boxImport.ids.length+' 张卡片，请点击目标卡片引入；Esc 取消':'未选中卡片，请重新拖动框选');
+  },true);
+  $('#canvas').addEventListener('click',event=>{
+    if(!boxImport)return;
+    event.preventDefault();event.stopImmediatePropagation();
+    if(boxImport.suppressClick){boxImport.suppressClick=false;return;}
+    const target=event.target.closest('.generation-card[data-card]');
+    if(boxImport.phase==='target' && target)importBoxSelection(target.dataset.card);
+  },true);
+  $('#canvas').addEventListener('pointercancel',()=>{if(boxImport){cancelBoxImport();tell('已取消框选引入');}},true);
   $('#canvas').onpointerdown=event=>{
     if(event.button!==0&&event.button!==1)return;
     const cardEl=event.target.closest('[data-card]'),handle=event.target.closest('[data-resize]');
@@ -866,6 +977,7 @@
   function zoom(factor,px,py){const v=state.project.body.canvas.viewport,old=v.zoom;v.zoom=Math.max(.15,Math.min(3,old*factor));v.x=px-(px-v.x)*v.zoom/old;v.y=py-(py-v.y)*v.zoom/old;transform();changed();}
   $('#canvas').addEventListener('wheel',event=>{
     if(!state.project)return;
+    if(boxImport?.phase==='drawing'){event.preventDefault();return;}
     if(event.target.closest('textarea')){
       // Keep native text scrolling, including at its boundaries; never pan/zoom here.
       if(event.ctrlKey||event.metaKey)event.preventDefault();
@@ -977,9 +1089,9 @@
   window.addEventListener('beforeunload',event=>{if(importing||uploading||window.directorComments?.busy()||state.version!==state.saved){event.preventDefault();event.returnValue='';}});
   window.directorStudio={
     changed, describeMedia, cardName, materials:()=>state.project ? commentMaterials() : [],
-    save, openProject, refreshProject, busy:()=>!!(drag||wireDrag||uploading||importing||window.directorComments?.busy()||[...(window.directorTimeline?.instances.values()||[])].some(i=>i.busy())), dirty:()=>state.version!==state.saved, currentProject:()=>state.project,
+    save, openProject, refreshProject, busy:()=>!!(drag||wireDrag||boxImport||uploading||importing||window.directorComments?.busy()||[...(window.directorTimeline?.instances.values()||[])].some(i=>i.busy())), dirty:()=>state.version!==state.saved, currentProject:()=>state.project,
     async refreshModels(){const data=await request('/api/models');state.models=data.models;state.inferenceCredentials=data.inference_credentials||{keys:[]};if(data.model_error)tell(data.model_error);if(state.project)renderCanvas();},
     async enter(user){state.user=user;document.body.classList.add('studio-active');$('#studio').hidden=false;$('#studio-account').textContent=user.login;try{const data=await request('/api/models');state.models=data.models;state.inferenceCredentials=data.inference_credentials||{keys:[]};if(!data.online)tell('ComfyUI 未连接，仅影响本地模型；云端模型可通过 service-inference 设置使用。');await dashboard();}catch(error){tell(error.message);}},
-    leave(){clearTimeout(state.polling);clearTimeout(state.timer);state.user=null;state.project=null;updateElapsedClocks();state.version=state.saved=0;$('#studio').hidden=true;document.body.classList.remove('studio-active');}
+    leave(){cancelBoxImport();clearTimeout(state.polling);clearTimeout(state.timer);state.user=null;state.project=null;updateElapsedClocks();state.version=state.saved=0;$('#studio').hidden=true;document.body.classList.remove('studio-active');}
   };
 })();

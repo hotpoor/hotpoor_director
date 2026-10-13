@@ -1,6 +1,7 @@
 const {contextBridge,ipcRenderer}=require('electron');
 contextBridge.exposeInMainWorld('directorDesktop',Object.freeze({
   isDesktop:true,
+  screenshotSettings:()=>ipcRenderer.invoke('director:screenshot-settings'),
   openAuthorization:url=>ipcRenderer.invoke('director:open-authorization',url),
   runCommand:async(request,onOutput)=>{
     const executionId=request.executionId||globalThis.crypto.randomUUID();
