@@ -206,14 +206,49 @@ def verify_object(profile,key,size,mime):
         raise StorageError('未能确认文件上传完成，或大小/类型不一致；请检查对象读取权限后重试') from None
 
 
+async def cos_public_head(url, parts):
+    """Verify COS over public DNS when cloud-local DNS returns a private route.
+
+    Keep the original HTTPS hostname for Host/SNI/certificate verification, but
+    pin the connection to a validated public address. Never whitelist link-local
+    addresses or allow redirects to inherit a COS exception.
+    """
+    if parts.scheme != 'https' or parts.port not in (None, 443) or not re.fullmatch(
+            r'[a-z0-9][a-z0-9-]*-\d{5,20}\.cos\.[a-z][a-z0-9-]{1,40}\.myqcloud\.com', parts.hostname or ''):
+        raise ValueError('Non-public destination')
+    response = await AsyncHTTPClient().fetch(HTTPRequest(
+        'https://doh.pub/dns-query?name=' + quote(parts.hostname, safe='') + '&type=A',
+        headers={'Accept': 'application/dns-json'}, connect_timeout=5,
+        request_timeout=15, follow_redirects=False))
+    result = json.loads(response.body)
+    if result.get('Status') != 0:
+        raise ValueError('Public DNS lookup failed')
+    addresses = [item['data'] for item in result.get('Answer', []) if item.get('type') == 1]
+    if not addresses or any(not ipaddress.IPv4Address(ip).is_global for ip in addresses):
+        raise ValueError('Public DNS returned a non-public address')
+    from tornado.netutil import OverrideResolver, Resolver
+    from tornado.simple_httpclient import SimpleAsyncHTTPClient
+    resolver = OverrideResolver(resolver=Resolver(), mapping={(parts.hostname, 443): (addresses[0], 443)})
+    client = SimpleAsyncHTTPClient(force_instance=True, resolver=resolver)
+    try:
+        return await client.fetch(HTTPRequest(url, method='HEAD', connect_timeout=5,
+            request_timeout=15, follow_redirects=False), raise_error=False)
+    finally:
+        client.close()
+        resolver.close()
+
+
 async def verify_public(url,size):
     try:
         for _ in range(5):
             parts=urlsplit(url)
             if parts.scheme not in ('http','https') or not parts.hostname or parts.username or parts.password or parts.port not in (None,80,443):raise ValueError()
             addresses=await asyncio.get_running_loop().getaddrinfo(parts.hostname,parts.port or (443 if parts.scheme=='https' else 80),type=socket.SOCK_STREAM)
-            if not addresses or any(not ipaddress.ip_address(item[4][0]).is_global for item in addresses):raise ValueError()
-            response=await AsyncHTTPClient().fetch(HTTPRequest(url,method='HEAD',connect_timeout=5,request_timeout=15,follow_redirects=False),raise_error=False)
+            if not addresses:raise ValueError()
+            if any(not ipaddress.ip_address(item[4][0]).is_global for item in addresses):
+                response=await cos_public_head(url,parts)
+            else:
+                response=await AsyncHTTPClient().fetch(HTTPRequest(url,method='HEAD',connect_timeout=5,request_timeout=15,follow_redirects=False),raise_error=False)
             if response.code in (301,302,303,307,308):
                 url=urljoin(url,response.headers['Location']);continue
             if response.code!=200 or int(response.headers.get('Content-Length',-1))!=size:raise ValueError()

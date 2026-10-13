@@ -131,6 +131,40 @@ class ProviderError(Exception):
         self.code = code
 
 
+def provider_error_message(status, body=None, headers=None, key=''):
+    """Classify upstream errors without displaying untrusted response text."""
+    message = {400:'请求被服务商拒绝，请在服务控制台查看具体原因',401:'API Key 无效',402:'余额不足或用量超限',
+               403:'当前 Key 没有访问权限',404:'模型或任务不存在',429:'请求频率受限，请稍后查询',
+               503:'服务暂时没有可用容量'}.get(status, '网络或服务异常')
+    payload = {}
+    try:
+        value = json.loads(body) if isinstance(body, (bytes, str)) else body
+        if isinstance(value, dict): payload = value
+    except (ValueError, TypeError):
+        pass
+    error = payload.get('error')
+    detail = error if isinstance(error, dict) else {}
+    codes = {str(detail.get(field, '')).lower() for field in ('code', 'upstream_code', 'type')}
+    text = detail.get('message', '')
+    moderation = bool(codes & {'moderation_blocked', 'content_policy_violation', 'safety_violation', 'safety_violations'})
+    if isinstance(text, str):
+        moderation = moderation or 'rejected by the safety system' in text.lower() or 'safety_violations=' in text.lower()
+    if moderation and status in (200, 400, 403, 422):
+        message = '内容审核拦截：提示词或参考素材未通过服务商安全审核，请检查内容'
+    elif status in (400, 422):
+        param = detail.get('param')
+        labels = {'size':'图片尺寸','quality':'画质','background':'背景','output_format':'输出格式',
+                  'n':'生成张数','model':'模型','images':'参考图片','image':'参考图片','prompt':'提示词'}
+        if isinstance(param, str) and param in labels:
+            message = '请求参数错误：请检查'+labels[param]
+    elif status == 200:
+        message = '服务商返回错误，请在服务控制台查看详情'
+    request_id = payload.get('request_id') or (headers or {}).get('X-Request-Id')
+    if isinstance(request_id, str) and re.fullmatch(r'[a-zA-Z0-9_-]{1,200}', request_id) and not request_id.startswith('sk-') and (not key or key not in request_id):
+        message += '；请求编号：'+request_id
+    return message
+
+
 async def api(key, path, data=None):
     try:
         response = await AsyncHTTPClient().fetch(HTTPRequest(BASE_URL + path,
@@ -139,10 +173,8 @@ async def api(key, path, data=None):
             body=None if data is None else json.dumps(data), connect_timeout=20,
             request_timeout=300 if data is not None else 45, follow_redirects=False))
     except HTTPClientError as error:
-        # Never echo response bodies: gateways can include the original request/key.
-        message = {400:'请求参数或参考素材不符合模型要求',401:'API Key 无效',402:'余额不足或用量超限',
-                   403:'当前 Key 没有访问权限',404:'模型或任务不存在',429:'请求频率受限，请稍后查询',
-                   503:'服务暂时没有可用容量'}.get(error.code, '网络或服务异常')
+        response = error.response
+        message = provider_error_message(error.code, getattr(response, 'body', None), getattr(response, 'headers', None), key)
         if error.code == 599 and data is not None:
             message = '提交结果未确认，服务可能已受理；请在服务控制台确认，勿直接重复生成'
         raise ProviderError(f'service-inference：{message}（{error.code}）', error.code) from None
@@ -151,7 +183,7 @@ async def api(key, path, data=None):
         if not isinstance(result, dict):
             raise ValueError()
         if result.get('error'):
-            raise ProviderError('service-inference 返回错误，请在服务控制台查看详情')
+            raise ProviderError('service-inference：'+provider_error_message(200, result, response.headers, key))
         request_id = response.headers.get('X-Request-Id')
         if isinstance(request_id, str) and re.fullmatch(r'[a-zA-Z0-9_-]{1,200}', request_id):
             result['_request_id'] = request_id

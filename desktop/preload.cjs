@@ -1,6 +1,7 @@
 const {contextBridge,ipcRenderer}=require('electron');
 contextBridge.exposeInMainWorld('directorDesktop',Object.freeze({
   isDesktop:true,
+  screenshotSettings:()=>ipcRenderer.invoke('director:screenshot-settings'),
   importWikiFolder:async onProgress=>{
     const requestId=globalThis.crypto.randomUUID();
     const listener=(_event,value)=>{if(value.requestId===requestId&&typeof onProgress==='function')onProgress(value);};

@@ -104,6 +104,8 @@ ComfyUI 是独立运行的推理服务。先在目标机器安装并启动兼容
 
 ## service-inference 云端生成
 
+需要向其他人讲解或独立复用视频 API 时，读取 [service-inference-video](skills/service-inference-video/SKILL.md)，其中包含直传协议、两类 AK 的真实要求、视频请求与提示词示例。
+
 配置和维护云端生成时，先读 [README 的云端生成说明](README.md#service-inference-云端图片与视频生成) 及 [多 Key 管理](README.md#多-service-inference-key)；实际模型、参数和请求逻辑以 [inference_models.py](backend/inference_models.py) 与 [inference.py](backend/inference.py) 为准。
 
 - 项目列表右上角 **service-inference 设置** 可添加和命名多个 API Key，单选一个供新任务使用。保存、切换和刷新模型会查询该 Key 的 `/v1/models`；卡片只能选择账号可见且工作台已接入的模型。旧卡片的不可用模型保留显示并禁用生成，不自动替换创作参数。

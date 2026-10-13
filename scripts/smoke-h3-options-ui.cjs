@@ -48,7 +48,7 @@ main()
     const js=code=>win.webContents.executeJavaScript(code,true).catch(error=>{console.error('Renderer failed:',code);throw error;});
     const wait=async code=>{for(let n=0;n<300;n++){if(await js(code))return;await new Promise(r=>setTimeout(r,100));}throw Error('Timed out: '+code);};
     const check=async(code,message)=>{if(!await js(code))throw Error(message);};
-    await wait("!!document.querySelector('#login-panel h2')");
+    await wait("['创建第一个账号','登录'].includes(document.querySelector('#login-panel h2')?.textContent)");
     await js(`window.smokeApi=async(path,body)=>{const r=await fetch(path,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json','X-XSRFToken':decodeURIComponent(document.cookie.split('; ').find(x=>x.startsWith('_xsrf=')).slice(6))},body:body===undefined?undefined:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw Error(JSON.stringify(d));return d;};void 0;`);
     await js(`(async()=>{if(document.querySelector('#login-panel h2').textContent==='创建第一个账号')await smokeApi('/api/setup',{login:'h3-ui',password:'h3-ui-password-123'});await smokeApi('/api/login',{login:'h3-ui',password:'h3-ui-password-123'});await directorStudio.enter(await smokeApi('/api/me'));document.querySelector('#new-project').click();document.querySelector('#project-form').elements.title.value='H3 Turbo UI';document.querySelector('#project-form').requestSubmit();})()`);
     await wait("!document.querySelector('#editor').hidden");

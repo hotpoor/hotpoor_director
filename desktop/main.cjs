@@ -24,6 +24,7 @@ else app.whenReady().then(async () => {
   const dataDirectory = process.env.DIRECTOR_DATA_DIR || (development &&
     (fs.existsSync(path.join(localDirectory, 'config.json')) || !fs.existsSync(path.join(savedDirectory, 'config.json')))
     ? localDirectory : savedDirectory);
+  const screenshots = require('./screenshot/index.cjs').createScreenCapture({directory: dataDirectory, title: 'Hotpoor Director', defaultPriority: 100});
   const vault=createVault(dataDirectory,safeStorage);
   const authorization=createAuthorization(dataDirectory);
   const agentPermissionsPath=path.join(dataDirectory,'agent-permissions.json');
@@ -64,6 +65,10 @@ else app.whenReady().then(async () => {
     const wikiImporter=createWikiImporter({window,origin,dialog,executable,prefix:app.isPackaged?[]:['-m','backend'],root:app.isPackaged?process.resourcesPath:root,dataDirectory,pgBin:path.join(app.isPackaged?process.resourcesPath:path.join(root,'runtime'),'pgsql','bin')});
     ipcMain.handle('director:wiki-import-folder',(event,requestId)=>wikiImporter.run(event,requestId));
     window.on('close',event=>{if(wikiImporter.busy){event.preventDefault();void dialog.showMessageBox(window,{type:'info',message:'知识库正在导入，请等待完成后再关闭。'});}});
+    ipcMain.handle('director:screenshot-settings', event => {
+      if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame || event.senderFrame.url !== origin + '/') throw Error('Invalid sender');
+      return screenshots.openSettings();
+    });
     ipcMain.handle('director:open-authorization', async (event, value) => {
       if (event.sender !== window.webContents || event.senderFrame?.url !== origin + '/') throw Error('Invalid sender');
       const url = new URL(value);

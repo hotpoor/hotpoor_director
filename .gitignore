@@ -228,3 +228,9 @@ release/
 node_modules/
 *.log
 !director-backend.spec
+
+# Generated macOS screenshot helper
+/desktop/screenshot/bin/
+
+# macOS Finder metadata
+.DS_Store

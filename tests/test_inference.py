@@ -445,3 +445,43 @@ def test_webp_output_preserves_format_locally(tmp_path):
         [{'b64_json': base64.b64encode(raw).decode()}]))
     assert result == [{'filename': 'a-0.webp', 'mime': 'image/webp'}]
     assert (tmp_path / 'generated/a-0.webp').read_bytes() == raw
+
+
+@pytest.mark.parametrize('status', [400, 403])
+def test_moderation_errors_are_classified_without_echoing_private_text(status):
+    response=SimpleNamespace(body=json.dumps({'error': {'upstream_code':'moderation_blocked',
+        'message':'Your request was rejected by the safety system. '+KEY+' private prompt',
+        'param':None}, 'request_id':'req-safe-123'}).encode(), headers={})
+    client=SimpleNamespace(fetch=AsyncMock(side_effect=HTTPClientError(status,response=response)))
+    with patch('backend.inference.AsyncHTTPClient',return_value=client), pytest.raises(ProviderError) as error:
+        asyncio.run(api(KEY,'/v1/images/generations',{'prompt':'private prompt'}))
+    text=str(error.value)
+    assert '内容审核拦截' in text and 'req-safe-123' in text
+    assert KEY not in text and 'private prompt' not in text and error.value.code==status
+
+
+@pytest.mark.parametrize('body,expected', [
+    ({'error':{'code':'content_policy_violation'}}, '内容审核拦截：提示词或参考素材未通过服务商安全审核，请检查内容'),
+    ({'error':{'message':'Your request was rejected by the safety system.'}}, '内容审核拦截：提示词或参考素材未通过服务商安全审核，请检查内容'),
+    ({'error':{'param':'size','message':'secret'}}, '请求参数错误：请检查图片尺寸'),
+    ({'error':{'param':'unexpected-private-field'}}, '请求被服务商拒绝，请在服务控制台查看具体原因'),
+    ('not-json', '请求被服务商拒绝，请在服务控制台查看具体原因'),
+    ([], '请求被服务商拒绝，请在服务控制台查看具体原因'),
+])
+def test_provider_error_classification_fallbacks(body,expected):
+    from backend.inference import provider_error_message
+    assert provider_error_message(400,json.dumps(body)) == expected
+
+
+@pytest.mark.parametrize('request_id', ['secret with spaces', 'sk-secret123', KEY, '<script>'])
+def test_provider_error_request_ids_are_filtered(request_id):
+    from backend.inference import provider_error_message
+    assert '请求编号' not in provider_error_message(400,{'request_id':request_id},key=KEY)
+
+
+def test_success_status_with_provider_error_is_classified():
+    response=SimpleNamespace(body=json.dumps({'error':{'upstream_code':'moderation_blocked'},'request_id':'req-safe'}).encode(),headers={})
+    client=SimpleNamespace(fetch=AsyncMock(return_value=response))
+    with patch('backend.inference.AsyncHTTPClient',return_value=client),pytest.raises(ProviderError) as error:
+        asyncio.run(api(KEY,'/v1/images/generations',{'prompt':'scene'}))
+    assert '内容审核拦截' in str(error.value) and 'req-safe' in str(error.value)

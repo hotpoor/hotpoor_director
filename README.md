@@ -21,6 +21,7 @@ flowchart LR
 [查看每日开发记录](DEVELOPMENT_LOG.md#每日工作记录分布) · [查看项目开发时间线](DEVELOPMENT_HISTORY.md#开发时间线)
 
 - **自由组织**：平移缩放、拖动卡片、调整尺寸；触控板和鼠标均可操作。
+- **框选引入**：点击画布底栏「框选引入 · B」或按 B，拖框选择来源卡片，再点击目标卡片，批量连接并加入引入素材库。框与卡片相交即选中，自动跳过自身和已有连线；Esc 或再次点击按钮取消。输入文字时不触发快捷键。
 - **连接参考**：素材、评论与生成卡片可以连线，下游直接复用上游资料和结果。
 - **持续迭代**：同一项目混用本地与云端模型，保留生成历史、参数和对比结果，编辑自动保存。
 
@@ -115,6 +116,8 @@ ComfyUI 默认没有账号保护，只向可信局域网开放，不需要路由
 
 ### service-inference 云端图片与视频生成
 
+面向其他开发者的独立 [视频生成 Skill](skills/service-inference-video/SKILL.md)：包含应用 / 管理 AK 区别、云存储直传、Seedance / H3 请求与提示词示例，可整目录复制使用。
+
 项目列表右上角的 **service-inference 设置** 提供 API Key 保存、替换、清除和只读连接测试。接口使用一个 `Authorization: Bearer` API Key，不需要额外的 Secret。密钥保存在有效数据目录下的隐藏文件 `.service-inference.json`（源码默认 `.local/.service-inference.json`），文件权限为当前用户读写；普通配置读取不回显 Key；只有用户点击「显示 AK / 复制 AK」时才通过已认证接口读取。此目录已被 Git 忽略。所有生成请求由后端发送，不在画布或历史中保存密钥。被活跃云端任务使用的 Key 暂不能替换或删除。
 
 在图片或视频卡片中选择带“云端”的模型即可使用；本地 ComfyUI 模型继续保留。
@@ -133,6 +136,8 @@ GPT 图片接口按用户确认的 OpenAI 兼容协议接入：文字生成走 `
 GPT 与 Seedream 使用同步图片接口（请求在后台执行），请在图片请求完成前保持应用开启。视频提交后保存远端任务 ID，Seedance 每 10 秒、MiniMax 每 15 秒查询一次；应用重启会继续查询已有 ID，不会重新发起生成。生成结果按提交时选择保存到本机或云存储；本机结果位于数据目录 `generated/`，通过带登录验证的结果接口访问，视频支持 Range 拖动播放。历史播放、图片预览、PIN 和视频提帧继续引用保存后的结果。每个结果限制 210 MB；返回的用量按服务商原值记录，未返回 token 时不虚构。
 
 当前云端适配未接入取消或排序，因此这类任务只能查看和定位，不显示可用的取消/排序按钮；ComfyUI 的任务操作保持原有行为。提交超时或应用在提交期间关闭时，不自动重试付费请求：请到服务控制台核对受理状态。视频查询或结果下载的暂时性错误会自动重试；鉴权失效、无权限或任务不存在时会停止查询并显示错误。图片结果保存失败需在服务控制台核对；组图仅在支持的图片模型中提供；当前未接 SSE 流式输出，尺寸通过各模型提供的选项设置。
+
+service-inference 返回错误时区分内容安全审核拦截、已知参数错误和无法识别原因的拒绝；请求编号经格式校验后显示，方便服务商排查。不会直接显示服务商原始响应、提示词或密钥。已有失败历史保留当时的错误提示，新请求使用新版分类。
 
 接口依据：用户提供的 [Seedream](https://console.service-inference.ai/docs/seedream)、[豆包 Seedance Max](https://console.service-inference.ai/docs/doubao-seedance-max)、[Dreamina Seedance Max](https://console.service-inference.ai/docs/seedance-max)、[MiniMax H3](https://console.service-inference.ai/docs/minimax) 文档。生成按服务商规则计费；设置里的连接测试仅查询任务列表，不触发生成。
 
@@ -450,6 +455,8 @@ Region 可选择或填写，Endpoint 按地域自动生成，也可填写官方 
 
 在空间控制台配置 CORS：允许来源 `*`，方法 `PUT`、`POST`、`HEAD`，请求头 `Content-Type`（或 `*`）。客户端不发送登录 Cookie。需有对象上传和读取权限；「验证空间」额外需要查询空间信息权限。该验证不上传文件，不代表 CORS 或域名已可用。访问域名应允许公网读取、正确绑定 DNS，且防盗链允许云端获取素材。私有空间可使用已配置的公开 CDN；本版不签发下载链接，也不修改空间 ACL。
 
+腾讯云服务器可能把标准 COS 域名解析为链路本地地址。公网确认遇到此情况时，使用 DNSPod 的 HTTPS DNS 查询公网 IPv4，并固定连接该地址，保留原域名 TLS 校验。此回退仅适用于标准 HTTPS COS 域名，仍拒绝私网目标、检查每次重定向和文件大小；不会改变桶权限或上传路径。
+
 长期密钥保存在有效数据目录下 `.cloud-storage.json`（源码为 `.local/.cloud-storage.json`，文件权限 0600），不通过设置接口回显、不进入项目参数。清除厂商配置不会删除云端文件。需要实际厂商凭据、权限与 CORS 配好后，才能完成真实上传验证。
 
 路径前缀可按厂商分别填写，例如 `projects/demo/images`，访问 URL 为 `<访问域名>/projects/demo/images/<唯一文件名>`。留空上传至 Bucket 根目录，首尾及重复斜杠自动整理。仅影响新上传对象，不移动已有文件或修改历史 URL。
@@ -659,3 +666,7 @@ ComfyUI 需要支持 `TextEncodeQwenImage21` 和 `QwenImage21Cache`，并安装�
 - `vae/qwen_image_2.1_vae_bf16.safetensors`
 
 [官方模型与工作流](https://huggingface.co/Comfy-Org/Qwen-Image-2.1)；[Qwen Research License](https://github.com/QwenLM/Qwen-Image-2.1/blob/main/LICENSE)。本地研究与评估可用，商业使用须取得另行授权。
+
+### 截图与共享快捷键
+
+新增整屏截图到剪贴板及可设置全局快捷键。HOTPOOR 产品共用快捷键，按优先级自动交接监听。详见 [截图设置与构建说明](docs/screen-capture.md)。
