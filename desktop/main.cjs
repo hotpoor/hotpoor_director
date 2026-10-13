@@ -140,6 +140,10 @@ else app.whenReady().then(async () => {
     window.webContents.on('will-navigate', (event, url) => {if (new URL(url).origin !== origin) event.preventDefault();});
     await window.webContents.session.cookies.set({url:origin,name:'director_bootstrap',value:bootstrapToken,httpOnly:true,sameSite:'strict',path:'/'});
     await window.loadURL(origin);
+    if (process.env.DIRECTOR_SMOKE_TEST !== '1') {
+      window.show();
+      window.focus();
+    }
     if (development) {
       console.log('Source development workspace ready:', origin);
       let refreshTimer;

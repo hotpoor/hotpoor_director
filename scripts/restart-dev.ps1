@@ -103,8 +103,13 @@ try {
             $output = Get-Content -LiteralPath $stdout -Raw
             if ($output -match 'Source development workspace ready:\s*(http://127\.0\.0\.1:\d+)') {
                 $origin = $Matches[1]
-                $ready = $true
-                break
+                $visible = @(Get-DirectorProcesses | Where-Object { $_.ExecutablePath -eq $electron } | ForEach-Object {
+                    Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue
+                } | Where-Object { $_.MainWindowHandle -ne 0 })
+                if ($visible.Count -gt 0) {
+                    $ready = $true
+                    break
+                }
             }
         }
         Start-Sleep -Milliseconds 500
