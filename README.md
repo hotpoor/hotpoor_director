@@ -529,6 +529,8 @@ npm run backend
 
 双击 `Start_Dev.bat`，或在项目根目录执行 `npm run dev`（`npm start` 也直接运行源码）。Electron 启动 `.venv` 中的 Python 读取 `backend` 源码，无需生成应用 EXE 或重新打包。
 
+Windows 联合启动：双击 `Start_All.bat`，等待 ComfyUI 队列完成后关闭该目录的旧进程，启动 ComfyUI 并确认就绪，再重启 Director（含内置数据库）。端口被其他程序占用时停止并报错；日志位于 `.local/restart-logs/`。可用 `Start_All.bat -DryRun` 检查进程匹配，或 `-ComfyRoot "路径"` 指定 ComfyUI 目录。重启前保存编辑内容。
+
 Windows 一键重启：双击 `Restart_Dev.bat`。脚本先请求关闭当前源码目录的 Electron，等待后端和数据库正常退出；165 秒后仍未退出则结束该目录的残留 Electron / 后端，再通过 `pg_ctl` 正常停止所选数据目录的内置数据库。随后复用应用启动流程，按数据库 → 后端 → 桌面窗口顺序启动，等待就绪后显示地址。外部数据库不由脚本停止；ComfyUI 独立运行。启动日志保存在 `.local/restart-logs/`。可先执行 `Restart_Dev.bat -DryRun` 查看匹配范围而不重启。重启前保存正在编辑的内容，并等待应用内正在执行的命令结束。
 
 - 修改 `backend/web` 下的 HTML、CSS、页面 JS 和图片，保存后窗口自动刷新。
