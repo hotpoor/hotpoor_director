@@ -117,6 +117,7 @@ try {
     if (!$ready) { throw "Startup timed out. Check $stderr and the application's error window." }
     Write-Host "Ready: $origin" -ForegroundColor Green
     Write-Host "Logs: $logDirectory"
+    exit 0
 } catch {
     Write-Host $_.Exception.Message -ForegroundColor Red
     exit 1
