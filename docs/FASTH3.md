@@ -18,7 +18,7 @@
 
 图中请求VSA：keep_percent=10、start=.2、end=1、min_tokens=12288、extra_tokens=256、sink_conditioning=exact_kv_and_rows。小于阈值或在起始窗口外可能使用普通计算。
 
-2026-10-17 的 Windows RTX3090实测，14379 tokens达到阈值，但日志明确为 `no compiled sol_attn kernel for this GPU`，因此自动回退dense attention。模型仍在GPU上正常生成，只是该项加速未生效。不能把节点存在、勾选或成功出片描述为稀疏加速已生效；也不能据此认定3090硬件永远不支持。未安装/编译新的稀疏内核。
+2026-10-17 的 Windows RTX3090实测，14379 tokens达到阈值，但日志明确为 `no compiled sol_attn kernel for this GPU`，因此自动回退dense attention。模型仍在GPU上正常生成，只是该项加速未生效。不能把节点存在、勾选或成功出片描述为稀疏加速已生效；也不能据此认定3090硬件永远不支持。此为原生VSA初测状态；后续已安装独立Sol-Attn内核，见下节。
 
 ## 三版实测：雕塑复活
 
@@ -39,3 +39,20 @@ FastH3与双采基本持平，比原版约2.12倍速度。抽帧观察，FastH3�
 ## 回归验证
 
 `tests/test_fasth3.py`：固定步数与不兼容参数、首尾帧/无参考分支、模型接线、音轨、节点预检列表及超分保留原片。`scripts/smoke-h3-options-ui.cjs`：真实Electron页面的模型切换、固定步数、保存重开、缺失节点拒绝，测试不提交GPU任务。实测API与本次应用图使用相同参数链，节点编号及输出前缀按应用约定调整。
+
+
+## Sol-Attn 可选项：3090 已验证执行（2026-10-17）
+
+在FastH3卡片勾选「Sol-Attn 稀疏计算」。默认关闭，旧任务沿用原图。仅FastH3支持该选项；开启后用 `MiniMaxH3MemoryEfficientSolAttentionPatch` 替换原生BlockSparseAttention，不叠加两种稀疏补丁。
+
+本机已安装 [ComfyUI-sol-attn](https://github.com/Saganaki22/ComfyUI-sol-attn) 固定提交 `930a4d6e432ff8b8ed5e30ff2f72519b92d69bdf`，目录为 `I:/AI/Workspaces/ComfyUI/custom_nodes/director_sol_attn`。依赖固定 `triton-windows==3.7.0.post26`，与本机PyTorch2.13.0+cu126配套；未升级PyTorch。参考 [Windows Triton兼容矩阵和embedded Python说明](https://github.com/triton-lang/triton-windows)。embedded Python缺少编译所需include/libs时，需补充匹配Python3.12的开发文件；本机从已有完整Python3.12运行时复制缺失目录，无覆盖原文件。
+
+实测设置：tau=1.0、min_tokens=4096、strict=True、thresh_type=diag、int8_qk/pv均False、sink_conditioning=exact_kv_and_rows、dense_blocks为空。注意上游strict只会抛出内核执行错误，不会禁止短序列/不支持形状的主动回退；是否生效仍须看active及fallback日志。
+
+用同一雕塑图、逐字提示词、448×800、124帧、24fps和种子2026101701跑两轮：**400+400次Sol调用、零回退**，14379 tokens。测试包装只加计数、不改计算，每50次写JSON；生产使用干净上游扩展。两轮解码后视频像素哈希一致，均有AAC音轨；抽帧确认碎裂与复活完成。
+
+耗时第一轮200.51秒、已有Triton编译缓存复测213.75秒，此前普通FastH3为175.40秒。**稀疏确实生效，但这组参数没有整体提速，因此不默认开启。** 每步约15秒，与普通模式接近。两轮Comfy图缓存均无命中、仍需加载与初始化；此前普通版部分模型设置节点有缓存。测试Python入口不同但加载同一Comfy依赖，不构成严格单变量内核基准，不能据此断言其他尺寸或配置的收益。
+
+生产embedded Python还单独通过小型GPU Sol内核测试（有限非零输出），应用图在同一8199服务预检，仅故意0步校验失败，无其他参数或权重错误。默认8188连接未修改。Director提交前检查Sol节点；缺失时不创建任务、不上传参考图。节点存在不能代替内核验证。关闭选项即可恢复此前FastH3流程。
+
+测试证据与四版同步预览位于设备私有仓库 `research/h3-fast/misato-revival/`：`comparison-four.html`、`COMPARISON-SOL.md`、`sol-audit-first.json`、`sol-audit-total.json`及两轮API/历史/视频。

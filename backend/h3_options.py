@@ -9,6 +9,8 @@ def validate_h3_draft(data):
         raise ValueError('H3 采样模式不正确')
     if not isinstance(data.get('h3_sage', False), bool):
         raise ValueError('H3 Sage Attention 参数必须为布尔值')
+    if not isinstance(data.get('h3_sol', False), bool):
+        raise ValueError('H3 Sol-Attn 参数必须为布尔值')
     scale = data.get('h3_upscale', 1)
     if type(scale) is not int or scale not in (1, 2, 4):
         raise ValueError('H3 超分倍率需为 1、2 或 4')
@@ -16,6 +18,8 @@ def validate_h3_draft(data):
 
 def validate_h3_options(model, data, steps):
     validate_h3_draft(data)
+    if data.get('h3_sol') and model != 'minimax-h3-fast':
+        raise ValueError('Sol-Attn 目前仅支持 FastH3 模型')
     if model not in H3_MODELS:
         if data.get('h3_sage') or data.get('h3_upscale', 1) != 1 or data.get('h3_sampling', 'turbo') != 'turbo':
             raise ValueError('当前模型不支持 H3 优化')
@@ -25,7 +29,7 @@ def validate_h3_options(model, data, steps):
             raise tornado.web.HTTPError(400, reason='FastH3 固定使用 8 步')
         if data.get('h3_sage') or data.get('h3_sampling', 'turbo') != 'turbo':
             raise ValueError('FastH3 使用独立的 8 步配置，不支持切换标准采样或 Sage')
-    options = {k: data[k] for k in ('h3_sampling', 'h3_sage', 'h3_upscale') if k in data}
+    options = {k: data[k] for k in ('h3_sampling', 'h3_sage', 'h3_upscale', 'h3_sol') if k in data}
     # Missing sampling mode belongs to a legacy FL2VA request: preserve its steps.
     if model == 'minimax-h3' and 'h3_sampling' in data and data['h3_sampling'] == 'turbo' and steps not in (6, 8):
         raise tornado.web.HTTPError(400, reason='H3 Turbo 使用 6 或 8 步；建议 8 步，标准模式可自行设置步数')
@@ -34,6 +38,8 @@ def validate_h3_options(model, data, steps):
 
 def required_h3_nodes(params):
     nodes = ['BlockSparseAttention', 'ModelAttentionBackend', 'MiniMaxH3SigmaShift', 'DenoTextEncoderUnload'] if params.get('model') == 'minimax-h3-fast' else []
+    if params.get('model') == 'minimax-h3-fast' and params.get('h3_sol'):
+        nodes[0] = 'MiniMaxH3MemoryEfficientSolAttentionPatch'
     if params.get('h3_sage'):
         nodes.append('PathchSageAttentionKJ')  # Upstream node ID includes this spelling.
     if params.get('h3_upscale', 1) > 1:
@@ -46,6 +52,11 @@ def apply_h3_options(graph, params):
         del graph['6']
         graph['7']['inputs']['model'] = ['1', 0]
         graph['10']['inputs']['model'] = ['1', 0]
+    if params.get('model') == 'minimax-h3-fast' and params.get('h3_sol'):
+        graph['40'] = {'class_type': 'MiniMaxH3MemoryEfficientSolAttentionPatch', 'inputs': {
+            'model': ['1', 0], 'enabled': True, 'tau': 1.0, 'min_tokens': 4096,
+            'strict': True, 'thresh_type': 'diag', 'int8_qk': False, 'int8_pv': False,
+            'sink_conditioning': 'exact_kv_and_rows', 'dense_blocks': ''}}
     if params.get('h3_sage'):
         graph['16'] = {'class_type': 'PathchSageAttentionKJ', 'inputs': {
             'model': graph['7']['inputs']['model'], 'sage_attention': 'auto', 'allow_compile': False}}

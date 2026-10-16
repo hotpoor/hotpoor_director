@@ -59,3 +59,22 @@ def test_fast_node_preflight_and_optional_upscale_keep_original_output():
     assert spec['fixed_steps'] and spec['default_steps'] == 8
     assert spec['modes'] == ['text', 'image'] and spec['ref_limit'] == 2
     assert not size_error(p['model'], 448, 800)
+
+
+def test_sol_is_opt_in_uses_validated_settings_and_keeps_model_chain():
+    p = params(h3_sol=True)
+    g = workflow('video', 'image', p, ['first.png'], 'sol')
+    base = workflow('video', 'image', params(), ['first.png'], 'sol')
+    assert all(g[k] == v for k, v in base.items() if k != '40')
+    assert g['40']['class_type'] == 'MiniMaxH3MemoryEfficientSolAttentionPatch'
+    assert g['40']['inputs']['strict'] is True
+    assert g['40']['inputs']['tau'] == 1.0
+    assert g['40']['inputs']['int8_qk'] is g['40']['inputs']['int8_pv'] is False
+    assert g['40']['inputs']['sink_conditioning'] == 'exact_kv_and_rows'
+    assert required_h3_nodes(p)[0] == g['40']['class_type']
+    assert validate_h3_options(p['model'], {'h3_sol': True}, 8) == {'h3_sol': True}
+    assert workflow('video', 'text', params(), [], 'legacy') == workflow(
+        'video', 'text', params(h3_sol=False), [], 'legacy')
+    for model, option in [('minimax-h3', True), ('z-image', True), ('minimax-h3-fast', 'true')]:
+        with pytest.raises(ValueError):
+            validate_h3_options(model, {'h3_sol': option}, 8)

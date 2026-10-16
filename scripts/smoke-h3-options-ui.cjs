@@ -99,12 +99,13 @@ main()
     await check("Number(document.querySelector('[data-field=steps]').value)===8 && document.querySelector('[data-field=steps]').readOnly",'FastH3 must lock 8 steps');
     await check("!document.querySelector('[data-field=turbo_mode]') && !document.querySelector('[data-field=h3_sage]') && !document.querySelector('[data-field=h3_sampling]')",'FastH3 must not expose incompatible switches');
     await check("document.querySelector('.generation-settings').textContent.includes('稀疏')",'FastH3 fallback explanation missing');
-    await js("directorStudio.save();document.querySelector('#back-dashboard').click()");
+    await check("!document.querySelector('[data-field=h3_sol]').checked",'Sol must remain opt-in');
+    await js("document.querySelector('[data-field=h3_sol]').click();directorStudio.save();document.querySelector('#back-dashboard').click()");
     await wait("!document.querySelector('#dashboard').hidden");
     await js("directorStudio.openProject(smokeProject)");
-    await check("document.querySelector('[data-field=model]').value==='minimax-h3-fast' && Number(document.querySelector('[data-field=steps]').value)===8",'FastH3 draft lost on reopen');
+    await check("document.querySelector('[data-field=model]').value==='minimax-h3-fast' && document.querySelector('[data-field=h3_sol]').checked && Number(document.querySelector('[data-field=steps]').value)===8",'FastH3 draft lost on reopen');
     await js(`(async()=>{const c=directorStudio.currentProject().body.canvas.cards[0];const r=await fetch('/api/projects/'+smokeProject+'/generate',{method:'POST',headers:{'Content-Type':'application/json','X-XSRFToken':decodeURIComponent(document.cookie.split('; ').find(x=>x.startsWith('_xsrf=')).slice(6))},body:JSON.stringify({...c.drafts.text,model:'minimax-h3-fast',card_id:c.id,mode:'text',prompt:'A statue awakens.',request_id:crypto.randomUUID().replaceAll('-','')})});window.preflightStatus=r.status;window.preflightReply=await r.json();})()`);
-    await check("preflightStatus===400 && /BlockSparseAttention/.test(preflightReply.error)",'FastH3 missing-node preflight did not run');
+    await check("preflightStatus===400 && /MiniMaxH3MemoryEfficientSolAttentionPatch/.test(preflightReply.error)",'FastH3 missing-node preflight did not run');
     await check("(async()=>(await smokeApi('/api/projects/'+smokeProject+'/history')).history.length===0)()",'FastH3 preflight created history');
     console.log('PASS: H3 modes, steps, upscale dimensions, persistence, missing-node preflight and reference tokens. No GPU generation submitted.');
     win.destroy();

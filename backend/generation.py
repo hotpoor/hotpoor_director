@@ -35,7 +35,7 @@ MODELS = [
          note='图生视频支持首帧和可选尾帧；多图参考请选择 H3-Base-Ref2VA。'),
     dict(id='minimax-h3-fast', name='FastH3 · 8步 · 本地', type='video', modes=['text', 'image'],
          ref_limit=2, default_steps=8, fixed_steps=True, default_duration=5, default_width=448, default_height=800,
-         note='MiniMax H3 蒸馏加速版，固定 8 步；支持首帧和可选尾帧，带原生音频。稀疏加速依赖兼容内核，可能自动回退普通计算；当前 3090 实测回退。多元素参考请选择 Ref2VA。'),
+         note='MiniMax H3 蒸馏加速版，固定 8 步；支持首帧和可选尾帧，带原生音频。可选 Sol-Attn 稀疏计算（需扩展），3090 已实测；关闭时沿用原流程，原生 VSA 在本机回退。多元素参考请选择 Ref2VA。'),
     dict(id='minimax-h3-ref2va', name='H3-Base-Ref2VA · 多元素参考', type='video', modes=['reference'],
          ref_limit=8, ref_types=["image", "video", "audio"], supports_turbo=True, default_steps=20, default_duration=5, default_width=512, default_height=320,
          note='混合参考共 1–8 项，视频、音频各最多 3 项。用 <Picture 1> / <Video 1> / <Audio 1> 引用；视频取开头并转 24 fps（仅画面），声音请单独添加音频。参考片段截至生成时长，建议至少 5 秒。'),
