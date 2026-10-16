@@ -74,7 +74,7 @@ def validate_project(data):
         for draft in drafts.values():
             if not isinstance(draft, dict) or not isinstance(draft.get('prompt', ''), str) or len(draft.get('prompt', '')) > 12000:
                 raise ValueError('提示词格式不正确')
-            if 'model' in draft and draft['model'] not in QWEN_IMAGE21_IDS and draft['model'] not in ('z-image-turbo', 'z-image', 'minimax-h3', 'minimax-h3-ref2va', 'ltx-2.5') and draft['model'] not in CLOUD_BY_ID:
+            if 'model' in draft and draft['model'] not in QWEN_IMAGE21_IDS and draft['model'] not in ('z-image-turbo', 'z-image', 'minimax-h3', 'minimax-h3-ref2va', 'minimax-h3-fast', 'ltx-2.5') and draft['model'] not in CLOUD_BY_ID:
                 raise ValueError('未知模型')
             if not isinstance(draft.get('negative_prompt', ''), str) or len(draft.get('negative_prompt', '')) > 12000:
                 raise ValueError('反向提示词格式不正确')

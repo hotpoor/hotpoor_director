@@ -33,6 +33,9 @@ MODELS = [
          note='支持反向提示词；建议 30–50 步、CFG 3–5。图生图为潜空间重绘。'),
     dict(id='minimax-h3', name='MiniMax H3 · 本地', type='video', modes=['text', 'image'],
          note='图生视频支持首帧和可选尾帧；多图参考请选择 H3-Base-Ref2VA。'),
+    dict(id='minimax-h3-fast', name='FastH3 · 8步 · 本地', type='video', modes=['text', 'image'],
+         ref_limit=2, default_steps=8, fixed_steps=True, default_duration=5, default_width=448, default_height=800,
+         note='MiniMax H3 蒸馏加速版，固定 8 步；支持首帧和可选尾帧，带原生音频。稀疏加速依赖兼容内核，可能自动回退普通计算；当前 3090 实测回退。多元素参考请选择 Ref2VA。'),
     dict(id='minimax-h3-ref2va', name='H3-Base-Ref2VA · 多元素参考', type='video', modes=['reference'],
          ref_limit=8, ref_types=["image", "video", "audio"], supports_turbo=True, default_steps=20, default_duration=5, default_width=512, default_height=320,
          note='混合参考共 1–8 项，视频、音频各最多 3 项。用 <Picture 1> / <Video 1> / <Audio 1> 引用；视频取开头并转 24 fps（仅画面），声音请单独添加音频。参考片段截至生成时长，建议至少 5 秒。'),
@@ -163,6 +166,18 @@ def workflow(kind, mode, p, refs, job_id):
             del graph['6']
             graph['7']['inputs']['model'] = ['1', 0]
             graph['10']['inputs']['model'] = ['1', 0]
+    if p.get('model') == 'minimax-h3-fast':
+        graph['1']['inputs']['unet_name'] = 'fastvideo_fasth3_8step_v2_pruned_int8_convrot.safetensors'
+        del graph['6']  # Distilled weights do not use the FL2VA/Ref2VA Turbo LoRAs.
+        graph['40'] = node('BlockSparseAttention', model=['1', 0], selection='vsa',
+            **{'selection.keep_percent': 10.0}, start_percent=.2, end_percent=1.0,
+            dense_blocks='', min_tokens=12288, extra_tokens=256,
+            sink_conditioning='exact_kv_and_rows', verbose=True)
+        graph['41'] = node('ModelAttentionBackend', model=['40', 0], attention='comfy kitchen attention')
+        graph['42'] = node('MiniMaxH3SigmaShift', model=['41', 0], shift_video=10.0, shift_audio=3.0)
+        graph['43'] = node('DenoTextEncoderUnload', positive_conditioning=['5', 0], text_encoder=['2', 0])
+        graph['7']['inputs'].update(model=['42', 0], conditioning=['43', 0])
+        graph['10']['inputs'].update(model=['42', 0], steps=8)
     apply_h3_options(graph, p)
     counts = {'image': 0, 'video': 0, 'audio': 0}
     for i, ref in enumerate(refs):

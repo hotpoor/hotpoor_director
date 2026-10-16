@@ -1,7 +1,7 @@
 """Explicit, opt-in H3 optimizations; old records keep their original graph."""
 import tornado.web
 
-H3_MODELS = ('minimax-h3', 'minimax-h3-ref2va')
+H3_MODELS = ('minimax-h3', 'minimax-h3-ref2va', 'minimax-h3-fast')
 
 
 def validate_h3_draft(data):
@@ -20,6 +20,11 @@ def validate_h3_options(model, data, steps):
         if data.get('h3_sage') or data.get('h3_upscale', 1) != 1 or data.get('h3_sampling', 'turbo') != 'turbo':
             raise ValueError('当前模型不支持 H3 优化')
         return {}
+    if model == 'minimax-h3-fast':
+        if steps != 8:
+            raise tornado.web.HTTPError(400, reason='FastH3 固定使用 8 步')
+        if data.get('h3_sage') or data.get('h3_sampling', 'turbo') != 'turbo':
+            raise ValueError('FastH3 使用独立的 8 步配置，不支持切换标准采样或 Sage')
     options = {k: data[k] for k in ('h3_sampling', 'h3_sage', 'h3_upscale') if k in data}
     # Missing sampling mode belongs to a legacy FL2VA request: preserve its steps.
     if model == 'minimax-h3' and 'h3_sampling' in data and data['h3_sampling'] == 'turbo' and steps not in (6, 8):
@@ -28,7 +33,7 @@ def validate_h3_options(model, data, steps):
 
 
 def required_h3_nodes(params):
-    nodes = []
+    nodes = ['BlockSparseAttention', 'ModelAttentionBackend', 'MiniMaxH3SigmaShift', 'DenoTextEncoderUnload'] if params.get('model') == 'minimax-h3-fast' else []
     if params.get('h3_sage'):
         nodes.append('PathchSageAttentionKJ')  # Upstream node ID includes this spelling.
     if params.get('h3_upscale', 1) > 1:
