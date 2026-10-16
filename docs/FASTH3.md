@@ -56,3 +56,12 @@ FastH3与双采基本持平，比原版约2.12倍速度。抽帧观察，FastH3�
 生产embedded Python还单独通过小型GPU Sol内核测试（有限非零输出），应用图在同一8199服务预检，仅故意0步校验失败，无其他参数或权重错误。默认8188连接未修改。Director提交前检查Sol节点；缺失时不创建任务、不上传参考图。节点存在不能代替内核验证。关闭选项即可恢复此前FastH3流程。
 
 测试证据与四版同步预览位于设备私有仓库 `research/h3-fast/misato-revival/`：`comparison-four.html`、`COMPARISON-SOL.md`、`sol-audit-first.json`、`sol-audit-total.json`及两轮API/历史/视频。
+
+
+## 3090后续优化：通用Triton后端
+
+2026-10-17拆分测量发现：当前torch2.13.0+cu126使Comfy主动关闭comfy-kitchen CUDA后端，通用Triton原先默认关闭。保持原PyTorch，用已安装的triton-windows3.7.0.post26及 `--enable-triton-backend`，相同旧图448×800/124帧/2步诊断中，正常单步主干GPU事件从14.898秒降到6.138秒，约2.43倍；注意力含投影7.574→4.046秒，MLP7.014→1.787秒。不是整段生成2.43倍：首次加载/调优和约31秒文本处理、21秒解码仍占成本，两步全流程133.63/135.21秒。
+
+新图320×576/362帧/完整8步/约15秒出片成功，完整215.529秒，稳定采样约10.7秒/步。该片工作量不同，不能与旧5秒总耗时作公平A/B。通用Triton与Sol-Attn独立，本次完整片没有开启Sol；原生VSA仍会回退，不代表通用Triton优化无效。没有升级PyTorch或强制绕过CUDA保护。
+
+Windows联合启动可传 `-EnableTriton`，也可在本机 `.local/comfy-launch.json` 写入 `{"enable_triton_backend":true}`。配置只作用本机、默认缺省关闭，启动前检查Triton可导入和配置布尔类型；DryRun也显示状态。本机3090已启用，其他机器不自动套用。关掉该配置/参数并在队列空闲后重启可回退。详细探针、原始数据和限制归档于设备私有仓库 `research/h3-fast/profiling-3090/`，新片在 `asuka-dance-15s/`。

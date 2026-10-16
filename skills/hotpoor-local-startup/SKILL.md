@@ -52,3 +52,10 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'J:/codex_projects/hotpo
 - 缺少环境时说明确切路径，参考 `scripts/setup.ps1`，不将环境安装混入普通启动。ComfyUI 成功、Director 失败时分别报告，并保留可用服务。
 
 完成后报告两项各自状态、实际 URL、日志位置和未解决错误。只做预检须明确未实际启动；创建或校验本技能不代表服务已启动。不以付费生成验证启动。
+
+
+## 本机通用Triton后端（2026-10-17）
+
+联合脚本可传 `-EnableTriton`，或读取项目 `.local/comfy-launch.json` 的 `enable_triton_backend` 布尔字段。本机3090设为true；没有本机配置则默认不启用。开启时添加 `--enable-triton-backend`，启动前检查Triton可导入，类型错误或缺依赖在停止服务前报错，DryRun显示开关状态。独立启动Comfy时也沿用本机已确认的该参数；不将其与卡片Sol-Attn选项混淆。已配套triton-windows3.7.0.post26与torch2.13.0+cu126，不自动升级PyTorch。
+
+原BAT和8199测试脚本已保留备份于artifact目录。回退时关闭本机配置/移除启动flag，待队列空闲重启；不卸载模型或删除数据库。实测正常采样步更快，不承诺整段相同比例提速。

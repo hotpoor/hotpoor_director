@@ -671,3 +671,6 @@ ComfyUI 需要支持 `TextEncodeQwenImage21` 和 `QwenImage21Cache`，并安装�
 ### 截图与共享快捷键
 
 新增整屏截图到剪贴板及可设置全局快捷键。HOTPOOR 产品共用快捷键，按优先级自动交接监听。详见 [截图设置与构建说明](docs/screen-capture.md)。
+
+
+本机3090可选[通用Triton后端优化](docs/FASTH3.md#3090后续优化通用triton后端)，与Sol开关独立。正常采样步实测约2.43倍速度，整段还包含加载、文本与解码；不把单步加速比当作总耗时承诺。

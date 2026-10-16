@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$ComfyRoot, [switch]$DryRun)
+param([string]$ComfyRoot, [switch]$DryRun, [switch]$EnableTriton)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 if (!$ComfyRoot) { $ComfyRoot = Join-Path $root '..\ComfyUI' }
@@ -19,6 +19,19 @@ try {
     foreach ($path in @($python, $main)) {
         if (!(Test-Path -LiteralPath $path)) { throw "Missing ComfyUI file: $path" }
     }
+    $launchConfig = Join-Path $root '.local\comfy-launch.json'
+    if (Test-Path -LiteralPath $launchConfig) {
+        $launch = Get-Content -LiteralPath $launchConfig -Raw | ConvertFrom-Json
+        if ($null -ne $launch.enable_triton_backend) {
+            if ($launch.enable_triton_backend -isnot [bool]) { throw 'enable_triton_backend must be a boolean.' }
+            if (!$EnableTriton) { $EnableTriton = $launch.enable_triton_backend }
+        }
+    }
+    if ($EnableTriton) {
+        & $python -c 'import triton'
+        if ($LASTEXITCODE -ne 0) { throw 'Triton was requested but is unavailable in the ComfyUI Python environment.' }
+    }
+    Write-Host ("ComfyUI Triton backend: " + [bool]$EnableTriton)
     $existing = @(Get-ComfyProcesses)
     foreach ($listener in Get-ComfyListener) {
         if ($listener.OwningProcess -notin $existing.ProcessId) { throw 'Port 8188 belongs to another process. Startup stopped without closing it.' }
@@ -56,7 +69,9 @@ try {
     $stdout = Join-Path $logs "$stamp.comfy.stdout.log"
     $stderr = Join-Path $logs "$stamp.comfy.stderr.log"
     Write-Host 'Starting ComfyUI on GPU 0...'
-    $app = Start-Process -FilePath $python -ArgumentList '-s', ('"' + $main + '"'), '--windows-standalone-build', '--cuda-device', '0', '--reserve-vram', '2', '--listen', '0.0.0.0', '--port', '8188' -WorkingDirectory $ComfyRoot -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+    $comfyArguments = @('-s', ('"' + $main + '"'), '--windows-standalone-build', '--cuda-device', '0', '--reserve-vram', '2', '--listen', '0.0.0.0', '--port', '8188')
+    if ($EnableTriton) { $comfyArguments += '--enable-triton-backend' }
+    $app = Start-Process -FilePath $python -ArgumentList $comfyArguments -WorkingDirectory $ComfyRoot -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
     $deadline = (Get-Date).AddMinutes(6)
     do {
         $app.Refresh()
