@@ -1105,6 +1105,13 @@
   $('#studio-logout').onclick=async()=>{try{if(importing||window.directorComments?.busy())throw Error('请等待素材上传或评论发送完成');await save();await request('/api/logout',{});location.reload();}catch(e){tell(e.message);}};
   window.addEventListener('beforeunload',event=>{if(importing||uploading||window.directorComments?.busy()||state.version!==state.saved){event.preventDefault();event.returnValue='';}});
   window.directorStudio={
+    addSpeechAsset:async(asset,projectId)=>{
+      if(!state.project||state.project.block_id!==projectId)throw Error('项目已切换，请回到原项目添加配音');
+      if(cards().some(c=>c.type==='asset'&&c.asset_id===asset.id))return;
+      if(cards().length>=200)throw Error('当前画布最多 200 张卡片');
+      const card={id:uid(),type:'asset',mode:'media',asset_id:asset.id,name:asset.name,mime:asset.mime,size:asset.size,x:cards().length?Math.max(...cards().map(c=>c.x+c.w))+80:40,y:40,w:420,h:240};
+      cards().push(card);const el=document.createElement('article');el.className='generation-card';el.dataset.card=card.id;$('#canvas-world').append(el);renderCard(card);changed();$('#canvas-empty').hidden=true;await save();
+    },
     changed, describeMedia, cardName, materials:()=>state.project ? commentMaterials() : [],
     save, openProject, refreshProject, busy:()=>!!(drag||wireDrag||boxImport||uploading||importing||window.directorComments?.busy()||[...(window.directorTimeline?.instances.values()||[])].some(i=>i.busy())), dirty:()=>state.version!==state.saved, currentProject:()=>state.project,
     async refreshModels(){const data=await request('/api/models');state.models=data.models;state.inferenceCredentials=data.inference_credentials||{keys:[]};if(data.model_error)tell(data.model_error);if(state.project)renderCanvas();},

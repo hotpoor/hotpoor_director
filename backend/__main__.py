@@ -89,6 +89,8 @@ async def run(args):
         if app:
             from backend.dialogue import close_dialogues
             await close_dialogues(app)
+            if app.settings.get('speech_manager'):
+                await app.settings['speech_manager'].close()
             await app.settings['inference_manager'].close()
             await app.settings['progress_tracker'].close()
         if pool:

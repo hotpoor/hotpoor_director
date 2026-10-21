@@ -674,3 +674,7 @@ ComfyUI 需要支持 `TextEncodeQwenImage21` 和 `QwenImage21Cache`，并安装�
 
 
 本机3090可选[通用Triton后端优化](docs/FASTH3.md#3090后续优化通用triton后端)，与Sol开关独立。正常采样步实测约2.43倍速度，整段还包含加载、文本与解码；不把单步加速比当作总耗时承诺。
+
+### Qwen3-TTS 独立配音
+
+画布工具栏「＋ 独立配音」支持本地 Base 声音克隆和 CustomVoice 预设音色，生成独立 WAV，可试听、下载及添加到画布。支持取消任务；不会自动上传音频或安装模型。[配置与验证](docs/QWEN_TTS.md)。

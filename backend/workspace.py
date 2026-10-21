@@ -361,7 +361,11 @@ def workspace_routes():
     from backend.inference import InferenceSettingsHandler, InferenceTestHandler, InferenceCostHandler, InferenceCostImportHandler
     from backend.cloud_storage import StorageSettingsHandler, StorageTestHandler, UploadGrantHandler, UploadConfirmHandler, CloudImageHandler
     from backend.generation import ModelsHandler, GenerateHandler, HistoryHandler, OutputHandler, CancelGenerationHandler, QueueOrderHandler
+    from backend.speech import SpeechSettingsHandler, SpeechJobsHandler, SpeechCancelHandler
     return [
+        (r'/api/settings/speech', SpeechSettingsHandler),
+        (r'/api/projects/([0-9a-f]{32})/speech', SpeechJobsHandler),
+        (r'/api/speech/([0-9a-f]{32})/cancel', SpeechCancelHandler),
         (r'/api/dialogue/conversations/([0-9a-f]{32})/files', DialogueUploadHandler),
         (r'/api/dialogue/files/([0-9a-f]{32})', DialogueFileHandler),
         (r'/api/dialogue/models', DialogueModelsHandler),

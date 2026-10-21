@@ -294,3 +294,19 @@ a[href^="file://"]:hover{color:#f4c078}
 #canvas.box-import-active,#canvas.box-import-active .generation-card{cursor:crosshair}
 #canvas .generation-card.box-import-selected{outline:2px solid #8bc9ff;outline-offset:3px}
 #studio #box-import[aria-pressed="true"]{background:#24455f;color:#d7eeff;border-color:#8bc9ff}
+
+#speech-dialog { width:min(760px,94vw); max-height:88vh; overflow:auto; }
+#speech-dialog form { display:grid; gap:12px; margin:18px 0; }
+#speech-dialog summary { cursor:pointer; padding:10px 0; }
+#speech-dialog .speech-result { padding:18px 0; border-top:1px solid #5555; }
+#speech-dialog audio { display:block; width:100%; margin:12px 0; }
+#speech-dialog [hidden] { display:none !important; }
+
+#speech-dialog { padding:24px; background:#181818; color:#eee; border:1px solid #555; border-radius:10px; }
+#speech-dialog::backdrop { background:#000a; }
+#speech-dialog .dialog-heading { gap:16px; }
+#speech-dialog .dialog-heading h2 { font-size:20px; min-width:0; }
+#speech-dialog .dialog-heading button { flex:none; padding:7px 12px; }
+#speech-dialog > p { line-height:1.7; color:#aaa; }
+#speech-dialog form label { margin:0; }
+#speech-dialog .speech-result p { white-space:pre-wrap; overflow-wrap:anywhere; }

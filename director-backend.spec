@@ -1,6 +1,6 @@
 from PyInstaller.utils.hooks import collect_all
 
-datas = [('backend/schema', 'backend/schema'), ('backend/web', 'backend/web'), ('backend/knowledge/*.sql', 'backend/knowledge'), ('backend/knowledge/scope_web', 'backend/knowledge/scope_web')]
+datas = [('backend/workers/*.py', 'backend/workers'), ('backend/schema', 'backend/schema'), ('backend/web', 'backend/web'), ('backend/knowledge/*.sql', 'backend/knowledge'), ('backend/knowledge/scope_web', 'backend/knowledge/scope_web')]
 binaries = []
 hiddenimports = []
 for package in ('psycopg', 'psycopg_binary', 'psycopg_pool', 'argon2', '_argon2_cffi_bindings', 'asyncpg', 'jieba', 'qdrant_client'):
