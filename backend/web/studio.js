@@ -470,10 +470,10 @@
     const last=button.dataset.extractFrame==='last',seconds=Number(bar.querySelector('.frame-seconds').value);
     if(!last&&(!Number.isFinite(seconds)||seconds<0||bar.querySelector('.frame-seconds').value==='')){tell('请输入有效的非负秒数');return;}
     importing=true;button.disabled=true;tell('正在读取视频帧…');
-    const video=document.createElement('video');video.muted=true;video.preload='auto';
+    const video=document.createElement('video');video.crossOrigin='anonymous';video.muted=true;video.preload='auto';
     const wait=(event,action)=>new Promise((resolve,reject)=>{
       const done=error=>{clearTimeout(timer);video.removeEventListener(event,ok);video.removeEventListener('error',fail);error?reject(error):resolve();};
-      const ok=()=>done(),fail=()=>done(Error('视频无法解码，请检查视频格式'));
+      const ok=()=>done(),fail=()=>done(Error('视频无法读取：请检查云存储是否允许当前网站跨域读取，以及视频格式是否支持。'));
       const timer=setTimeout(()=>done(Error('读取视频帧超时，请重试')),30000);
       video.addEventListener(event,ok,{once:true});video.addEventListener('error',fail,{once:true});try{action?.();}catch(error){done(error);}
     });
@@ -491,7 +491,7 @@
       if(state.project!==project)throw Error('项目已切换，已停止添加帧');
       const card={id:uid(),type:'asset',mode:'media',asset_id:asset.id,name:asset.name,mime:asset.mime,size:asset.size,x:Math.max(...cards().map(c=>c.x+c.w))+80,y:source.y,w:420,h:360};
       cards().push(card);renderCanvas();const v=project.body.canvas.viewport;v.x=40-card.x*v.zoom;v.y=40-card.y*v.zoom;transform();changed();await save();tell('已提取为图片素材卡片，可连线用于下一次生成');
-    }catch(error){tell(error.message);}
+    }catch(error){tell(error.name==='SecurityError'?'云存储未允许跨域提帧，请为视频域名配置当前网站的跨域读取权限。':error.message);}
     finally{video.pause();video.removeAttribute('src');video.load();importing=false;button.disabled=false;}
   }
   function publicMediaUrl(value){

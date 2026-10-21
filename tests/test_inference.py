@@ -485,3 +485,48 @@ def test_success_status_with_provider_error_is_classified():
     with patch('backend.inference.AsyncHTTPClient',return_value=client),pytest.raises(ProviderError) as error:
         asyncio.run(api(KEY,'/v1/images/generations',{'prompt':'scene'}))
     assert '内容审核拦截' in str(error.value) and 'req-safe' in str(error.value)
+
+
+def test_qiniu_fetch_timeout_keeps_source_and_restart_only_retries_cloud_fetch(tmp_path):
+    from backend import cloud_storage as storage
+    from test_cloud_storage import profile
+    config={'data_dir':tmp_path};save_key(config,KEY)
+    p=profile();storage.save(config,{'active_profile_id':'q','profiles':{'q':p}})
+    url='https://provider.example/video.mp4'
+    body=job(output_storage='cloud',storage_profile_id='q',storage_profile_fingerprint=storage.fingerprint(p),remote_task_id='already-billed',owner_id='owner',project_id='c'*32)
+    pool=Pool({'a':{'body':body}});manager=InferenceManager(config,pool)
+    metadata={'fsize':1234,'mimeType':'video/mp4'}
+    qiniu=SimpleNamespace(stat=Mock(side_effect=[(None,SimpleNamespace(status_code=612)),(metadata,SimpleNamespace(status_code=200))]),fetch=Mock(side_effect=TimeoutError('private source details')))
+    with patch('backend.inference.api',AsyncMock(return_value={'task':{'status':'completed','outputs':[url]}})) as request, \
+         patch('backend.inference.download_memory',AsyncMock(side_effect=AssertionError('backend must not download'))) as download, \
+         patch('backend.cloud_storage.store_generated',AsyncMock(side_effect=AssertionError('backend must not upload'))) as upload, \
+         patch.object(storage,'qiniu_manager',return_value=qiniu), \
+         patch.object(storage,'verify_object'),patch.object(storage,'verify_public',AsyncMock(return_value=None)), \
+         patch('backend.inference.asyncio.sleep',AsyncMock(side_effect=asyncio.CancelledError)):
+        with pytest.raises(asyncio.CancelledError):asyncio.run(manager.run('a',body,None))
+        saved=copy.deepcopy(pool.rows['a']['body'])
+        assert saved['pending_outputs']==[url] and saved['status']=='running'
+        assert saved['failure']['stage']=='fetching_output'
+        assert '不经过服务器转传' in saved['error'] and 'private source details' not in saved['error']
+        # Simulate application restart using the persisted task, not a fresh submission.
+        restarted=InferenceManager(config,pool)
+        asyncio.run(restarted.run('a',saved,None))
+        download.assert_not_awaited();upload.assert_not_awaited()
+    assert request.await_count==1 and all(len(call.args)==2 for call in request.await_args_list)
+    assert qiniu.fetch.call_count==1  # Timed-out fetch already reached Qiniu; stat reuses it.
+    result=pool.rows['a']['body']
+    assert result['status']=='completed' and result['pending_outputs'] is None
+    assert result['outputs'][0]['transfer']=='remote_fetch'
+    assert not (tmp_path/'generated').exists()
+
+
+def test_qiniu_base64_video_is_not_uploaded_through_backend(tmp_path):
+    from backend import cloud_storage as storage
+    from test_cloud_storage import profile
+    config={'data_dir':tmp_path};p=profile()
+    storage.save(config,{'active_profile_id':'q','profiles':{'q':p}})
+    body=job(output_storage='cloud',storage_profile_id='q',storage_profile_fingerprint=storage.fingerprint(p),owner_id='owner',project_id='c'*32)
+    manager=InferenceManager(config,Pool())
+    with patch('backend.inference.download_memory',AsyncMock()) as download,patch.object(storage,'store_generated',AsyncMock()) as upload:
+        with pytest.raises(ValueError):asyncio.run(manager.store_outputs('a',body,[{'b64_json':base64.b64encode(b'video').decode()}]))
+        download.assert_not_awaited();upload.assert_not_awaited()

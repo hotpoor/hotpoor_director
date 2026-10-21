@@ -450,7 +450,7 @@ async def store_generated(config, pool, job, raw, mime, name, phase):
 
 
 async def fetch_generated_video(config, pool, job, url, name, phase):
-    """Let Qiniu fetch large videos directly; other providers use streamed transfer."""
+    """Qiniu videos must use remote fetch; never fall back to backend transfer."""
     profile_id = job.get('storage_profile_id')
     if not profile_id: return None
     profile = load(config)['profiles'].get(profile_id)
@@ -466,16 +466,22 @@ async def fetch_generated_video(config, pool, job, url, name, phase):
         manager = qiniu_manager(profile)
         existing, info = manager.stat(profile['bucket_name'], key)
         if info.status_code == 200: return existing
+        if info.status_code != 612:
+            raise StorageError('七牛对象状态查询失败（HTTP '+str(info.status_code)+'）；保留任务重试，不经过服务器转传')
         result, info = manager.fetch(url, profile['bucket_name'], key)
-        if info.status_code != 200 or not isinstance(result, dict): return None
+        if info.status_code != 200 or not isinstance(result, dict):
+            raise StorageError('七牛抓取未成功（HTTP '+str(info.status_code)+'）；保留任务重试，不经过服务器转传')
         return result
     try:
         result = await asyncio.to_thread(fetch)
+    except StorageError:
+        raise
     except Exception:
-        # A timed-out fetch can still finish at the provider. The stable key is
-        # checked before another fetch on retry; never resubmit generation.
-        return None
-    if not result: return None
+        # A timed-out fetch may still finish at Qiniu. Keep the stable key and
+        # source URL for retry; never download the video through this backend.
+        raise StorageError('七牛抓取结果未确认；保留任务重试，不经过服务器转传，也不会重新生成视频') from None
+    if not isinstance(result, dict):
+        raise StorageError('七牛对象信息不完整；保留任务重试，不经过服务器转传')
     size = result.get('fsize')
     if not isinstance(size, int) or not 1 <= size <= 210 * 1024 * 1024:
         raise StorageError('云存储抓取的生成视频大小异常')

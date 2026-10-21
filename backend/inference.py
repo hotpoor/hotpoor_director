@@ -565,7 +565,7 @@ class InferenceManager:
                 async def phase(stage, **counts):
                     body['_output_phase'] = stage
                     await self.update(job_id, remote_status=stage, error=None, progress={'phase': 'saving', 'maximum': len(outputs), 'item': index + 1, **counts})
-                if body['type'] == 'video' and not (isinstance(output, dict) and output.get('b64_json')):
+                if body['type'] == 'video':
                     direct = await fetch_generated_video(self.config, self.pool, body, output.get('url') if isinstance(output, dict) else output, f'{job_id}-{index}', phase)
                     if direct:
                         result.append(direct)

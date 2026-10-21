@@ -335,3 +335,22 @@ def test_cos_redirect_does_not_inherit_private_access_and_size_still_checked():
             client.assert_not_called()
     asyncio.run(run(SimpleNamespace(code=302,headers={'Location':'https://169.254.169.254/'})))
     asyncio.run(run(SimpleNamespace(code=200,headers={'Content-Length':'5'})))
+
+
+@pytest.mark.parametrize('failure', ['timeout', 'rejected', 'stat_error', 'empty_metadata'])
+def test_qiniu_video_fetch_failure_never_allows_backend_transfer(tmp_path, failure):
+    from test_inference import Pool
+    p=profile();config={'data_dir':tmp_path}
+    s.save(config,{'active_profile_id':'q','profiles':{'q':p}})
+    job=dict(storage_profile_id='q',storage_profile_fingerprint=s.fingerprint(p),owner_id='owner',project_id='a'*32)
+    manager=SimpleNamespace(stat=Mock(return_value=(None,SimpleNamespace(status_code=612))),
+                            fetch=Mock(return_value=(None,SimpleNamespace(status_code=400))))
+    if failure=='timeout':manager.fetch.side_effect=TimeoutError('private signed source URL')
+    if failure=='stat_error':manager.stat.return_value=(None,SimpleNamespace(status_code=503))
+    if failure=='empty_metadata':manager.stat.return_value=(None,SimpleNamespace(status_code=200))
+    with patch.object(s,'qiniu_manager',return_value=manager):
+        with pytest.raises(s.StorageError) as error:
+            asyncio.run(s.fetch_generated_video(config,Pool(),job,'https://provider.example/out.mp4','job-0',AsyncMock()))
+    assert '不经过服务器转传' in str(error.value)
+    assert 'private signed' not in str(error.value)
+    if failure in ('stat_error','empty_metadata'):manager.fetch.assert_not_called()
