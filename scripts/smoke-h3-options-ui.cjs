@@ -14,6 +14,8 @@ app.whenReady().then(async()=>{
 import backend.generation as generation
 original_comfy_at = generation.comfy_at
 async def stub_comfy_at(base, path, data=None):
+    if path == '/object_info/MinimaxH3LatentUpscaler3D':
+        return {'MinimaxH3LatentUpscaler3D': {'input': {'required': {'model_name': [[]]}}}}
     if path.startswith('/object_info/'):
         return {}
     return await original_comfy_at(base, path, data)
@@ -87,6 +89,10 @@ main()
     await check("preflightStatus===400 && /H3|缺少/.test(preflightReply.error)",'Missing node preflight must fail before generating');
     await check("(async()=>(await smokeApi('/api/projects/'+smokeProject+'/history')).history.length===0)()",'Failed preflight inserted generation history');
     await js("document.querySelector('[data-field=model]').focus();directorEditing.claim('card:'+document.querySelector('[data-card]').dataset.card)");
+    // Present node but missing learned checkpoint must reject before any job exists.
+    await js(`(async()=>{const c=directorStudio.currentProject().body.canvas.cards[0];const r=await fetch('/api/projects/'+smokeProject+'/generate',{method:'POST',headers:{'Content-Type':'application/json','X-XSRFToken':decodeURIComponent(document.cookie.split('; ').find(x=>x.startsWith('_xsrf=')).slice(6))},body:JSON.stringify({...c.drafts.text,model:'minimax-h3',h3_two_stage:true,h3_first_scale:.5,h3_refine_steps:3,h3_sage:false,h3_upscale:1,card_id:c.id,mode:'text',prompt:'A bird flies.',request_id:crypto.randomUUID().replaceAll('-','')})});window.preflightStatus=r.status;window.preflightReply=await r.json();})()`);
+    await check("preflightStatus===400 && /缺少权重/.test(preflightReply.error)",'Missing learned checkpoint must fail preflight');
+    await check("(async()=>(await smokeApi('/api/projects/'+smokeProject+'/history')).history.length===0)()",'Missing checkpoint created a generation');
     // Mixed reference numbering must remain per media type, and be literal text in HTML.
     await js(`(()=>{const c=directorStudio.currentProject().body.canvas.cards[0];c.drafts.reference={model:'minimax-h3-ref2va',prompt:'',refs:['1'.repeat(32),'2'.repeat(32),'3'.repeat(32),'4'.repeat(32)],ref_info:{['1'.repeat(32)]:{mime:'image/png'},['2'.repeat(32)]:{mime:'audio/wav'},['3'.repeat(32)]:{mime:'image/png'},['4'.repeat(32)]:{mime:'video/mp4'}}};const s=document.querySelector('[data-field=model]');s.value='minimax-h3-ref2va';s.dispatchEvent(new Event('change',{bubbles:true}));})()`);
     console.log("Reference tokens:", await js("JSON.stringify([...document.querySelectorAll('.reference-token')].map(x=>x.textContent))"));
@@ -94,6 +100,18 @@ main()
     await js("document.querySelector('[data-field=prompt]').focus();directorEditing.claim('card:'+document.querySelector('[data-card]').dataset.card)");
     await js("document.querySelector('.reference-token').click()");
     await check("document.querySelector('[data-field=prompt]').value==='<Picture 1>'",'Reference insertion must preserve literal angle brackets');
+    // Clear synthetic reference IDs before testing persistence against the real DB.
+    await js(`(()=>{for(const d of Object.values(directorStudio.currentProject().body.canvas.cards[0].drafts)){d.refs=[];d.ref_info={};}})()`);
+    // Learned two-stage settings persist; enabling it disables Ref2VA Turbo.
+    await js("document.querySelector('[data-field=h3_two_stage]').click()");
+    await check("document.querySelector('[data-field=h3_two_stage]').checked && !document.querySelector('[data-field=turbo_mode]').checked",'Double sampling must disable incompatible Turbo');
+    await js(`(()=>{const s=document.querySelector('[data-field=h3_first_scale]');s.value='0.75';s.dispatchEvent(new Event('input',{bubbles:true}));s.dispatchEvent(new Event('change',{bubbles:true}));const n=document.querySelector('[data-field=h3_refine_steps]');n.value='5';n.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await js("directorStudio.save();document.querySelector('#back-dashboard').click()");
+    await wait("!document.querySelector('#dashboard').hidden");
+    await js("directorStudio.openProject(smokeProject)");
+    await check("document.querySelector('[data-field=h3_two_stage]').checked && Number(document.querySelector('[data-field=h3_first_scale]').value)===.75 && Number(document.querySelector('[data-field=h3_refine_steps]').value)===5",'Two-stage options lost on reopen');
+    await check("document.querySelector('.h3-output-size').textContent.includes('双采精修')",'Two-stage output dimensions missing');
+    await js("document.querySelector('[data-field=model]').focus();directorEditing.claim('card:'+document.querySelector('[data-card]').dataset.card)");
     // FastH3 must survive saving and reject missing runtime extensions without a GPU job.
     await js(`(()=>{for(const d of Object.values(directorStudio.currentProject().body.canvas.cards[0].drafts)){d.refs=[];d.ref_info={};}const s=document.querySelector('[data-field=model]');s.value='minimax-h3-fast';s.dispatchEvent(new Event('change',{bubbles:true}));})()`);
     await check("Number(document.querySelector('[data-field=steps]').value)===8 && document.querySelector('[data-field=steps]').readOnly",'FastH3 must lock 8 steps');

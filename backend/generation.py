@@ -13,7 +13,7 @@ from psycopg.types.json import Jsonb
 from tornado.httpclient import AsyncHTTPClient, HTTPClientError, HTTPRequest
 import tornado.web
 
-from backend.h3_options import validate_h3_options, apply_h3_options, required_h3_nodes
+from backend.h3_options import validate_h3_options, apply_h3_options, required_h3_nodes, apply_h3_two_stage, H3_LATENT_MODEL
 from backend.qwen_models import QWEN_IMAGE21_GGUF, QWEN_IMAGE21_IDS
 from backend.reference_media import prepare_reference
 from backend.comfy_settings import endpoint
@@ -197,6 +197,7 @@ def workflow(kind, mode, p, refs, job_id):
         else:
             graph[key] = node('LoadImage', image=filename)
             graph['5']['inputs'][f'ref_images.ref_image_{number}' if reference else ('first_frame' if i == 0 else 'last_frame')] = [key, 0]
+    apply_h3_two_stage(graph, p)
     return graph
 
 
@@ -328,6 +329,10 @@ class GenerateHandler(PrivateHandler):
                 raise tornado.web.HTTPError(400, reason='无法检查 H3 优化节点，请连接 ComfyUI 后重试')
             if node_id not in info:
                 raise tornado.web.HTTPError(400, reason=f'ComfyUI 缺少 {node_id}，请安装对应扩展并重启，或关闭此优化；尚未提交生成')
+            if node_id == 'MinimaxH3LatentUpscaler3D':
+                choices = info[node_id].get('input', {}).get('required', {}).get('model_name', [[]])[0]
+                if H3_LATENT_MODEL not in choices:
+                    raise tornado.web.HTTPError(400, reason=f'双采缺少权重 {H3_LATENT_MODEL}，请放入 ComfyUI/models/latent_upscale_models；尚未提交生成')
         if p['seed'] == -1:
             p['seed'] = secrets.randbelow(2**53)
         assets = [await owned(self.projects, ref, self.owner, 'asset') for ref in refs]
