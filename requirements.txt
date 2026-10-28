@@ -10,3 +10,4 @@ PySocks==1.7.1
 asyncpg>=0.29,<1
 jieba==0.42.1
 qdrant-client>=1.12,<2
+cryptography>=44,<51

@@ -350,6 +350,7 @@ class AssetHandler(PrivateHandler):
 
 
 def workspace_routes():
+    from backend.wechat import WechatConversationsHandler, WechatConversationHandler, WechatPreviewHandler, WechatExportHandler
     from backend.dialogue_files import DialogueUploadHandler, DialogueFileHandler
     from backend.dialogue import (DialogueModelsHandler, DialoguesHandler, DialogueHandler,
                                   DialogueCategoriesHandler, DialogueCategoryHandler)
@@ -363,6 +364,10 @@ def workspace_routes():
     from backend.generation import ModelsHandler, GenerateHandler, HistoryHandler, OutputHandler, CancelGenerationHandler, QueueOrderHandler
     from backend.speech import SpeechSettingsHandler, SpeechJobsHandler, SpeechCancelHandler
     return [
+        (r'/api/wechat/preview', WechatPreviewHandler),
+        (r'/api/wechat/conversations', WechatConversationsHandler),
+        (r'/api/wechat/conversations/([0-9a-f]{32})', WechatConversationHandler),
+        (r'/api/wechat/conversations/([0-9a-f]{32})/export', WechatExportHandler),
         (r'/api/settings/speech', SpeechSettingsHandler),
         (r'/api/projects/([0-9a-f]{32})/speech', SpeechJobsHandler),
         (r'/api/speech/([0-9a-f]{32})/cancel', SpeechCancelHandler),

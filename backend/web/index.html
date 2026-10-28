@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="/static/dialogs.css">
   <link rel="stylesheet" href="/static/timeline.css">
   <link rel="stylesheet" href="/static/dialogue.css">
+  <link rel="stylesheet" href="/static/wechat.css">
 </head>
 <body>
   <header class="masthead"><a class="wordmark" href="/" aria-label="Hotpoor Director 首页"><img src="/static/brand/logo.png" alt="" width="38" height="38"><span>HOTPOOR <strong>DIRECTOR</strong></span></a><span class="masthead-caption">THE FILMMAKER’S WORKSPACE</span></header>
@@ -31,7 +32,7 @@
   </main>
   <footer><span>HOTPOOR DIRECTOR</span><span>为创作而生 · BUILT FOR THE STORY</span><span class="footer-mark" aria-hidden="true">◧</span></footer>
   <section id="studio" hidden aria-label="导演工作空间">
-    <nav class="studio-nav"><a class="studio-brand" href="#"><img src="/static/brand/logo.png" width="30" height="30" alt="Director Logo"> HOTPOOR DIRECTOR</a><span id="studio-account"></span><button id="open-screenshot-settings" class="quiet" hidden>截图与快捷键</button><button id="open-dialogue" class="quiet">对话模式</button><button id="studio-logout" class="quiet">退出登录</button></nav>
+    <nav class="studio-nav"><a class="studio-brand" href="#"><img src="/static/brand/logo.png" width="30" height="30" alt="Director Logo"> HOTPOOR DIRECTOR</a><span id="studio-account"></span><button id="open-screenshot-settings" class="quiet" hidden>截图与快捷键</button><button id="open-wechat" class="quiet">微信模式</button><button id="open-dialogue" class="quiet">对话模式</button><button id="studio-logout" class="quiet">退出登录</button></nav>
     <section id="dashboard">
       <div class="dash-heading"><div><span class="eyebrow">YOUR PRODUCTIONS / 作品档案</span><h1>故事，从这里开始。</h1><p>每个项目，一片属于你的创作现场。</p></div><div class="dashboard-actions"><button id="open-storage-settings" class="quiet">云存储直传设置</button><button id="open-inference-settings" class="quiet"><img class="inference-entry-logo" src="/static/brand/tokenmart-cart.png" alt="">service-inference 设置</button><button id="open-comfy-settings" class="quiet">⚙ ComfyUI 配置</button><button id="new-project">＋ 创建项目</button></div></div>
       <div class="dash-bar"><h2>我的项目 <small id="project-count">00</small></h2><input id="project-search" placeholder="搜索标题、描述…" aria-label="搜索项目"></div>
@@ -72,6 +73,7 @@
   <script src="/static/dialogue-model-picker.js"></script>
   <script src="/static/dialogue.js"></script>
   <script src="/static/file-links.js"></script>
+  <script src="/static/wechat.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>
