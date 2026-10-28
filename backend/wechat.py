@@ -1,4 +1,4 @@
-"""Account-private, read-only WeChat exports with optional encrypted object storage."""
+"""Account-private, read-only WeChat exports backed by encrypted static cloud files."""
 import asyncio
 import csv
 import hashlib
@@ -170,15 +170,26 @@ async def download(profile, cloud):
     return raw
 
 
-async def contents(handler, row):
+async def contents(handler, row, offset=0, limit=None):
     body = row['body']
-    if body['storage'] == 'database': return body['messages']
     try:
         profile = selected_profile(handler.settings['config'], body['profile_id'], body['cloud']['location'])
-        raw = await download(profile, body['cloud'])
         key = archive_key(handler.settings['config'])
-        value = json.loads(unseal(raw, key, handler.owner + ':' + row['block_id']))
-        return value['messages']
+        messages = []
+        position = 0
+        for part in body['cloud']['parts']:
+            end = position + part['count']
+            if end <= offset:
+                position = end
+                continue
+            if limit is not None and position >= offset + limit: break
+            raw = await download(profile, part)
+            value = json.loads(unseal(raw, key, handler.owner + ':' + row['block_id'] + ':' + str(part['index'])))
+            first = max(0, offset - position)
+            last = None if limit is None else max(0, offset + limit - position)
+            messages.extend(value['messages'][first:last])
+            position = end
+        return messages
     except Exception:
         raise HTTPError(502, reason='无法读取加密云归档，请检查原存储配置、对象和账号解密密钥') from None
 
@@ -202,11 +213,11 @@ class WechatConversationsHandler(PrivateHandler):
         data = self.data()
         try:
             value = parse_export(data.get('name'), data.get('content'), data.get('title', ''))
-            mode = data.get('storage', 'database')
-            if mode not in ('database', 'cloud'): raise ValueError('请选择存储方式')
+            mode = data.get('storage', 'cloud')
+            if mode != 'cloud': raise ValueError('聊天正文仅保存为云存储静态归档，请选择云配置')
             profile_id = data.get('profile_id')
-            if mode == 'cloud' and not isinstance(profile_id, str): raise ValueError('请选择云存储配置')
-            profile = selected_profile(self.settings['config'], profile_id) if mode == 'cloud' else None
+            if not isinstance(profile_id, str): raise ValueError('请选择云存储配置')
+            profile = selected_profile(self.settings['config'], profile_id)
         except (ValueError, TypeError) as error:
             raise HTTPError(400, reason=str(error)) from None
         request_id = data.get('request_id', uuid.uuid4().hex)
@@ -224,22 +235,26 @@ class WechatConversationsHandler(PrivateHandler):
         body = {'kind': 'wechat_conversation', 'owner_id': self.owner, 'title': value['title'],
                 'count': len(value['messages']), 'first_time': value['messages'][0]['time'],
                 'last_time': value['messages'][-1]['time'], 'source_name': data['name'], 'storage': mode, 'import_signature': signature}
-        if profile:
-            try:
-                raw = json.dumps(value, ensure_ascii=False).encode()
-                cipher = seal(raw, archive_key(self.settings['config'], create=True), self.owner + ':' + identifier)
-                prefix = profile.get('path_prefix', 'director').strip('/')
-                key = '/'.join(filter(None, [prefix, 'wechat', self.owner, identifier + '-' + uuid.uuid4().hex + '.enc']))
+        try:
+            encryption_key = archive_key(self.settings['config'], create=True)
+            prefix = profile.get('path_prefix', 'director').strip('/')
+            parts = []
+            for index, start in enumerate(range(0, len(value['messages']), 500)):
+                pack = {'version': 1, 'title': value['title'], 'messages': value['messages'][start:start+500]}
+                raw = json.dumps(pack, ensure_ascii=False).encode()
+                identity = self.owner + ':' + identifier + ':' + str(index)
+                cipher = seal(raw, encryption_key, identity)
+                key = '/'.join(filter(None, [prefix, 'wechat', self.owner, identifier, str(index)+'-'+uuid.uuid4().hex+'.enc']))
                 await asyncio.to_thread(upload, profile, key, cipher)
-                cloud = {'key': key, 'size': len(cipher), 'sha256': hashlib.sha256(cipher).hexdigest(), 'location': location(profile)}
-                # Read back before publishing the archive in the conversation list.
-                verified = await download(profile, cloud)
-                assert unseal(verified, archive_key(self.settings['config']), self.owner + ':' + identifier) == raw
-                body.update(profile_id=profile_id, storage_name=profile.get('name', profile['provider']), cloud=cloud)
-            except Exception:
-                raise HTTPError(502, reason='云归档上传或回读校验未完成，原始文件保留，请检查存储权限和网络后重试') from None
-        else:
-            body['messages'] = value['messages']
+                part = {'key': key, 'size': len(cipher), 'sha256': hashlib.sha256(cipher).hexdigest(),
+                        'count': len(pack['messages']), 'index': index}
+                verified = await download(profile, part)
+                if unseal(verified, encryption_key, identity) != raw: raise ValueError('归档回读不一致')
+                parts.append(part)
+            body.update(profile_id=profile_id, storage_name=profile.get('name', profile['provider']),
+                        cloud={'parts': parts, 'location': location(profile)})
+        except Exception:
+            raise HTTPError(502, reason='云归档上传或回读校验未完成，原始文件保留，请检查存储权限和网络后重试') from None
         async with self.projects.connection() as conn:
             await conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s) ON CONFLICT (block_id) DO NOTHING', (identifier, Jsonb(body)), block_id=identifier)
         self.finish({'id': identifier, 'title': body['title'], 'count': body['count']})
@@ -254,12 +269,15 @@ class WechatConversationHandler(PrivateHandler):
             query = self.get_query_argument('q', '').strip()
             if len(query) > 200: raise ValueError()
         except ValueError: raise HTTPError(400, reason='分页或搜索参数无效') from None
-        messages = await contents(self, row)
+        messages = await contents(self, row, 0 if query else offset, None if query else 100)
+        total = row['body']['count']
         if query:
             query = query.casefold()
             messages = [m for m in messages if query in m['text'].casefold() or query in m['sender'].casefold() or query in m['time'].casefold()]
-        self.finish({'id': identifier, 'title': row['body']['title'], 'messages': messages[offset:offset+100],
-                     'total': len(messages), 'next_offset': offset+100 if offset+100 < len(messages) else None})
+            total = len(messages)
+            messages = messages[offset:offset+100]
+        self.finish({'id': identifier, 'title': row['body']['title'], 'messages': messages,
+                     'total': total, 'next_offset': offset+100 if offset+100 < total else None})
 
 
 class WechatExportHandler(PrivateHandler):

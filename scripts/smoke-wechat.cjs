@@ -2,7 +2,7 @@
 const {app,BrowserWindow}=require('electron'),http=require('node:http'),fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const root=path.resolve(__dirname,'..');let server;
 app.whenReady().then(async()=>{try{
- const conversation={block_id:'a'.repeat(32),body:{title:'产品讨论（测试数据）',count:205,storage:'database',source_name:'fixture.json',last_time:'2026-10-29 09:30:00'}},rows=[conversation],imports=[];
+ const conversation={block_id:'a'.repeat(32),body:{title:'产品讨论（测试数据）',count:205,storage:'cloud',storage_name:'七牛归档',source_name:'fixture.json',last_time:'2026-10-29 09:30:00'}},rows=[conversation],imports=[];
  const messages=Array.from({length:205},(_,i)=>({id:String(i),sender:i%2?'我':'张三',time:'2026-10-29 09:30:00',text:i===0?'<img src=x onerror="window.pwned=true">':`讨论消息 ${i}`,is_self:!!(i%2),type:'text'}));
  server=http.createServer(async(req,res)=>{
   const url=new URL(req.url,'http://localhost');res.setHeader('Content-Type','application/json; charset=utf-8');

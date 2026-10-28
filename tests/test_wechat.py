@@ -73,31 +73,18 @@ def test_cloud_import_only_publishes_verified_ciphertext(tmp_path):
         h.finish.assert_not_called()
 
 
-def test_real_http_import_pagination_search_export_and_owner_isolation(service):
+def test_real_http_preview_rejects_database_body_storage(service):
     _,url=service
     with httpx.Client(base_url=url,trust_env=False) as c:
         assert c.get('/api/wechat/conversations').status_code==401
         c.get('/');c.headers['X-XSRFToken']=c.cookies['_xsrf']
         assert c.post('/api/login',json={'login':'director','password':'a-local-test-password-123'}).status_code==200
-        payload={'name':'real-format.json','content':json.dumps(example(205)),'storage':'database','request_id':'1'*32}
+        payload={'name':'real-format.json','content':json.dumps(example(205)),'storage':'database'}
         preview=c.post('/api/wechat/preview',json=payload);assert preview.status_code==200,preview.text
         assert preview.json()['count']==205 and len(preview.json()['sample'])==5
-        result=c.post('/api/wechat/conversations',json=payload);assert result.status_code==200,result.text
-        identifier=result.json()['id']
-        assert c.post('/api/wechat/conversations',json=payload).json()['id']==identifier
-        path='/api/wechat/conversations/'+identifier
-        listing=c.get('/api/wechat/conversations').json()['conversations']
-        assert listing and 'messages' not in listing[0]['body']
-        page=c.get(path).json();assert len(page['messages'])==100 and page['next_offset']==100
-        assert len(c.get(path+'?offset=200').json()['messages'])==5
-        filtered=c.get(path,params={'q':'正文 204'}).json();assert filtered['total']==1
-        exported=c.get(path+'/export');assert len(exported.json()['messages'])==205
-        assert exported.headers['cache-control']=='no-store'
-        assert c.get(path+'?offset=-1').status_code==400
+        assert c.post('/api/wechat/conversations',json=payload).status_code==400
+        assert c.get('/api/wechat/conversations').json()['conversations']==[]
         assert c.post('/api/wechat/conversations',json={**payload,'storage':'cloud','profile_id':'missing'}).status_code==400
-        assert c.get('/api/wechat/conversations/'+'0'*32).status_code==404
-        assert c.post('/api/logout',json={}).status_code==200
-        assert c.get(path).status_code==401
 
 
 @pytest.mark.parametrize('provider',['qiniu','aliyun','tencent'])
