@@ -354,3 +354,28 @@ def test_qiniu_video_fetch_failure_never_allows_backend_transfer(tmp_path, failu
     assert '不经过服务器转传' in str(error.value)
     assert 'private signed' not in str(error.value)
     if failure in ('stat_error','empty_metadata'):manager.fetch.assert_not_called()
+
+
+def test_reveal_is_explicit_uncached_and_does_not_modify_saved_profiles(tmp_path):
+    from contextlib import asynccontextmanager
+    @asynccontextmanager
+    async def lock():
+        yield
+    value={'active_provider':'qiniu','profiles':{'saved':profile()}}
+    config={'data_dir':tmp_path}
+    s.save(config,value)
+    before=(tmp_path/'.cloud-storage.json').read_bytes()
+    data={'action':'reveal','id':'saved'}
+    h=SimpleNamespace(settings={'config':config,'storage_lock':lock()},data=lambda:data,
+                      set_header=Mock(),finish=Mock())
+    asyncio.run(s.StorageSettingsHandler.post(h))
+    assert h.finish.call_args.args[0]=={'access_key_id':'fake-access-id','access_key_secret':'fake-secret-value'}
+    h.set_header.assert_called_once_with('Cache-Control','no-store')
+    assert (tmp_path/'.cloud-storage.json').read_bytes()==before
+    assert 'fake-secret-value' not in json.dumps(s.public_view(s.load(config)))
+    for invalid in ('missing',None,[],{}):
+        h.settings['storage_lock']=lock()
+        data['id']=invalid
+        with pytest.raises(HTTPError) as error:
+            asyncio.run(s.StorageSettingsHandler.post(h))
+        assert error.value.status_code==404

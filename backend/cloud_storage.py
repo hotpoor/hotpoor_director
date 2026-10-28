@@ -267,6 +267,14 @@ class StorageSettingsHandler(PrivateHandler):
             value=load(self.settings['config'])
             value['active_profile_id']=active_id(value)
             action=data.get('action','disable' if data.get('disable') else 'clear' if data.get('clear') else 'save')
+            if action == 'reveal':
+                profile_id = data.get('id')
+                if not isinstance(profile_id, str) or profile_id not in value['profiles']:
+                    raise tornado.web.HTTPError(404, reason='存储配置不存在')
+                profile = value['profiles'][profile_id]
+                self.set_header('Cache-Control', 'no-store')
+                self.finish({key: profile.get(key, '') for key in ('access_key_id', 'access_key_secret')})
+                return
             if action not in ('save','select','clear','disable'):
                 raise tornado.web.HTTPError(400,reason='未知配置操作')
             # Missing ID supports the previous one-profile-per-provider API.

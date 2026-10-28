@@ -1,7 +1,9 @@
 (() => {
   'use strict';
   const dialog=document.querySelector('#storage-dialog'),form=document.querySelector('#storage-form'),status=document.querySelector('#storage-status');
-  let config,editing="",busy=false;
+  let config,editing="",busy=false,revealed=false,revealVersion=0;
+  const revealButton=document.querySelector("#storage-reveal");
+  function conceal(){revealed=false;revealVersion++;revealButton.textContent="查看已保存密钥";for(const name of ["access_key_id","access_key_secret"]){field(name).type="password";field(name).value="";}}
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   async function request(path,body){
     const response=await fetch(path,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json','X-XSRFToken':decodeURIComponent(document.cookie.split('; ').find(x=>x.startsWith('_xsrf='))?.slice(6)||'')},body:body===undefined?undefined:JSON.stringify(body)});
@@ -12,7 +14,9 @@
   form.addEventListener('input',preview);
   function autoEndpoint(){const p=field('provider').value,r=field('region').value;field('endpoint').value=p==='qiniu'?`https://up-${r}.qiniup.com`:p==='aliyun'?`https://oss-${r}.aliyuncs.com`:`https://cos.${r}.myqcloud.com`;preview();}
   function render(){
+    conceal();
     const p=field('provider').value,meta=config.providers[p],saved=config.profiles[editing]||{};
+    revealButton.disabled=!saved.credentials_configured;
     field('name').value=saved.name||config.providers[p].name;
     document.querySelector('#storage-editor-title').textContent=editing?'编辑：'+saved.name:'添加新配置';
     document.querySelector('#storage-clear').disabled=!editing;
@@ -35,7 +39,23 @@
   async function open(){dialog.showModal();status.textContent='读取配置…';try{config=await request('/api/settings/storage');field('provider').value='qiniu';edit(config.active_profile_id||Object.keys(config.profiles)[0]||'');}catch(e){status.textContent=e.message;}}
   document.querySelector('#open-storage-settings').onclick=open;
   document.querySelector('#close-storage').onclick=()=>{if(!busy)dialog.close();};
-  dialog.addEventListener('close',()=>{field('access_key_id').value='';field('access_key_secret').value='';});
+  dialog.addEventListener('close',conceal);
+  revealButton.onclick=async()=>{
+    if(busy)return;
+    if(revealed){conceal();return;}
+    if(['access_key_id','access_key_secret'].some(name=>field(name).value)){
+      status.textContent='输入框有未保存的密钥，请先保存后再查看已保存密钥';return;
+    }
+    const id=editing,version=++revealVersion;
+    revealButton.disabled=true;
+    try{
+      const result=await request('/api/settings/storage',{action:'reveal',id});
+      if(version!==revealVersion||editing!==id||!dialog.open)return;
+      for(const name of ['access_key_id','access_key_secret']){field(name).value=result[name];field(name).type='text';}
+      revealed=true;revealButton.textContent='隐藏密钥';status.textContent='已显示此配置的密钥；关闭窗口或切换配置后自动隐藏';
+    }catch(e){if(version===revealVersion)status.textContent=e.message;}
+    finally{if(version===revealVersion)revealButton.disabled=false;}
+  };
   document.querySelector('#storage-add').onclick=()=>{if(!busy)edit('');};
   document.querySelector('#storage-profile-list').onclick=e=>{const b=e.target.closest('[data-storage-edit]');if(b&&!busy)edit(b.dataset.storageEdit);};
   document.querySelector('#storage-profile-list').onchange=e=>{if(e.target.name==='active_storage')submit('select',e.target.value);};
@@ -58,7 +78,7 @@
         edit(editing);status.textContent+=' · 保存完成';
       }
     }catch(e){list();status.textContent=e.message;}
-    finally{busy=false;inputs.forEach(x=>x.disabled=false);document.querySelector('#storage-clear').disabled=!editing;}
+    finally{busy=false;inputs.forEach(x=>x.disabled=false);document.querySelector('#storage-clear').disabled=!editing;revealButton.disabled=!config.profiles[editing]?.credentials_configured;}
   }
   form.onsubmit=e=>{e.preventDefault();submit('save');};
   document.querySelector('#storage-save-only').onclick=()=>submit('save-only');
