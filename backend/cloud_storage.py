@@ -275,15 +275,20 @@ class StorageSettingsHandler(PrivateHandler):
                 self.set_header('Cache-Control', 'no-store')
                 self.finish({key: profile.get(key, '') for key in ('access_key_id', 'access_key_secret')})
                 return
-            if action not in ('save','select','clear','disable'):
+            if action not in ('save','select','clear','disable','copy'):
                 raise tornado.web.HTTPError(400,reason='未知配置操作')
             # Missing ID supports the previous one-profile-per-provider API.
             profile_id=data.get('id',data.get('provider'))
             if profile_id is not None and not isinstance(profile_id,str):raise tornado.web.HTTPError(400,reason='配置 ID 不正确')
             previous=value['profiles'].get(profile_id)
-            if action in ('select','clear') and not previous:
+            if action in ('select','clear','copy') and not previous:
                 raise tornado.web.HTTPError(404,reason='存储配置不存在')
-            if action=='disable':value['active_profile_id']=None
+            if action=='copy':
+                if len(value['profiles'])>=50:
+                    raise tornado.web.HTTPError(400,reason='最多保存 50 套云存储配置')
+                copied={**previous,'name':(previous.get('name') or PROVIDERS[previous['provider']]['name'])[:75]+' · 副本'}
+                value['profiles'][uuid.uuid4().hex]=copied
+            elif action=='disable':value['active_profile_id']=None
             elif action=='select':value['active_profile_id']=profile_id
             elif action=='clear':
                 value['profiles'].pop(profile_id)

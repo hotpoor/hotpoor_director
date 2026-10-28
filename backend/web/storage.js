@@ -32,7 +32,7 @@
     status.textContent=(saved.credentials_configured?'此配置已保存':'正在填写新配置')+' · 当前启用：'+(config.profiles[config.active_profile_id]?.name||'未启用');
   }
   function list(){
-    document.querySelector('#storage-profile-list').innerHTML=Object.entries(config.profiles).map(([id,p])=>`<div class="storage-profile-row ${id===editing?'editing':''}"><label><input type="radio" name="active_storage" value="${esc(id)}" ${id===config.active_profile_id?'checked':''} aria-label="启用 ${esc(p.name)}"><span><strong>${esc(p.name)}</strong><small>${esc(config.providers[p.provider].name)} · ${esc(p.bucket_name)}</small><small>${esc(p.access_domain)}${p.path_prefix?'/'+esc(p.path_prefix):''}</small></span></label><button type="button" class="quiet" data-storage-edit="${esc(id)}">编辑</button></div>`).join('')||'<p class="comfy-help">尚未保存配置</p>';
+    document.querySelector('#storage-profile-list').innerHTML=Object.entries(config.profiles).map(([id,p])=>`<div class="storage-profile-row ${id===editing?'editing':''}"><label><input type="radio" name="active_storage" value="${esc(id)}" ${id===config.active_profile_id?'checked':''} aria-label="启用 ${esc(p.name)}"><span><strong>${esc(p.name)}</strong><small>${esc(config.providers[p.provider].name)} · ${esc(p.bucket_name)}</small><small>${esc(p.access_domain)}${p.path_prefix?'/'+esc(p.path_prefix):''}</small></span></label><button type="button" class="quiet" data-storage-edit="${esc(id)}">编辑</button><button type="button" class="quiet" data-storage-copy="${esc(id)}" title="复制已保存的配置与密钥">复制</button></div>`).join('')||'<p class="comfy-help">尚未保存配置</p>';
     document.querySelector('#storage-active').textContent='当前启用：'+(config.profiles[config.active_profile_id]?.name||'未启用');
   }
   function edit(id){editing=id;const p=config.profiles[id];if(p)field('provider').value=p.provider;render();list();}
@@ -57,28 +57,32 @@
     finally{if(version===revealVersion)revealButton.disabled=false;}
   };
   document.querySelector('#storage-add').onclick=()=>{if(!busy)edit('');};
-  document.querySelector('#storage-profile-list').onclick=e=>{const b=e.target.closest('[data-storage-edit]');if(b&&!busy)edit(b.dataset.storageEdit);};
+  document.querySelector('#storage-profile-list').onclick=e=>{if(busy)return;const copy=e.target.closest('[data-storage-copy]');if(copy){submit('copy',copy.dataset.storageCopy);return;}const b=e.target.closest('[data-storage-edit]');if(b)edit(b.dataset.storageEdit);};
   document.querySelector('#storage-profile-list').onchange=e=>{if(e.target.name==='active_storage')submit('select',e.target.value);};
   field('provider').onchange=()=>{editing='';render();list();};field('region').onchange=autoEndpoint;
   document.querySelector('#storage-auto-endpoint').onclick=autoEndpoint;
   async function submit(action,id=editing){
     if(busy)return;
+    let copied=false;
     const inputs=[...form.querySelectorAll('input,select,button')],data=Object.fromEntries(new FormData(form));
     if(['save','save-only','test'].includes(action)&&!form.reportValidity())return;
     busy=true;inputs.forEach(x=>x.disabled=true);status.textContent=action==='test'?'验证空间访问…':action==='select'?'切换启用配置…':'保存配置…';
     try{
-      const body=['clear','disable','select'].includes(action)?{id,action}:{...data,id,activate:action!=='save-only'};
+      const body=['clear','disable','select','copy'].includes(action)?{id,action}:{...data,id,activate:action!=='save-only'};
       const result=await request('/api/settings/storage'+(action==='test'?'/test':''),body);
       if(action==='test')status.textContent=result.note;
       else{
         const previousIds=new Set(Object.keys(config.profiles));config=result;
-        if(action==='save'||action==='save-only')editing=id||Object.keys(config.profiles).find(k=>!previousIds.has(k))||'';
+        if(action==='copy')editing=Object.keys(config.profiles).find(k=>!previousIds.has(k))||'';
+        else if(action==='save'||action==='save-only')editing=id||Object.keys(config.profiles).find(k=>!previousIds.has(k))||'';
         else if(action==='select')editing=id;
         else if(action==='clear')editing=config.active_profile_id||'';
-        edit(editing);status.textContent+=' · 保存完成';
+        edit(editing);
+        if(action==='copy'){status.textContent='已复制为独立配置，原配置与启用项保持不变。修改存储路径前缀后点击「仅保存」或「保存并启用」。';copied=true;}
+        else status.textContent+=' · 保存完成';
       }
     }catch(e){list();status.textContent=e.message;}
-    finally{busy=false;inputs.forEach(x=>x.disabled=false);document.querySelector('#storage-clear').disabled=!editing;revealButton.disabled=!config.profiles[editing]?.credentials_configured;}
+    finally{busy=false;inputs.forEach(x=>x.disabled=false);document.querySelector('#storage-clear').disabled=!editing;revealButton.disabled=!config.profiles[editing]?.credentials_configured;if(copied){field('path_prefix').focus();field('path_prefix').select();}}
   }
   form.onsubmit=e=>{e.preventDefault();submit('save');};
   document.querySelector('#storage-save-only').onclick=()=>submit('save-only');

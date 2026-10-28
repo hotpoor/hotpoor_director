@@ -379,3 +379,37 @@ def test_reveal_is_explicit_uncached_and_does_not_modify_saved_profiles(tmp_path
         with pytest.raises(HTTPError) as error:
             asyncio.run(s.StorageSettingsHandler.post(h))
         assert error.value.status_code==404
+
+
+def test_copy_profile_keeps_credentials_and_active_selection_independent(tmp_path):
+    config={'data_dir':tmp_path}
+    original={**profile(),'name':'七牛素材','path_prefix':'director/references'}
+    value={'active_profile_id':'original','active_provider':'qiniu','profiles':{'original':original}}
+    s.save(config,value)
+    data={'action':'copy','id':'original'}
+    h=SimpleNamespace(settings={'config':config,'storage_lock':asyncio.Lock()},data=lambda:data,finish=Mock())
+    asyncio.run(s.StorageSettingsHandler.post(h))
+    saved=s.load(config);copied_id=next(i for i in saved['profiles'] if i!='original')
+    assert saved['active_profile_id']=='original'
+    assert saved['profiles']['original']==original
+    assert saved['profiles'][copied_id]=={**original,'name':'七牛素材 · 副本'}
+    assert 'fake-secret-value' not in json.dumps(h.finish.call_args.args[0])
+    data.update({**saved['profiles'][copied_id],'id':copied_id,'action':'save','access_key_id':'','access_key_secret':'','path_prefix':'wechat/archive','activate':False})
+    asyncio.run(s.StorageSettingsHandler.post(h))
+    saved=s.load(config)
+    assert saved['profiles']['original']==original
+    assert saved['profiles'][copied_id]['path_prefix']=='wechat/archive'
+    assert saved['profiles'][copied_id]['access_key_secret']==original['access_key_secret']
+    assert saved['active_profile_id']=='original'
+
+
+def test_copy_rejects_missing_source_and_limit_without_writing(tmp_path):
+    config={'data_dir':tmp_path};data={'action':'copy','id':'missing'}
+    value={'active_profile_id':'0','profiles':{str(i):profile() for i in range(50)}}
+    s.save(config,value);before=(tmp_path/'.cloud-storage.json').read_bytes()
+    h=SimpleNamespace(settings={'config':config,'storage_lock':asyncio.Lock()},data=lambda:data,finish=Mock())
+    for source,status in [('missing',404),('0',400),([],400)]:
+        data['id']=source
+        with pytest.raises(HTTPError) as error:asyncio.run(s.StorageSettingsHandler.post(h))
+        assert error.value.status_code==status
+        assert (tmp_path/'.cloud-storage.json').read_bytes()==before
