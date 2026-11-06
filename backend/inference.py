@@ -631,6 +631,12 @@ class InferenceManager:
         return result
 
     async def complete(self, job_id, body, outputs, usage):
+        sources=[]
+        for output in outputs if isinstance(outputs,list) else []:
+            url=output.get('url') if isinstance(output,dict) else output
+            try:sources.append(public_url(url))
+            except (ValueError,TypeError):continue
+        if sources:await self.update(job_id,source_outputs=sources)
         local = await self.store_outputs(job_id,body,outputs)
         usage = dict(usage) if isinstance(usage,dict) else {}
         usage['tokens'] = usage.get('total_tokens',usage.get('output_tokens'))

@@ -530,3 +530,16 @@ def test_qiniu_base64_video_is_not_uploaded_through_backend(tmp_path):
     with patch('backend.inference.download_memory',AsyncMock()) as download,patch.object(storage,'store_generated',AsyncMock()) as upload:
         with pytest.raises(ValueError):asyncio.run(manager.store_outputs('a',body,[{'b64_json':base64.b64encode(b'video').decode()}]))
         download.assert_not_awaited();upload.assert_not_awaited()
+
+
+def test_provider_result_links_are_persisted_before_transfer_and_survive_failure(tmp_path):
+    body=job(IMAGE,output_storage='cloud')
+    pool=Pool({'a':{'body':body}});manager=InferenceManager({'data_dir':tmp_path},pool)
+    url='https://provider.example/result.png?token=temporary'
+    async def blocked(*args):
+        assert pool.rows['a']['body']['source_outputs']==[url]
+        assert pool.rows['a']['body'].get('outputs',[])==[]
+        raise ValueError('transfer unavailable')
+    with patch.object(manager,'store_outputs',blocked):
+        with pytest.raises(ValueError):asyncio.run(manager.complete('a',body,[{'url':url},{'b64_json':'not-a-url'},{'url':'javascript:bad'}],{}))
+    assert pool.rows['a']['body']['source_outputs']==[url]
