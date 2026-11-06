@@ -543,3 +543,19 @@ def test_provider_result_links_are_persisted_before_transfer_and_survive_failure
     with patch.object(manager,'store_outputs',blocked):
         with pytest.raises(ValueError):asyncio.run(manager.complete('a',body,[{'url':url},{'b64_json':'not-a-url'},{'url':'javascript:bad'}],{}))
     assert pool.rows['a']['body']['source_outputs']==[url]
+
+
+def test_stage_timeline_deduplicates_progress_and_preserves_first_result_timestamp(tmp_path):
+    body=job(IMAGE,outputs=[])
+    body['submitted_at']=1000
+    pool=Pool({'a':{'body':body}});manager=InferenceManager({'data_dir':tmp_path},pool)
+    async def check():
+        with patch('backend.inference.time.time_ns',side_effect=[2000000000,3000000000,4000000000]):
+            await manager.mark_stage('a',body,'source_received',once=True)
+            await manager.mark_stage('a',body,'reading_output',item=1)
+            await manager.mark_stage('a',body,'reading_output',item=1)
+            await manager.mark_stage('a',body,'source_received',once=True)
+            await manager.mark_stage('a',body,'verifying_output',item=1)
+    asyncio.run(check())
+    events=pool.rows['a']['body']['generation_timeline']
+    assert [(e['stage'],e['at']) for e in events]==[('submitted',1000),('source_received',2000),('reading_output',3000),('verifying_output',4000)]

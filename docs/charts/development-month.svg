@@ -32,10 +32,10 @@
 <rect x="232" y="159" width="54" height="48" rx="5" fill="#ebedf0" stroke="#d1d9e0"/>
 <text x="239" y="174" font-size="11" fill="#1f2328">5</text>
 </g>
-<g><title>2026-11-06：3 条开发记录</title>
-<rect x="300" y="159" width="54" height="48" rx="5" fill="#9be9a8" stroke="#d1d9e0"/>
+<g><title>2026-11-06：4 条开发记录</title>
+<rect x="300" y="159" width="54" height="48" rx="5" fill="#40c463" stroke="#d1d9e0"/>
 <text x="307" y="174" font-size="11" fill="#1f2328">6</text>
-<text x="327" y="195" text-anchor="middle" font-size="16" font-weight="600" fill="#1f2328">3</text>
+<text x="327" y="195" text-anchor="middle" font-size="16" font-weight="600" fill="#1f2328">4</text>
 </g>
 <g><title>2026-11-07：晚于最新记录日期</title>
 <rect x="368" y="159" width="54" height="48" rx="5" fill="#ffffff" stroke="#d1d9e0" stroke-dasharray="3 3"/>
@@ -133,7 +133,7 @@
 <rect x="28" y="391" width="54" height="48" rx="5" fill="#ffffff" stroke="#d1d9e0" stroke-dasharray="3 3"/>
 <text x="35" y="406" font-size="11" fill="#1f2328">30</text>
 </g>
-<text x="540" y="136" font-size="36" font-weight="600">3</text>
+<text x="540" y="136" font-size="36" font-weight="600">4</text>
 <text x="540" y="159" font-size="13" fill="#59636e">本月开发记录</text>
 <text x="540" y="207" font-size="28" font-weight="600">1</text>
 <text x="540" y="230" font-size="13" fill="#59636e">有记录的日期</text>

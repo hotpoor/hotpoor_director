@@ -543,6 +543,17 @@ class InferenceManager:
         async with self.pool.connection() as conn:
             await conn.execute('UPDATE entities SET body=body || %s WHERE block_id=%s', (Jsonb(patch), job_id), block_id=job_id)
 
+    async def mark_stage(self, job_id, body, stage, item=None, once=False):
+        timeline=body.setdefault('generation_timeline',[])
+        if not timeline and isinstance(body.get('submitted_at'),(int,float)):
+            timeline.append({'stage':'submitted','at':body['submitted_at']})
+        if once and any(event['stage']==stage for event in timeline):return
+        if timeline and timeline[-1]['stage']==stage and timeline[-1].get('item')==item:return
+        event={'stage':stage,'at':time.time_ns()//1_000_000}
+        if item is not None:event['item']=item
+        timeline.append(event)
+        await self.update(job_id,generation_timeline=timeline)
+
     async def start(self):
         async with self.pool.connection() as conn:
             rows = await (await conn.scan("SELECT * FROM entities WHERE body->>'provider'=%s AND body->>'status' IN ('submitting','queued','running')", (PROVIDER,))).fetchall()
@@ -575,6 +586,7 @@ class InferenceManager:
             for index, output in enumerate(outputs):
                 async def phase(stage, **counts):
                     body['_output_phase'] = stage
+                    await self.mark_stage(job_id,body,stage,item=index+1)
                     await self.update(job_id, remote_status=stage, error=None, progress={'phase': 'saving', 'maximum': len(outputs), 'item': index + 1, **counts})
                 if body['type'] == 'video':
                     direct = await fetch_generated_video(self.config, self.pool, body, output.get('url') if isinstance(output, dict) else output, f'{job_id}-{index}', phase)
@@ -600,6 +612,7 @@ class InferenceManager:
                     uploaded = await upload_bytes({}, raw, mime, f'{job_id}-{index}', transport=self.config['storage_transport'])
                 result.append({'remote_url': uploaded['url'], 'mime': mime, 'sha256': uploaded['sha256'], 'size': len(raw)})
             return result
+        await self.mark_stage(job_id,body,'downloading')
         await self.update(job_id, remote_status='downloading', error=None, progress={'phase': 'saving'})
         directory = self.config['data_dir'] / 'generated'
         directory.mkdir(exist_ok=True)
@@ -631,13 +644,15 @@ class InferenceManager:
         return result
 
     async def complete(self, job_id, body, outputs, usage):
+        await self.mark_stage(job_id,body,'source_received',once=True)
         sources=[]
         for output in outputs if isinstance(outputs,list) else []:
             url=output.get('url') if isinstance(output,dict) else output
             try:sources.append(public_url(url))
             except (ValueError,TypeError):continue
-        if sources:await self.update(job_id,source_outputs=sources)
+        if sources:await self.update(job_id,source_outputs=sources,source_received_at=next(event['at'] for event in body['generation_timeline'] if event['stage']=='source_received'))
         local = await self.store_outputs(job_id,body,outputs)
+        await self.mark_stage(job_id,body,'archived',once=True)
         usage = dict(usage) if isinstance(usage,dict) else {}
         usage['tokens'] = usage.get('total_tokens',usage.get('output_tokens'))
         await self.update(job_id,status='completed',outputs=local,usage=usage,
@@ -667,7 +682,9 @@ class InferenceManager:
                         reader=SimpleNamespace(projects=self.pool,owner=body['owner_id'],settings={'config':self.config})
                         payload=payload_for(model,body['mode'],await resolve_references(reader,body['params']))
                     endpoint = ('/v1/images/edits' if model.get('image_api') == 'openai' and payload.get('images') else '/v1/images/generations') if body['type']=='image' else '/'+model['api_version']+'/video/generate'
+                    await self.mark_stage(job_id,body,'requesting_upstream',once=True)
                     response = await api(key, endpoint, payload)
+                    await self.mark_stage(job_id,body,'upstream_accepted',once=True)
                 cost = reported_cost(response)
                 if cost:
                     await self.update(job_id, cost=cost, cost_checked_at=int(time.time() * 1000))

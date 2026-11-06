@@ -57,7 +57,7 @@ app.whenReady().then(async()=>{
     const project=await js("directorStudio.currentProject()");
     await js(`(()=>{
       const original=window.fetch;
-      window.pendingResult={block_id:'e'.repeat(32),createtime:Date.now(),body:{kind:'generation',provider:'service-inference',card_id:directorStudio.currentProject().body.canvas.cards[0].id,type:'video',model:'si:dreamina-seedance-2-0-260128-max',status:'running',submitted_at:Date.now(),params:{prompt:'待转存结果'},refs:[],outputs:[],pending_outputs:['https://cdn.example.com/result.mp4?token=temporary'],usage:{tokens:null},remote_status:'reading_output',progress:{phase:'saving',item:1,maximum:1,bytes:1100000}}};
+      window.pendingResult={block_id:'e'.repeat(32),createtime:Date.now(),body:{kind:'generation',provider:'service-inference',card_id:directorStudio.currentProject().body.canvas.cards[0].id,type:'video',model:'si:dreamina-seedance-2-0-260128-max',status:'running',submitted_at:Date.now(),params:{prompt:'待转存结果'},refs:[],outputs:[],source_received_at:Date.now(),source_outputs:['https://cdn.example.com/result.mp4?token=temporary'],generation_timeline:[{stage:'source_received',at:1700000000000},{stage:'reading_output',at:1700000001250}],pending_outputs:['https://cdn.example.com/result.mp4?token=temporary'],usage:{tokens:null},remote_status:'reading_output',progress:{phase:'saving',item:1,maximum:1,bytes:1100000}}};
       window.fetch=async(...args)=>{const response=await original(...args);if(String(args[0]).endsWith('/history')&&response.ok){const data=await response.json();data.history.unshift(structuredClone(pendingResult));return new Response(JSON.stringify(data),{status:200,headers:{'Content-Type':'application/json'}});}return response;};
     })()`);
     await js(`directorStudio.openProject('${project.block_id}')`);
@@ -71,6 +71,7 @@ app.whenReady().then(async()=>{
     await js(`directorStudio.openProject('${project.block_id}')`);
     await wait("!document.querySelector('.pending-output-sources')&&!!document.querySelector('.output-sources a')");
     if(!await js("document.querySelector('.output-sources a').href==='https://cdn.example.com/archive.mp4'"))throw Error('Archived result URL missing');
+    if(!await js("document.querySelector('.upstream-output-sources a').href==='https://cdn.example.com/result.mp4?token=temporary'&&document.querySelector('.upstream-output-sources').textContent.includes('可能存在时效')&&document.querySelector('.generation-timeline').textContent.includes('1.250 秒')"))throw Error('Original result link or stage times missing after archiving');
     console.log('Early result links UI passed: active transfer progress, clickable/copyable provider URL, retry retention, archived URL replacement. No paid generation.');
     win.destroy();
   }catch(error){failed=true;console.error(error);}
