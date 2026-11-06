@@ -239,8 +239,10 @@
     const kind=key==='video_urls'?'Video':key==='audio_urls'?'Audio':'Image';
     return String(d[key]||'').split(/\s+/).filter(Boolean).map((url,index)=>{
       const token='@'+kind+(key==='last_frame'?2:index+1);
-      const safe=/^https?:\/\//i.test(url);
-      const preview=kind==='Image'&&safe?`<img src="${esc(url)}" alt="${token} 参考图片" loading="lazy" draggable="false">`:`<span class="reference-media-kind">${kind==='Video'?'视频':kind==='Audio'?'音频':'图片'}</span>`;
+      const privateObject=url.match(/^\/(?:hotpoor\/director\/)?api\/storage\/uploads\/([0-9a-f]{32})\/read$/);
+      const previewURL=privateObject?'/api/storage/uploads/'+privateObject[1]+'/read':url;
+      const safe=/^https?:\/\//i.test(url)||!!privateObject;
+      const preview=kind==='Image'&&safe?`<img src="${esc(previewURL)}" alt="${token} 参考图片" loading="lazy" draggable="false">`:`<span class="reference-media-kind">${kind==='Video'?'视频':kind==='Audio'?'音频':'图片'}</span>`;
       return `<button type="button" class="reference-mention quiet" data-ref-mention="${token}" title="插入 ${token} · ${esc(url)}">${preview}<strong>${token}</strong></button>`;
     }).join('');
   }
