@@ -555,7 +555,7 @@ class OutputHandler(PrivateHandler):
         outputs = row['body'].get('outputs', [])
         if int(index) >= len(outputs):
             raise tornado.web.HTTPError(404)
-        if outputs[int(index)].get('remote_url', '').startswith('https://'):
+        if outputs[int(index)].get('remote_url', '').startswith(('https://','/api/storage/uploads/')):
             self.redirect(outputs[int(index)]['remote_url']); return
         if row['body'].get('provider') == PROVIDER:
             from backend.inference import serve_output

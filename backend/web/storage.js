@@ -10,7 +10,7 @@
     const result=await response.json();if(!response.ok)throw Error(result.error||'请求失败');return result;
   }
   const field=name=>form.elements[name];
-  function preview(){const prefix=field('path_prefix').value.trim().replace(/^\/+|\/+$/g,'').split('/').filter(Boolean).map(encodeURIComponent).join('/');let domain=field('domain').value.trim().replace(/\/+$/,'');if(domain&&!domain.includes('://'))domain='https://'+domain;if(!domain&&field('provider').value!=='qiniu'&&field('bucket_name').value)domain='https://'+field('bucket_name').value+'.'+field('endpoint').value.replace(/^https?:\/\//,'');document.querySelector('#storage-url-preview').textContent='访问地址示例：'+(domain||'<访问域名>')+'/'+(prefix?prefix+'/':'')+'<项目 block_id>/<MD5>.<后缀>'; }
+  function preview(){document.querySelector('#storage-access-help').textContent=field('access_mode').value==='private'?'私有读：通过登录鉴权入口按需生成 10 分钟临时读取签名。':'公有读：直接使用对象访问地址。'+(field('access_mode').value==='public-read-write'?'公有写允许匿名写入，请确认云端实际权限。':'');const prefix=field('path_prefix').value.trim().replace(/^\/+|\/+$/g,'').split('/').filter(Boolean).map(encodeURIComponent).join('/');let domain=field('domain').value.trim().replace(/\/+$/,'');if(domain&&!domain.includes('://'))domain='https://'+domain;if(!domain&&field('provider').value!=='qiniu'&&field('bucket_name').value)domain='https://'+field('bucket_name').value+'.'+field('endpoint').value.replace(/^https?:\/\//,'');document.querySelector('#storage-url-preview').textContent='访问地址示例：'+(domain||'<访问域名>')+'/'+(prefix?prefix+'/':'')+'<项目 block_id>/<MD5>.<后缀>'; }
   form.addEventListener('input',preview);
   function autoEndpoint(){const p=field('provider').value,r=field('region').value;field('endpoint').value=p==='qiniu'?`https://up-${r}.qiniup.com`:p==='aliyun'?`https://oss-${r}.aliyuncs.com`:`https://cos.${r}.myqcloud.com`;preview();}
   function render(){
@@ -23,6 +23,7 @@
     document.querySelector('#storage-key-label').textContent=meta.key_label;document.querySelector('#storage-secret-label').textContent=meta.secret_label;
     for(const name of ['access_key_id','access_key_secret']){field(name).value='';field(name).placeholder=saved.credentials_configured?'已保存，留空保留':'请输入'+meta[name==='access_key_id'?'key_label':'secret_label'];}
     for(const name of ['bucket_name','region','endpoint','domain','path_prefix'])field(name).value=saved[name]||'';
+    field('access_mode').value=saved.access_mode||'public-read';
     field('path_prefix').value=saved.path_prefix??'director/references';
     field('bucket_name').placeholder=meta.bucket_hint;field('domain').required=meta.domain_required;
     document.querySelector('#storage-domain-label').textContent='访问域名'+(meta.domain_required?'（必填）':'（选填，留空使用 Bucket 域名）');
@@ -133,9 +134,9 @@
         report('upload','正在上传到云存储',0,'准备发送文件…');await directUpload(grant,body,report);
         id=grant.upload_id;pending.set(file,id);
       }
-      report('confirm','确认文件与公网访问',null,'文件已上传，正在检查大小、类型与访问 URL…');
+      report('confirm','确认文件与读取策略',null,'文件已上传，正在检查大小、类型与访问 URL…');
       const result=await request('/api/storage/uploads/'+id+'/confirm',{});pending.delete(file);
-      report('done','上传完成',100,'公网访问已确认，素材可以使用');panel.dataset.state='done';return result;
+      report('done','上传完成',100,'文件已确认，素材可以使用');panel.dataset.state='done';return result;
     }catch(error){report('error','上传未完成',null,error.message);panel.dataset.state='error';throw error;}
     finally{closeProgress.hidden=false;}
   }

@@ -413,3 +413,48 @@ def test_copy_rejects_missing_source_and_limit_without_writing(tmp_path):
         with pytest.raises(HTTPError) as error:asyncio.run(s.StorageSettingsHandler.post(h))
         assert error.value.status_code==status
         assert (tmp_path/'.cloud-storage.json').read_bytes()==before
+
+
+@pytest.mark.parametrize('provider',s.PROVIDERS)
+def test_private_read_real_sdk_signatures(provider):
+    p=s.normalize({**profile(provider),'access_mode':'private'})
+    url=s.sign_read(p,'images/参考.png')
+    query=parse_qs(urlsplit(url).query)
+    assert ('token' if provider=='qiniu' else 'x-oss-signature' if provider=='aliyun' else 'q-signature') in query
+    assert p['access_key_secret'] not in url
+    assert s.object_url('a'*32,{'access_mode':'private'})=='/api/storage/uploads/'+'a'*32+'/read'
+
+
+def test_access_mode_validation_and_legacy_fingerprint():
+    p=profile();legacy={k:v for k,v in p.items() if k!='access_mode'}
+    assert s.fingerprint(p)==s.fingerprint(legacy)
+    assert s.normalize({**p,'access_mode':'private'})['access_mode']=='private'
+    with pytest.raises(ValueError):s.normalize({**p,'access_mode':'invalid'})
+    assert s.sign_read(p,'file.png')=='https://cdn.example.com/file.png'
+
+
+def test_private_confirmation_does_not_require_anonymous_read(tmp_path):
+    p=s.normalize({**profile(),'access_mode':'private'})
+    s.save({'data_dir':tmp_path},{'profiles':{'qiniu':p}})
+    body=dict(provider='qiniu',access_mode='private',profile_fingerprint=s.fingerprint(p),key='file.png',url='https://cdn.example.com/file.png',name='file.png',size=16,mime='image/png',status='pending')
+    conn=AsyncMock();conn.execute=AsyncMock()
+    pool=Mock();pool.connection.return_value.__aenter__=AsyncMock(return_value=conn);pool.connection.return_value.__aexit__=AsyncMock(return_value=False)
+    h=SimpleNamespace(settings={'config':{'data_dir':tmp_path}},owner='owner',projects=pool,finish=Mock())
+    with patch.object(s,'owned',AsyncMock(return_value={'body':body})),patch.object(s,'verify_object'),patch.object(s,'verify_public',AsyncMock()) as public:
+        asyncio.run(s.UploadConfirmHandler.post(h,'a'*32))
+    public.assert_not_awaited()
+    assert h.finish.call_args.args[0]['url'].endswith('/read')
+
+
+def test_private_read_resolves_only_owned_completed_object(tmp_path):
+    p=s.normalize({**profile(),'access_mode':'private'})
+    s.save({'data_dir':tmp_path},{'profiles':{'qiniu':p}})
+    h=SimpleNamespace(projects=Mock(),owner='owner',settings={'config':{'data_dir':tmp_path}})
+    url='/api/storage/uploads/'+'a'*32+'/read'
+    with patch.object(s,'owned',AsyncMock(side_effect=HTTPError(404))),patch.object(s,'sign_read') as sign:
+        with pytest.raises(HTTPError):asyncio.run(s.resolve_url(h,url))
+        sign.assert_not_called()
+    body=dict(status='completed',provider='qiniu',key='images/file.png')
+    with patch.object(s,'owned',AsyncMock(return_value={'body':body})),patch.object(s,'sign_read',return_value='https://signed.example.com') as sign:
+        assert asyncio.run(s.resolve_url(h,url))=='https://signed.example.com'
+        sign.assert_called_once_with(p,'images/file.png')

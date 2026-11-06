@@ -352,6 +352,17 @@ def urls(data, key, limit):
     return values
 
 
+async def resolve_references(handler, data):
+    from backend.cloud_storage import resolve_url
+    result=dict(data)
+    for field in ('image_urls','video_urls','audio_urls'):
+        if isinstance(result.get(field),str):
+            result[field]='\n'.join([await resolve_url(handler,url.strip()) for url in result[field].splitlines() if url.strip()])
+    for field in ('first_frame','last_frame'):
+        if isinstance(result.get(field),str):result[field]=await resolve_url(handler,result[field])
+    return result
+
+
 def payload_for(model, mode, data):
     prompt = data.get('prompt')
     if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 12000:
@@ -645,6 +656,10 @@ class InferenceManager:
             if payload is not None:
                 async with self.slots:
                     await self.update(job_id,status='running')
+                    if '/api/storage/uploads/' in json.dumps(body.get('params',{})):
+                        from types import SimpleNamespace
+                        reader=SimpleNamespace(projects=self.pool,owner=body['owner_id'],settings={'config':self.config})
+                        payload=payload_for(model,body['mode'],await resolve_references(reader,body['params']))
                     endpoint = ('/v1/images/edits' if model.get('image_api') == 'openai' and payload.get('images') else '/v1/images/generations') if body['type']=='image' else '/'+model['api_version']+'/video/generate'
                     response = await api(key, endpoint, payload)
                 cost = reported_cost(response)
@@ -724,7 +739,7 @@ async def submit(handler, project_id, data):
     if not isinstance(job_id,str) or not ID.fullmatch(job_id):
         raise tornado.web.HTTPError(400,reason='请求 UUID 不正确')
     try:
-        payload=payload_for(model,data.get('mode'),data)
+        payload=payload_for(model,data.get('mode'),await resolve_references(handler,data))
     except (ValueError,TypeError,OverflowError) as error:
         raise tornado.web.HTTPError(400,reason=str(error))
     manager=handler.settings['inference_manager']

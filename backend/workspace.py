@@ -207,7 +207,9 @@ async def save_project(handler, project_id=None):
             asset = await owned(handler.projects, card['asset_id'], handler.owner, 'cloud_upload' if cloud else 'asset')
             if cloud and asset['body'].get('status')!='completed':raise tornado.web.HTTPError(400,reason='云存储素材尚未完成上传确认')
             card.update(name=asset['body']['name'], mime=asset['body']['mime'], size=asset['body'].get('size', 0))
-            if cloud:card.update(storage='cloud',url=asset['body']['url'],provider=asset['body']['provider'])
+            if cloud:
+                from backend.cloud_storage import object_url
+                card.update(storage='cloud',url=object_url(card['asset_id'],asset['body']),provider=asset['body']['provider'])
             else:
                 for key in ('storage','url','provider'):card.pop(key,None)
     from backend.comments import attachment
@@ -282,6 +284,8 @@ class CloudAssetHandler(PrivateHandler):
         body = upload['body']
         if body.get('status') != 'completed' or not body.get('url', '').startswith('https://'):
             raise tornado.web.HTTPError(400, reason='请先完成 HTTPS 云存储上传确认')
+        from backend.cloud_storage import object_url
+        body={**body,'url':object_url(upload['block_id'],body)}
         identifier = uuid.uuid5(uuid.NAMESPACE_URL, 'cloud-asset:' + self.owner + ':' + upload['block_id']).hex
         value = dict(kind='asset', owner_id=self.owner, project_id=body.get('project_id'), created_by=self.user, remote_url=body['url'], name=body['name'], mime=body['mime'], size=body['size'])
         async with self.projects.connection() as conn:
@@ -295,11 +299,11 @@ class AssetHandler(PrivateHandler):
 
     async def get(self, asset_id, include_body=True):
         row = await owned(self.projects, asset_id, self.owner, 'asset')
-        if row['body'].get('remote_url', '').startswith('https://') and (self.settings['config'].get('cloud_mode') or not row['body'].get('filename')):
+        if row['body'].get('remote_url', '').startswith(('https://','/api/storage/uploads/')) and (self.settings['config'].get('cloud_mode') or not row['body'].get('filename')):
             self.redirect(row['body']['remote_url']); return
         path = self.settings['config']['data_dir'] / 'media' / row['body']['filename']
         if not path.is_file():
-            if row['body'].get('remote_url', '').startswith('https://'):
+            if row['body'].get('remote_url', '').startswith(('https://','/api/storage/uploads/')):
                 self.redirect(row['body']['remote_url']); return
             raise tornado.web.HTTPError(404)
         size = path.stat().st_size
@@ -360,7 +364,7 @@ def workspace_routes():
     from backend.comments import CreateChatHandler, ChatHandler, ChatMessagesHandler, ChatMaterialsHandler
     from backend.comfy_settings import ComfySettingsHandler, ComfyTestHandler
     from backend.inference import InferenceSettingsHandler, InferenceTestHandler, InferenceCostHandler, InferenceCostImportHandler
-    from backend.cloud_storage import StorageSettingsHandler, StorageTestHandler, UploadGrantHandler, UploadConfirmHandler, CloudImageHandler
+    from backend.cloud_storage import StorageSettingsHandler, StorageTestHandler, UploadGrantHandler, UploadConfirmHandler, CloudImageHandler, CloudReadHandler
     from backend.generation import ModelsHandler, GenerateHandler, HistoryHandler, OutputHandler, CancelGenerationHandler, QueueOrderHandler
     from backend.speech import SpeechSettingsHandler, SpeechJobsHandler, SpeechCancelHandler
     return [
@@ -385,6 +389,7 @@ def workspace_routes():
         (r'/api/settings/storage', StorageSettingsHandler),
         (r'/api/settings/storage/test', StorageTestHandler),
         (r'/api/storage/uploads', UploadGrantHandler),
+        (r'/api/storage/uploads/([0-9a-f]{32})/read', CloudReadHandler),
         (r'/api/storage/uploads/([0-9a-f]{32})/image', CloudImageHandler),
         (r'/api/storage/uploads/([0-9a-f]{32})/confirm', UploadConfirmHandler),
         (r'/api/settings/service-inference', InferenceSettingsHandler),
@@ -415,7 +420,8 @@ async def ensure_local_asset(handler, asset):
     body = asset['body']; directory = handler.settings['config']['data_dir'] / 'media'
     current = directory / body.get('filename', '')
     if current.is_file(): return current
-    url = body.get('remote_url', '')
+    from backend.cloud_storage import resolve_url
+    url = await resolve_url(handler,body.get('remote_url', ''))
     if not url.startswith('https://') or body.get('mime') not in MIMES:
         raise ValueError('参考素材没有可用的本地文件或云端地址')
     directory.mkdir(exist_ok=True)

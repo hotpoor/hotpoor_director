@@ -30,6 +30,7 @@ PROVIDERS = {
         bucket_hint='完整名称，例如 my-bucket-1250000000', domain_required=False,
         help='使用 SecretId / SecretKey；Bucket 必须包含 APPID 后缀，例如 my-bucket-1250000000，无需另填 AppSecret。'),
 }
+ACCESS_MODES={'private': '私有读私有写', 'public-read': '私有写公有读', 'public-read-write': '公有读公有写'}
 TTL=600
 MIMES={'image/png':'.png','image/jpeg':'.jpg','image/webp':'.webp','video/mp4':'.mp4','video/webm':'.webm',
        'audio/mpeg':'.mp3','audio/mp3':'.mp3','audio/wav':'.wav','audio/x-wav':'.wav','audio/ogg':'.ogg',
@@ -101,6 +102,9 @@ def normalize(data, previous=None):
     if provider not in PROVIDERS:raise ValueError('请选择七牛、阿里云或腾讯云')
     previous=previous or {}
     value={'provider':provider}
+    mode=data.get('access_mode',previous.get('access_mode','public-read'))
+    if mode not in ACCESS_MODES:raise ValueError('请选择有效的 Bucket 访问权限')
+    value['access_mode']=mode
     for key in ('access_key_id','access_key_secret'):
         raw=data.get(key) or previous.get(key,'')
         if not isinstance(raw,str) or not 5<=len(raw.strip())<=4096 or any(c.isspace() for c in raw.strip()):raise ValueError('请填写完整的访问密钥；留空只能保留当前配置已保存的密钥')
@@ -131,6 +135,45 @@ def access_domain(profile):
     return profile['domain'] or 'https://'+profile['bucket_name']+'.'+urlsplit(profile['endpoint']).netloc
 
 
+def private_read(profile):
+    return profile.get('access_mode', 'public-read') == 'private'
+
+
+def sign_read(profile, key):
+    if not private_read(profile):return access_domain(profile)+'/'+quote(key,safe='/')
+    try:
+        if profile['provider']=='qiniu':
+            import qiniu
+            return qiniu.Auth(profile['access_key_id'],profile['access_key_secret']).private_download_url(access_domain(profile)+'/'+quote(key,safe='/'),expires=TTL)
+        if profile['provider']=='aliyun':return aliyun(profile).sign_url('GET',key,TTL,slash_safe=True)
+        return tencent(profile).get_presigned_url(Bucket=profile['bucket_name'],Key=key,Method='GET',Expired=TTL)
+    except Exception:
+        raise StorageError('生成读取凭证失败，请检查云存储配置') from None
+
+
+def object_url(upload_id, body):
+    return '/api/storage/uploads/'+upload_id+'/read' if body.get('access_mode')=='private' else body['url']
+
+
+async def resolve_url(handler, url):
+    url=url.removeprefix('/hotpoor/director')
+    match=re.fullmatch(r'/api/storage/uploads/([0-9a-f]{32})/read',url)
+    if not match:return url
+    row=await owned(handler.projects,match[1],handler.owner,'cloud_upload')
+    body=row['body']
+    if body.get('status')!='completed':raise tornado.web.HTTPError(400,reason='素材未完成上传')
+    profile=load(handler.settings['config'])['profiles'].get(body.get('profile_id',body['provider']))
+    if not profile:raise tornado.web.HTTPError(409,reason='素材的云存储配置已删除')
+    return await asyncio.to_thread(sign_read,profile,body['key'])
+
+
+class CloudReadHandler(PrivateHandler):
+    async def get(self, upload_id):
+        self.set_header('Cache-Control','private, no-store')
+        try:self.redirect(await resolve_url(self,'/api/storage/uploads/'+upload_id+'/read'))
+        except StorageError as error:raise tornado.web.HTTPError(502,reason=str(error))
+
+
 def active_id(value):
     return value.get('active_profile_id', value.get('active_provider'))
 
@@ -145,7 +188,7 @@ def public_view(value):
 
 
 def fingerprint(profile):
-    return hashlib.sha256(json.dumps({k:v for k,v in profile.items() if k not in ('name','id')},sort_keys=True).encode()).hexdigest()
+    return hashlib.sha256(json.dumps({k:v for k,v in profile.items() if k not in ('name','id') and not (k=='access_mode' and v=='public-read')},sort_keys=True).encode()).hexdigest()
 
 
 def aliyun(profile):
@@ -324,7 +367,7 @@ class StorageTestHandler(PrivateHandler):
             profile=normalize(data,previous)
             await asyncio.to_thread(probe,profile)
         except (ValueError,StorageError) as error:raise tornado.web.HTTPError(400,reason=str(error))
-        self.finish({'ok':True,'note':'空间读取验证通过；直传还需配置 CORS，可用小文件验证上传和公网访问。'})
+        self.finish({'ok':True,'note':'空间读取验证通过；直传还需配置 CORS，请用小文件验证上传和所选读取策略。'})
 
 
 class UploadGrantHandler(PrivateHandler):
@@ -352,7 +395,7 @@ class UploadGrantHandler(PrivateHandler):
         except Exception:raise tornado.web.HTTPError(502,reason='生成直传凭证失败，请检查存储配置') from None
         url=access_domain(profile)+'/'+quote(key,safe='/')
         body=dict(kind='cloud_upload',owner_id=self.owner,profile_id=profile_id,provider=profile['provider'],profile_fingerprint=fingerprint(profile),
-                  key=key,url=url,mime=mime,size=size,name=name,md5=digest,project_id=project_id,status='pending',expires_at=int(time.time())+TTL)
+                  access_mode=profile.get('access_mode','public-read'),key=key,url=url,mime=mime,size=size,name=name,md5=digest,project_id=project_id,status='pending',expires_at=int(time.time())+TTL)
         async with self.projects.connection() as conn:
             await conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s) ON CONFLICT (block_id) DO NOTHING',(upload_id,Jsonb(body)), block_id=upload_id)
         # Only short-lived, single-object credentials cross into the renderer.
@@ -360,7 +403,7 @@ class UploadGrantHandler(PrivateHandler):
 
 
 def upload_result(upload_id,body):
-    return {'id':upload_id,'url':body['url'],'name':body['name'],'mime':body['mime'],'size':body['size'],'storage':'cloud','provider':body['provider']}
+    return {'id':upload_id,'url':object_url(upload_id,body),'name':body['name'],'mime':body['mime'],'size':body['size'],'storage':'cloud','provider':body['provider']}
 
 
 class UploadConfirmHandler(PrivateHandler):
@@ -374,7 +417,7 @@ class UploadConfirmHandler(PrivateHandler):
         # Confirmation is still allowed after a grant expires: large uploads may finish later.
         try:
             await asyncio.to_thread(verify_object,profile,body['key'],body['size'],body['mime'])
-            body['url']=await verify_public(body['url'],body['size']) or body['url']
+            if not private_read(profile):body['url']=await verify_public(body['url'],body['size']) or body['url']
         except StorageError as error:raise tornado.web.HTTPError(502,reason=str(error))
         async with self.projects.connection() as conn:
             await conn.execute("UPDATE entities SET body=body || %s WHERE block_id=%s",(Jsonb({'status':'completed','url':body['url']}),upload_id), block_id=upload_id)
@@ -411,7 +454,11 @@ class CloudImageHandler(PrivateHandler):
         row=await owned(self.projects,upload_id,self.owner,'cloud_upload');body=row['body']
         if body.get('status')!='completed' or body.get('mime') not in ('image/png','image/jpeg','image/webp'):
             raise tornado.web.HTTPError(400,reason='只能复制已确认上传的图片')
-        try:raw=await read_cloud_image(body)
+        try:
+            if body.get('access_mode')=='private':
+                url=await resolve_url(self,object_url(upload_id,body))
+                body={**body,'url':url}
+            raw=await read_cloud_image(body)
         except StorageError as error:raise tornado.web.HTTPError(502,reason=str(error))
         self.set_header('Content-Type',body['mime'])
         self.set_header('Content-Length',len(raw))
@@ -431,7 +478,7 @@ async def store_generated(config, pool, job, raw, mime, name, phase):
     upload_id = hashlib.sha256(json.dumps([owner, project_id, fingerprint(profile), key, mime, len(raw)]).encode()).hexdigest()[:32]
     url = access_domain(profile) + '/' + quote(key, safe='/')
     body = dict(kind='cloud_upload', owner_id=owner, profile_id=profile_id, provider=profile['provider'],
-                profile_fingerprint=fingerprint(profile), key=key, url=url, mime=mime, size=len(raw),
+                profile_fingerprint=fingerprint(profile), access_mode=profile.get('access_mode','public-read'),key=key, url=url, mime=mime, size=len(raw),
                 name=name, md5=digest, project_id=project_id, status='pending', expires_at=int(time.time())+TTL)
 
     async def transport(path, data):
@@ -450,7 +497,7 @@ async def store_generated(config, pool, job, raw, mime, name, phase):
             raise StorageError('未知转存步骤')
         await phase('verifying_output')
         await asyncio.to_thread(verify_object, profile, key, len(raw), mime)
-        body['url'] = await verify_public(url, len(raw)) or url
+        if not private_read(profile):body['url'] = await verify_public(url, len(raw)) or url
         async with pool.connection() as conn:
             await conn.execute('UPDATE entities SET body=body || %s WHERE block_id=%s',
                                (Jsonb({'status': 'completed', 'url': body['url']}), upload_id), block_id=upload_id)
@@ -501,12 +548,12 @@ async def fetch_generated_video(config, pool, job, url, name, phase):
     await phase('verifying_output')
     await asyncio.to_thread(verify_object, profile, key, size, 'video/mp4')
     public = access_domain(profile) + '/' + quote(key, safe='/')
-    public = await verify_public(public, size) or public
+    if not private_read(profile):public = await verify_public(public, size) or public
     upload_id = hashlib.sha256(json.dumps([owner, fingerprint(profile), key]).encode()).hexdigest()[:32]
     body = dict(kind='cloud_upload', owner_id=owner, project_id=job['project_id'], profile_id=profile_id,
-                provider='qiniu', profile_fingerprint=fingerprint(profile), key=key, url=public,
+                access_mode=profile.get('access_mode','public-read'),provider='qiniu', profile_fingerprint=fingerprint(profile), key=key, url=public,
                 name=name, mime='video/mp4', size=size, status='completed', transfer='remote_fetch')
     async with pool.connection() as conn:
         await conn.execute('INSERT INTO entities(block_id,body) VALUES (%s,%s) ON CONFLICT (block_id) DO NOTHING',
                            (upload_id, Jsonb(body)), block_id=upload_id)
-    return {'remote_url': public, 'mime':'video/mp4', 'size':size, 'storage':'cloud', 'transfer':'remote_fetch'}
+    return {'remote_url': object_url(upload_id,body), 'mime':'video/mp4', 'size':size, 'storage':'cloud', 'transfer':'remote_fetch'}
